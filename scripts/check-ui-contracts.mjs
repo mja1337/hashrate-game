@@ -15,12 +15,11 @@ const modeEnd = inline.indexOf("\n];", modeStart) + 3;
 assert(modeStart >= 0 && modeEnd > modeStart, "STARTING_MODES could not be extracted");
 const modeContext = {};
 vm.runInNewContext(inline.slice(modeStart, modeEnd).replace("const STARTING_MODES", "var STARTING_MODES"), modeContext);
-assert(JSON.stringify(modeContext.STARTING_MODES.map(({ id, cash }) => [id, cash])) === JSON.stringify([
-  ["hard", 1500],
-  ["medium", 5000],
-  ["easy", 10000],
-  ["very-easy", 100000],
-]), "Starting difficulty values changed unexpectedly");
+assert(JSON.stringify(modeContext.STARTING_MODES.map(({ id, start }) => [id, start])) === JSON.stringify([
+  ["easy", 1233100800000],
+  ["medium", 1233619200000],
+  ["hard", 1288483200000],
+]), "Campaign start-date options changed unexpectedly");
 
 const helperNames = ["fmtUsd", "fmtBtc", "fmtCompactNumber", "fmtCompactUsd"];
 const helperSource = inline.split(/\r?\n/).filter(line => helperNames.some(name => line.startsWith(`function ${name}(`))).join("\n");

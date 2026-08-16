@@ -3,12 +3,14 @@
 /* UI LAYER — rendering is split by game system so future features stay local. */
 function renderHeader(){
   const fs=fleet(),mc=monthlyCost(),online=operating(),p=priceAt(state.time);
+  const mobileNav=`<section class="mobile-nav ${mobileMenuOpen?"open":""}" aria-label="Mobile navigation"><div class="mobile-nav-metrics"><div><span>Cash</span><b>${fmtUsd(state.cash)}</b></div><div><span>Self-held BTC</span><b>${fmtBtc(controlled())}</b></div><div><span>Fleet</span><b>${fmtHash(fs.hash)}</b></div><div><span>Power</span><b>${fs.kw.toFixed(2)} kW</b></div></div><div class="mobile-nav-tabs">${["dashboard","mine","pools","market","custody","facilities","energy","finance","learn","tech","ledger","method"].map(t=>`<button class="${activeTab===t?"active":""}" data-action="tab" data-value="${t}">${t}</button>`).join("")}</div></section>`;
   return `<header class="topbar">
     <div class="brand"><div class="coin">₿</div><div><div class="brand-name">HASHRATE</div><div class="brand-sub">Alpha 2.9 · Operator campaign</div></div></div>
     <div class="era-chip"><strong>${eraAt(state.time)}</strong><span>Historical replay · seed ${state.seed}</span></div>
     <div class="clock"><strong id="live-date">${dateFmt(state.time)}</strong><span id="live-block">BLOCK ~${fmtNum(approxHeight(state.time))}</span></div>
     <div class="speeds" aria-label="Simulation speed">${[0,.5,1,2,4,8,16].map(s=>`<button class="speed ${state.speed===s?"active":""}" data-action="speed" data-value="${s}" aria-label="${s===0?"Pause":s+" times speed"}">${s===0?"Ⅱ":s+"×"}</button>`).join("")}</div>
     <div class="save-state"><i class="save-dot"></i>LOCAL SAVE</div>
+    <button class="mobile-menu-button ${mobileMenuOpen?"active":""}" data-action="mobile-menu" aria-label="${mobileMenuOpen?"Close":"Open"} navigation" aria-expanded="${mobileMenuOpen}"><i></i><i></i><i></i><span>Menu</span></button>
   </header>
   <section class="ticker" aria-label="Bitcoin network dashboard">
     <div class="tick"><div class="label">Liquid fiat</div><div id="live-fiat" class="value green">${fmtUsd(state.cash)}</div><div class="subvalue">spendable now</div></div>
@@ -25,7 +27,7 @@ function renderHeader(){
     <div class="tick"><div class="label">Power draw</div><div id="live-power" class="value">${fs.kw.toFixed(2)} kW</div><div id="live-power-rate" class="subvalue">${fmtUsd(mc.rate)}/kWh</div></div>
     <div class="tick"><div class="label">Transactions</div><div id="live-transactions" class="value">${fmtNum(txAt(state.time))}</div><div class="subvalue">7-day recorded mean</div></div>
     <div class="tick"><div class="label">Net worth</div><div id="live-worth" class="value">${fmtUsd(netWorth())}</div><div class="subvalue">mark to market</div></div>
-  </section>`
+  </section>${mobileNav}`
 }
 function nav(){
   const tabs=["dashboard","mine","pools","market","custody","facilities","energy","finance","learn","tech","ledger","method"];
