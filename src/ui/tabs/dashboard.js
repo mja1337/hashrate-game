@@ -1,0 +1,57 @@
+"use strict";
+
+/* UI LAYER — rendering is split by game system so future features stay local. */
+function renderHeader(){
+  const fs=fleet(),mc=monthlyCost(),online=operating(),p=priceAt(state.time);
+  return `<header class="topbar">
+    <div class="brand"><div class="coin">₿</div><div><div class="brand-name">HASHRATE</div><div class="brand-sub">Alpha 2.9 · Operator campaign</div></div></div>
+    <div class="era-chip"><strong>${eraAt(state.time)}</strong><span>Historical replay · seed ${state.seed}</span></div>
+    <div class="clock"><strong id="live-date">${dateFmt(state.time)}</strong><span id="live-block">BLOCK ~${fmtNum(approxHeight(state.time))}</span></div>
+    <div class="speeds" aria-label="Simulation speed">${[0,.5,1,2,4,8,16].map(s=>`<button class="speed ${state.speed===s?"active":""}" data-action="speed" data-value="${s}" aria-label="${s===0?"Pause":s+" times speed"}">${s===0?"Ⅱ":s+"×"}</button>`).join("")}</div>
+    <div class="save-state"><i class="save-dot"></i>LOCAL SAVE</div>
+  </header>
+  <section class="ticker" aria-label="Bitcoin network dashboard">
+    <div class="tick"><div class="label">Liquid fiat</div><div id="live-fiat" class="value green">${fmtUsd(state.cash)}</div><div class="subvalue">spendable now</div></div>
+    <div class="tick"><div class="label">Illiquid fiat</div><div id="live-illiquid-fiat" class="value">${fmtUsd(equityValue())}</div><div class="subvalue">ETF + Strategy shares</div></div>
+    <div class="tick"><div class="label">Self-held BTC</div><div id="live-controlled-btc" class="value green">${fmtBtc(controlled())}</div><div class="subvalue">Hot + cold keys</div></div>
+    <div class="tick"><div class="label">Custodial BTC</div><div id="live-custodial-btc" class="value orange">${fmtBtc(claims())}</div><div class="subvalue">Venue claims</div></div>
+    <div class="tick"><div class="label">Lightning locked</div><div id="live-lightning-btc" class="value">${fmtBtc(lightningLocked())}</div><div class="subvalue">Routing liquidity</div></div>
+    <div class="tick"><div class="label">BTC / USD</div><div id="live-price" class="value orange">${state.time<MARKET?"NO MARKET":fmtUsd(p)}</div><div class="subvalue">recorded daily composite</div></div>
+    <div class="tick"><div class="label">Network hash</div><div id="live-network-hash" class="value">${fmtHash(hashAt(state.time))}</div><div class="subvalue">14-day observed mean</div></div>
+    <div class="tick"><div class="label">Difficulty</div><div id="live-difficulty" class="value">${fmtDiff(difficultyAt(state.time))}</div><div class="subvalue">reconstructed daily mean</div></div>
+    <div class="tick"><div class="label">Subsidy</div><div id="live-subsidy" class="value">${subsidyAt(state.time)} BTC</div><div class="subvalue">per block</div></div>
+    <div class="tick"><div class="label">Fees / block</div><div id="live-fees" class="value">${fmtBtc(feeAt(state.time))}</div><div class="subvalue">7-day network mean</div></div>
+    <div class="tick"><div class="label">Your hash</div><div id="live-your-hash" class="value ${online?"green":""}">${fmtHash(fs.hash)}</div><div id="live-your-status" class="subvalue">${online?"online":"offline"}</div></div>
+    <div class="tick"><div class="label">Power draw</div><div id="live-power" class="value">${fs.kw.toFixed(2)} kW</div><div id="live-power-rate" class="subvalue">${fmtUsd(mc.rate)}/kWh</div></div>
+    <div class="tick"><div class="label">Transactions</div><div id="live-transactions" class="value">${fmtNum(txAt(state.time))}</div><div class="subvalue">7-day recorded mean</div></div>
+    <div class="tick"><div class="label">Net worth</div><div id="live-worth" class="value">${fmtUsd(netWorth())}</div><div class="subvalue">mark to market</div></div>
+  </section>`
+}
+function nav(){
+  const tabs=["dashboard","mine","market","custody","facilities","energy","finance","learn","tech","ledger","method"];
+  return `<nav class="tabs" aria-label="Game sections">${tabs.map(t=>`<button class="tab ${activeTab===t?"active":""}" data-action="tab" data-value="${t}">${t}</button>`).join("")}</nav>`
+}
+function poolDashboard(){
+  const t=state.time, net=hashAt(t), active=poolData(), rows=POOLS.filter(p=>p.id!=="solo"&&p.id!=="other"&&t>=at(p.date)).map(p=>({p,share:poolShareAt(p.id,t),eligible:poolEligible(p)})).filter(x=>x.share>0).sort((a,b)=>b.share-a.share);
+  const top=rows.slice(0,6),namedShare=top.reduce((sum,x)=>sum+x.share,0),colors=["#f0a92f","#86c79a","#79c8d3","#b99a74","#b9a4ce","#e78270"],segments=[...top.map((x,i)=>({name:x.p.name,share:x.share,color:colors[i],hash:fmtHash(net*x.share)})),{name:"Other pools / solo",share:Math.max(0,1-namedShare),color:"#344344",hash:fmtHash(net*Math.max(0,1-namedShare))}].filter(x=>x.share>.001),selected=state.mode==="pool"?active:null;
+  let angle=-90;const polar=a=>({x:110+94*Math.cos(a*Math.PI/180),y:110+94*Math.sin(a*Math.PI/180)}),slices=segments.map(segment=>{const start=angle,end=angle+segment.share*360,from=polar(start),to=polar(end),large=end-start>180?1:0;angle=end;return `<path d="M110 110 L${from.x.toFixed(2)} ${from.y.toFixed(2)} A94 94 0 ${large} 1 ${to.x.toFixed(2)} ${to.y.toFixed(2)} Z" fill="${segment.color}" stroke="#0b1011" stroke-width="2"/>`}).join(""),legend=segments.map(segment=>`<div class="pool-legend-row"><i style="background:${segment.color}"></i><span><b>${segment.name} · ${(segment.share*100).toFixed(1)}%</b><small>${segment.hash} estimated hashrate</small></span></div>`).join("");
+  return `<section class="card span-12"><div class="card-head"><h2>Mining pool concentration</h2><div class="meta">observed weekly shares · smoothed between anchors</div></div><div class="card-pad"><div class="pool-summary"><div><strong>${fmtHash(net)}</strong><span>network hashrate</span></div><div><strong>${selected?selected.name:"Solo mining"}</strong><span>your selected method</span></div><div><strong>${selected?(selected.fee*100).toFixed(2)+"%":"0%"}</strong><span>base pool fee</span></div></div><div class="pool-concentration"><svg class="pool-pie" viewBox="0 0 220 220" role="img" aria-label="Estimated mining pool concentration">${slices}<circle cx="110" cy="110" r="52" fill="#101718" stroke="#263033"/><text x="110" y="105" text-anchor="middle" fill="#e6eee9" font-size="13" font-family="ui-monospace,monospace">POOLS</text><text x="110" y="122" text-anchor="middle" fill="#9ba8a3" font-size="9" font-family="ui-monospace,monospace">EST. SHARE</text></svg><div class="pool-legend">${legend}</div></div><p class="modal-note">Named slices show the six largest available pools. The remainder is grouped as other pools / solo mining. Recent shares use mempool.space weekly block attribution; early history and dates between anchors are smoothed for gameplay, not an exact block-by-block reconstruction.</p><div class="actions" style="margin-top:12px;flex-wrap:wrap">${rows.map(x=>`<button class="action small ${state.pool===x.p.id&&state.mode==="pool"?"primary":""}" data-action="pool" data-value="${x.p.id}" ${x.eligible?"":"disabled"}>${x.p.name}${x.eligible?"":" · requires Block-template construction"}</button>`).join("")}<button class="action small ${state.mode==="solo"?"primary":""}" data-action="mode" data-value="solo">Solo</button></div></div></section>`
+}
+function dashboard(){
+  const fs=fleet(),p=priceAt(state.time),monthly=monthlyCost(),share=playerNetworkShareAt(state.time,fs.hash)*100,exp=operating()?expectedDay():0;
+  const historyBtc=state.history.length?state.history.map(x=>x.btc):[0,controlled()];
+  return `<div class="grid">
+    <section class="card span-12"><div class="hero"><div><div class="hero-kicker">${narrativeEra().label}</div><h1 id="dashboard-status">${operating()?"Your machines are securing the network.":state.policyLock?"Politics has shut the site.":state.debt>0?"The grid has cut you off.":"Mining is offline."}</h1><p id="dashboard-copy">${narrativeCopy("dashboard")} ${operating()?`You currently control ${fmtPct(share)} of effective hash.`:`Resolve the operational constraint or deliberately remain offline while history continues without you.`}</p></div><div class="hero-stat"><strong id="dashboard-yield">${fmtBtc(exp)}</strong><span>expected mining yield / day</span></div></div>
+      <div class="metric-row"><div class="metric"><div class="label">Controlled BTC</div><strong id="dashboard-controlled">${fmtBtc(controlled())}</strong><small>Private keys held</small></div><div class="metric"><div class="label">Custodial claims</div><strong id="dashboard-claims">${fmtBtc(claims())}</strong><small>Counterparty exposure</small></div><div class="metric"><div class="label">Cash runway</div><strong id="dashboard-runway">${monthly.total?Math.max(0,state.cash/monthly.total).toFixed(1):"∞"} mo</strong><small id="dashboard-runway-cost">${fmtUsd(monthly.total)} expected monthly</small></div><div class="metric"><div class="label">Facility load</div><strong id="dashboard-load">${(fs.kw/fs.cap*100).toFixed(1)}%</strong><small id="dashboard-load-sub">${fs.space} / ${facility().space} floor units</small></div></div>
+    </section>
+    ${settlementForecastVisual()}
+    ${operatorScoreVisual()}
+    <section class="card span-8"><div class="card-head"><h2>BTC / USD vs network hashrate</h2><div class="meta">daily price · 14-day hash mean · indexed at game start</div></div><div class="chart-wrap"><div id="dashboard-market-chart">${chart(sampled(priceAt),"#f7931a",true,{points:sampled(hashAt),color:"#86c79a",label:"Network hashrate",mainLabel:"BTC/USD"})}</div><div class="chart-labels"><span>Game start</span><span id="dashboard-chart-date">${dateFmt(state.time,true)}</span></div></div></section>
+    ${networkShareCard()}
+    ${poolDashboard()}
+    <section class="card span-6"><div class="card-head"><h2>Treasury map</h2><div class="meta">calculated</div></div><div id="dashboard-treasury" class="balance-list">${btcBreakdown()}</div></section>
+    <section class="card span-6"><div class="card-head"><h2>Controlled BTC history</h2><div class="meta">simulation</div></div><div class="chart-wrap"><div id="dashboard-history-chart">${chart(historyBtc,"#86c79a",true)}</div><div class="chart-labels"><span>run start</span><span id="dashboard-history-value">${fmtBtc(controlled())}</span></div></div></section>
+    <section class="card span-12"><div class="card-head"><h2>Mempool</h2><div class="meta">aggregate simulation</div></div><div id="dashboard-mempool" class="card-pad">${mempoolViz()}</div></section>
+    <section class="card span-12"><div class="card-head"><h2>Operator controls</h2><div class="meta">${state.mode.toUpperCase()} MINING</div></div><div class="card-pad actions"><button class="action ${state.power?"danger":"primary"}" data-action="toggle-power" ${state.debt||state.policyLock?"disabled":""}>${state.power?"Shut miners down":"Start miners"}</button><button class="action ${state.mode==="solo"?"primary":""}" data-action="mode" data-value="solo">Solo</button><button class="action ${state.mode==="pool"?"primary":""}" data-action="mode" data-value="pool" ${!availablePool()?"disabled":""}>Pool ${availablePool()?`· ${poolData().name} · ${(poolFee()*100).toFixed(2)}% fee`:"unavailable"}</button><button class="action" data-action="tab" data-value="mine">Buy hardware</button><button class="action" data-action="tab" data-value="market" ${state.time<MARKET?"disabled":""}>Raise cash</button><span id="dashboard-bill" class="push label">Next bill accrued: ${fmtUsd(state.bill)}</span></div></section>
+  </div>`
+}
