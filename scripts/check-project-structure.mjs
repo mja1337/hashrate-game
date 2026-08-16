@@ -15,6 +15,7 @@ const expectedScripts = [
   "src/engine/actions.js",
   "src/ui/presentation.js",
   "src/ui/tabs/dashboard.js",
+  "src/ui/tabs/pools.js",
   "src/ui/tabs/mine.js",
   "src/ui/tabs/ledger.js",
   "src/ui/tabs/market.js",

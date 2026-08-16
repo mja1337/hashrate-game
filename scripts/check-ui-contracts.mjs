@@ -43,6 +43,10 @@ assert(inline.includes('class="card span-12 exchange-balance-desk"'), "Market ex
 assert(inline.includes('class="span-12 facility-grid facility-options"'), "Facilities choices do not have a stable ordering target");
 assert(inline.includes('if(command&&facilityOptions)command.insertAdjacentElement("afterend",facilityOptions)'), "Facility choices are not placed directly below the current-facility command");
 assert(inline.includes("Math.min(900,Math.max(240,Math.ceil(days/7)+1))"), "Historical charts are not using capped weekly-or-better sampling");
+assert(inline.includes('"dashboard","mine","pools","market"'), "Pools is not a standalone navigation destination");
+assert(inline.includes('if(activeTab==="pools")return pools()'), "Pools page is not routed");
+assert(inline.includes('id:"bch"') && inline.includes('id:"bsv"'), "BCH and BSV fork-risk actions are missing");
+assert(inline.includes("UX walkthrough · page flow") && inline.includes("UX walkthrough · operating loop"), "Startup UX walkthrough is incomplete");
 
 const optionsStart = inline.indexOf("function hardwareFiatPurchaseOptions(");
 const optionsEnd = inline.indexOf("\nfunction hardwareFiatBuyControls(", optionsStart);

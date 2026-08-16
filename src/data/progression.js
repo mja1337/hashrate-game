@@ -5,6 +5,8 @@ const SPECULATIONS=[
   {id:"doge",date:"2013-12-06",name:"Dogecoin launch",kind:"Meme coin",chance:.28,payout:3.2,desc:"A viral fork is gathering a community. Most early meme bets fade; this one might run."},
   {id:"ethereum",date:"2015-07-30",name:"Ethereum launch",kind:"Smart-contract platform",chance:.38,payout:2.7,desc:"A new programmable chain asks you to rotate BTC into an unproven network token."},
   {id:"monero",date:"2014-04-18",name:"Monero launch",kind:"Privacy coin",chance:.30,payout:2.5,desc:"Privacy technology is compelling, but adoption and regulatory pressure make the trade uncertain."},
+  {id:"bch",date:"2017-08-01",name:"Bitcoin Cash hard fork",kind:"Bitcoin hard-fork claim",chance:.32,payout:2.4,desc:"A contentious block-size fork creates a separate asset. Risk hot-wallet BTC on the fork trade without making it part of the core operation."},
+  {id:"bsv",date:"2018-11-15",name:"Bitcoin SV hard fork",kind:"Bitcoin Cash hard-fork claim",chance:.18,payout:3.6,desc:"A second contentious split offers volatile fork exposure with severe technical, liquidity and counterparty risk."},
   {id:"solana",date:"2020-03-16",name:"Solana launch",kind:"High-throughput chain",chance:.25,payout:4.0,desc:"A fast new chain is promising scale. The upside is large; the early execution risk is larger."},
   {id:"shib",date:"2020-08-01",name:"Shiba Inu launch",kind:"Meme coin",chance:.16,payout:7.0,desc:"A meme-token punt with enormous upside on paper and a strong chance of becoming worthless."}
 ];
