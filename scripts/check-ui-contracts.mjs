@@ -3,7 +3,6 @@ import vm from "node:vm";
 
 const root = new URL("../", import.meta.url);
 const html = await readFile(new URL("index.html", root), "utf8");
-const css = await readFile(new URL("src/styles/app.css", root), "utf8");
 const appScripts = [...html.matchAll(/<script src="(src\/[^"]+\.js)"><\/script>/g)].map(match => match[1]);
 const inline = (await Promise.all(appScripts.map(file => readFile(new URL(file, root), "utf8")))).join("\n");
 
@@ -47,11 +46,6 @@ assert(inline.includes('"dashboard","mine","pools","market"'), "Pools is not a s
 assert(inline.includes('if(activeTab==="pools")return pools()'), "Pools page is not routed");
 assert(inline.includes('id:"bch"') && inline.includes('id:"bsv"'), "BCH and BSV fork-risk actions are missing");
 assert(inline.includes("UX walkthrough · page flow") && inline.includes("UX walkthrough · operating loop"), "Startup UX walkthrough is incomplete");
-assert(inline.includes('class="mobile-pause-button') && inline.includes('class="mobile-speed-panel"'), "Mobile simulation controls are missing");
-assert(css.includes("#dashboard-mempool{overflow:hidden}") && css.includes(".mp-chain{width:100%;flex:0 0 auto"), "Mobile mempool containment rules are missing");
-assert(inline.includes('const tickerBtc=value=>fmtBtc(value).replace(/ BTC$/,'), "Ticker BTC values still include a redundant unit suffix");
-assert(css.includes(".tick{min-width:115px;overflow:hidden") && css.includes("text-overflow:ellipsis"), "Ticker values can spill into adjacent cards");
-assert(inline.includes("retired=state.decommissionedHardware?.[id]||0") && inline.includes("retired=state.decommissionedHardware?.[h.id]||0"), "Miner sale controls do not consistently use retired inventory");
 
 const optionsStart = inline.indexOf("function hardwareFiatPurchaseOptions(");
 const optionsEnd = inline.indexOf("\nfunction hardwareFiatBuyControls(", optionsStart);
@@ -69,4 +63,4 @@ const controlsSource = inline.slice(controlsStart, controlsEnd);
 assert((controlsSource.match(/data-action=\\?"buy-hw\\?"/g) || []).length === 1, "A Mine card can render more than one dollar-purchase button");
 assert(controlsSource.includes("data-hardware-quantity"), "Mine batch quantities are not available through the single-button control");
 
-console.log("UI contracts passed: Mine purchases, difficulty and mobile speed controls, transaction precision, enhancement guards, mempool containment and Method coverage");
+console.log("UI contracts passed: unique Mine purchases, difficulty modes, transaction precision, enhancement guards and Method coverage");

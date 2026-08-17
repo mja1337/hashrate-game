@@ -12,8 +12,6 @@
 - `src/data/progression.js` — learning, skills, nodes, securities, donations and optional scenarios.
 - `src/data/content.js` — balance scenarios, release notes and historical story events.
 - `src/engine/history.js` — interpolation and historical/protocol lookup functions.
-- `src/engine/thermal.js` — cooling capacity, active heat load, room temperature and thermal stress.
-- `src/engine/nodes.js` — node power, synchronization, independent verification and Lightning capability.
 - `src/engine/simulation.js` — state, migrations, economics, settlement, ticking and live refresh.
 - `src/engine/actions.js` — player mutations, transactions, imports and exports.
 - `src/ui/presentation.js` — formatting, charts and reusable visual helpers.

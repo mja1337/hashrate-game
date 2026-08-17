@@ -24,9 +24,6 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(a==="learning-check")answerLearningCheck(v);
   else if(a==="order-parts")orderParts(id,Number(v));
   else if(a==="service-hw")serviceHardware(id);
-  else if(a==="hardware-power")setHardwarePower(id,v==="on",Number(b.dataset.qty)||1);
-  else if(a==="buy-cooling")buyCooling(id);
-  else if(a==="custody-lesson"){custodyLesson=v;render()}
   else if(a==="patch-firmware")patchFirmware();
   else if(a==="node-storage")upgradeNodeStorage(Number(v));
   else if(a==="node-prune")toggleNodePruning();
@@ -64,6 +61,6 @@ document.getElementById("app").addEventListener("pointerup",e=>{
   const b=e.target.closest('[data-action="tab"]');if(!b||b.disabled)return;
   recentTouchTab={value:b.dataset.value,at:Date.now()};activeTab=b.dataset.value;mobileMenuOpen=false;render(false);window.scrollTo({top:0,behavior:"smooth"});
 });
-document.getElementById("app").addEventListener("input",e=>{if(e.target.matches("[data-percent-input]"))updateTradePercentage(e.target.dataset.percentInput,e.target.value,e.target);else if(e.target.matches("[data-pool-history]"))updatePoolExplorer(Number(e.target.value))});
+document.getElementById("app").addEventListener("input",e=>{if(e.target.matches("[data-percent-input]"))updateTradePercentage(e.target.dataset.percentInput,e.target.value,e.target)});
 document.getElementById("app").addEventListener("change",e=>{if(e.target.matches("[data-hardware-quantity]")){const select=e.target,h=HARDWARE.find(item=>item.id===select.dataset.id),button=select.closest(".fiat-buy-actions")?.querySelector('[data-action="buy-hw"]'),qty=Math.max(1,Math.floor(Number(select.value)||1));if(h&&button){button.dataset.value=String(qty);button.textContent=`Buy ${fmtCompactNumber(qty)} · ${fmtCompactUsd(hardwareUnitCost(h)*qty)}`}return}if(e.target.id==="importSave"&&e.target.files&&e.target.files[0])importSave(e.target.files[0])});
 document.getElementById("app").addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.matches(".story-item"))e.target.click()});

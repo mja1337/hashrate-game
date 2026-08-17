@@ -14,7 +14,7 @@ const initialState=()=>({
   cash:1500,startingCash:1500,difficulty:"medium",campaignStart:START,debt:0,bill:0,billLedger:{energy:0,rent:0,internet:0,staff:0,insurance:0,nodeNetwork:0,other:0},lastMonth:new Date(START).toISOString().slice(0,7),power:true,policyLock:null,
   wallets:{hot:0,cold:0,mtgox:0,bitfinex:0,quadriga:0,frontier:0,exchange:0,etf:0,frozen:0},
   lightning:{locked:0,earned:0},
-  hardware:{laptop:1},poweredDownHardware:{},facility:"home",region:"na",thermal:{temperature:22,equipment:{}},node:0,nodeStorage:50,nodePruned:false,nodeMode:"archival",nodeSync:{primaryLag:0,primaryPeak:0,backupLag:0,backupPeak:0},backupNode:{enabled:false,outageUntil:0},mode:"solo",pool:"f2pool",
+  hardware:{laptop:1},facility:"home",region:"na",node:0,nodeStorage:50,nodePruned:false,nodeMode:"archival",nodeSync:{primaryLag:0,primaryPeak:0,backupLag:0,backupPeak:0},backupNode:{enabled:false,outageUntil:0},mode:"solo",pool:"f2pool",
   skills:[],points:0,startingGrant:false,seen:[],activeEvent:null,storyPause:true,shoppingPause:false,speculations:[],powerRateShock:null,hardwareAlerts:{seen:[],queue:[],active:null,resumeSpeed:0},
   treasuryPolicy:"cover",pendingSettlement:null,endReason:null,
   operator:{eras:{},periodMined:0,periodUptime:0,periodDays:0,lastRevenueUsd:0,totalMonths:0,solventMonths:0,profitableMonths:0,competitiveMonths:0,bridgeLoans:0,restructures:0},
@@ -22,7 +22,7 @@ const initialState=()=>({
   blocks:0,mined:0,nodeDays:0,uptimeDays:0,powerSpent:0,nextMilestone:100,
   connectivity:"fixed",history:[],activity:[],activitySeq:0,log:[{time:START,text:"Client synced to the network tip",amount:"~block "+approxHeight(START)}]
 });
-let state,loadedHasHardwareAlerts=false,activeTab="dashboard",mobileMenuOpen=false,activityFilter="all",activityLimit=100,tradePercentages={},custodyLesson="malware",introDifficulty="hard",pendingTransaction=null,toast=null,toastTimer=null,timer=null,faucet=null,faucetTimer=null,introStep=0,renderQueued=false,renderFullQueued=false,lastRenderAt=0;
+let state,loadedHasHardwareAlerts=false,activeTab="dashboard",mobileMenuOpen=false,activityFilter="all",activityLimit=100,tradePercentages={},introDifficulty="hard",pendingTransaction=null,toast=null,toastTimer=null,timer=null,faucet=null,faucetTimer=null,introStep=0,renderQueued=false,renderFullQueued=false,lastRenderAt=0;
 try{const raw=localStorage.getItem(SAVE_KEY);if(raw){const parsed=JSON.parse(raw);loadedHasHardwareAlerts=!!parsed.hardwareAlerts;state=Object.assign(initialState(),parsed)}else state=initialState()}catch(e){state=initialState()}
 const ACTIVITY_CATEGORIES=["trade","fleet","finance","reward","custody","learning","operations"];
 function activityCategory(text=""){
@@ -67,9 +67,6 @@ state.maintenance.parts=Math.max(0,Number(state.maintenance.parts)||0);
 state.maintenance.inventory=Object.assign({fan:0,hashboard:0,powerPcb:0,coolantPump:0,coolingManifold:0},state.maintenance.inventory&&typeof state.maintenance.inventory==="object"?state.maintenance.inventory:{});
 SPARE_PARTS.forEach(part=>state.maintenance.inventory[part.id]=Math.max(0,Math.floor(Number(state.maintenance.inventory[part.id])||0)));
 if(!state.maintenance.inventoryMigrated){state.maintenance.inventory.fan+=Math.floor(state.maintenance.parts);state.maintenance.parts=0;state.maintenance.inventoryMigrated=true;}
-state.poweredDownHardware=state.poweredDownHardware&&typeof state.poweredDownHardware==="object"?state.poweredDownHardware:{};
-state.thermal=Object.assign({temperature:22,equipment:{}},state.thermal||{});state.thermal.temperature=Math.max(-10,Math.min(90,Number(state.thermal.temperature)||22));state.thermal.equipment=state.thermal.equipment&&typeof state.thermal.equipment==="object"?state.thermal.equipment:{};
-COOLING_EQUIPMENT.forEach(item=>state.thermal.equipment[item.id]=Math.max(0,Math.floor(Number(state.thermal.equipment[item.id])||0)));
 state.procurementOrders=Array.isArray(state.procurementOrders)?state.procurementOrders.filter(o=>HARDWARE.some(h=>h.id===o.id)&&Number(o.qty)>0&&Number.isFinite(Number(o.due))):[];
 state.inactiveHardware=state.inactiveHardware&&typeof state.inactiveHardware==="object"?state.inactiveHardware:{};
 HARDWARE.forEach(h=>state.inactiveHardware[h.id]=Math.max(0,Math.floor(Number(state.inactiveHardware[h.id])||0)));
@@ -103,7 +100,7 @@ const numericDefaults={cash:1500,debt:0,bill:0,points:0,rng:123456789};
 Object.keys(numericDefaults).forEach(k=>{if(!Number.isFinite(Number(state[k])))state[k]=numericDefaults[k];else state[k]=Number(state[k])});
 if(state.shoppingPause){state.shoppingPause=false;if(state.started&&state.speed<=0&&!state.activeEvent&&!state.ended)state.speed=Number(state.returnSpeed)||1}
 state.hardware=state.hardware&&typeof state.hardware==="object"?state.hardware:{};
-HARDWARE.forEach(h=>{if(!Number.isFinite(Number(state.hardware[h.id])))state.hardware[h.id]=h.permanent?1:0;else state.hardware[h.id]=Math.max(h.permanent?1:0,Math.floor(Number(state.hardware[h.id])));state.poweredDownHardware[h.id]=Math.max(0,Math.min(state.hardware[h.id],Math.floor(Number(state.poweredDownHardware[h.id])||0)))});
+HARDWARE.forEach(h=>{if(!Number.isFinite(Number(state.hardware[h.id])))state.hardware[h.id]=h.permanent?1:0;else state.hardware[h.id]=Math.max(h.permanent?1:0,Math.floor(Number(state.hardware[h.id])))});
 function hasSkill(id){return state.skills.includes(id)}
 function fieldTechnicianCount(s=state){return (s.staff||[]).filter(id=>id==="fieldtech").length}
 function activeServiceJob(id,s=state){return (s.maintenance?.serviceJobs||[]).find(job=>job.id===id)}
@@ -129,17 +126,14 @@ function hardwareOfflineReason(h,s=state){
 }
 function fitsInstalledFleet(s){const fs=fleet(s),f=FACILITIES.find(x=>x.id===s.facility)||FACILITIES[0];return fs.potentialKw<=fs.cap&&fs.space<=f.space}
 function fleet(s=state){
-  let hash=0,minerW=0,space=0,value=0,count=0,activeCount=0,potentialW=0,offline=[];
-  HARDWARE.forEach(h=>{const n=s.hardware[h.id]||0,reason=hardwareOfflineReason(h,s),servicing=activeServiceJob(h.id,s)?.count||0,faults=hardwareFaultCount(h,s),repairing=Math.min(n,Math.max(servicing,faults)),paused=Math.min(Math.max(0,n-repairing),hardwarePoweredDownCount(h,s));space+=h.space*n;value+=h.cost*n;count+=n;potentialW+=h.w*n;if(n&&reason){offline.push({h,n,reason});return}if(repairing)offline.push({h,n:repairing,reason:servicing?"Repair in progress":"Unexpected hardware fault"});if(paused)offline.push({h,n:paused,reason:"Manually powered down"});const active=Math.max(0,n-repairing-paused),effectiveHash=h.hash*hardwareLaunchFactor(h,s.time);activeCount+=active;hash+=effectiveHash*active;minerW+=h.w*active;if(s.skills.includes("asictune")&&(h.era==="ASIC"||h.era==="HYDRO ASIC"))hash+=effectiveHash*active*.05});
-  if(s.skills.includes("firmware"))hash*=1.04;if(s.skills.includes("undervolt"))minerW*=.95;
-  const coolingW=coolingPowerWatts(s,minerW),w=minerW+coolingW;potentialW*=s.skills.includes("undervolt")?.95:1;potentialW+=coolingPeakWatts(s);
+  let hash=0,w=0,space=0,value=0,count=0,potentialW=0,offline=[];
+  HARDWARE.forEach(h=>{const n=s.hardware[h.id]||0,reason=hardwareOfflineReason(h,s),servicing=activeServiceJob(h.id,s)?.count||0,faults=hardwareFaultCount(h,s),unavailable=Math.min(n,Math.max(servicing,faults));space+=h.space*n;value+=h.cost*n;count+=n;potentialW+=h.w*n;if(n&&reason){offline.push({h,n,reason});return}if(unavailable)offline.push({h,n:unavailable,reason:servicing?"Repair in progress":"Unexpected hardware fault"});const active=Math.max(0,n-unavailable),effectiveHash=h.hash*hardwareLaunchFactor(h,s.time);hash+=effectiveHash*active;w+=h.w*active;if(s.skills.includes("asictune")&&(h.era==="ASIC"||h.era==="HYDRO ASIC"))hash+=effectiveHash*active*.05});
+  if(s.skills.includes("firmware"))hash*=1.04;if(s.skills.includes("undervolt"))w*=.95;
   const f=FACILITIES.find(x=>x.id===s.facility)||FACILITIES[0],cap=f.kw*(s.skills.includes("capacity")?1.1:1);
   const expandedCap=cap*(s.skills.includes("substation")?1.1:1);
-  return{hash,w,minerW,coolingW,kw:w/1000,space,value,count,activeCount,cap:expandedCap,potentialKw:potentialW/1000,offline,offlineCount:offline.reduce((a,x)=>a+x.n,0),within:w/1000<=expandedCap&&space<=f.space};
+  return{hash,w,kw:w/1000,space,value,count,cap:expandedCap,potentialKw:potentialW/1000,offline,offlineCount:offline.reduce((a,x)=>a+x.n,0),within:w/1000<=expandedCap&&space<=f.space};
 }
 function controlled(){return state.wallets.hot+state.wallets.cold}
-function hotWalletIncidentRisk(s=state){if(s.time<at("2011-01-01")||(s.wallets?.hot||0)<=0)return 0;const selfHeld=Math.max(1e-12,(s.wallets?.hot||0)+(s.wallets?.cold||0)),hotShare=(s.wallets?.hot||0)/selfHeld,base=.00065+hotShare*.0016;return base*(s.skills?.includes("multisig")?.42:1)}
-function hotWalletAnnualRisk(s=state){return 1-Math.pow(1-hotWalletIncidentRisk(s),12)}
 function treasuryPolicy(){return TREASURY_POLICIES.find(x=>x.id===state.treasuryPolicy)||TREASURY_POLICIES[0]}
 function operatorEraAt(t=state.time){return OPERATOR_ERAS.find(era=>t>=era.start&&t<era.end)||OPERATOR_ERAS[OPERATOR_ERAS.length-1]}
 function operatorEraStats(era=operatorEraAt()){return state.operator.eras[era.id]}
@@ -156,7 +150,38 @@ function powerOutage(){return state.time<(state.ops?.powerOutageUntil||0)}
 function siteOutage(){return connectivityOutage()||powerOutage()}
 function activeSiteIncident(){if(powerOutage())return{kind:"Grid outage",until:state.ops.powerOutageUntil};if(connectivityOutage())return{kind:"Internet outage",until:state.ops.outageUntil};return null}
 function relocating(){return !!state.relocationJob&&state.time<state.relocationJob.due}
+function nodeProfile(){return NODE_MODES.find(x=>x.id===state.nodeMode)||NODE_MODES[1]}
+function nodeDeploymentName(){return state.node===2?"Hardened node":state.node===1?"Dedicated full node":"Laptop full node"}
+function nodeModeWatts(profile=nodeProfile()){if(state.node===0)return 0;if(state.node===2)return profile.id==="relay"?profile.watts:profile.id==="archival"?80:35;return profile.watts}
+function nodeModeMonthly(profile=nodeProfile()){if(state.node===0)return 0;if(state.node===2&&profile.id!=="relay")return profile.monthly*2;return profile.monthly}
+function nodeModeConnections(profile=nodeProfile()){if(state.node===0)return profile.id==="pruned"?8:12;if(state.node===2&&profile.id!=="relay")return profile.connections*2;return profile.connections}
+function nodePowerWatts(){return nodeModeWatts()}
+function nodeMonthlyOverhead(){return nodeModeMonthly()}
+function backupNodeMonthlyOverhead(){return state.backupNode?.enabled?BACKUP_NODE.monthly:0}
+function totalNodeMonthlyOverhead(){return nodeMonthlyOverhead()+backupNodeMonthlyOverhead()}
+function nodeConnections(){return nodeModeConnections()}
+function nodeHostPowered(){if(state.debt>0||state.policyLock)return false;if(state.node>=1)return true;const laptop=HARDWARE.find(x=>x.id==="laptop");return !!state.power&&!!laptop&&!hardwareOfflineReason(laptop)}
+function nodeStorageReady(){const p=nodeProfile();return p.id==="pruned"?state.nodeStorage>=25:state.nodeStorage>=chainSizeAt(state.time)}
+function primaryNodeReady(){return nodeHostPowered()&&!siteOutage()&&nodeStorageReady()}
+function backupNodeOutage(){return state.time<(state.backupNode?.outageUntil||0)}
+function backupNodeReady(){return !!state.backupNode?.enabled&&state.debt<=0&&!backupNodeOutage()}
+function primaryNodeOnline(){return primaryNodeReady()&&(state.nodeSync?.primaryLag||0)<=0}
+function backupNodeOnline(){return backupNodeReady()&&(state.nodeSync?.backupLag||0)<=0}
+function nodeOnline(){return primaryNodeOnline()||backupNodeOnline()}
+function primaryNodeOfflineReason(){if(state.debt>0)return"grid arrears";if(state.policyLock)return"site policy shutdown";if(siteOutage())return"site connectivity outage";if(state.node===0&&!state.power)return"mining laptop powered off";if(state.node===0&&hardwareOfflineReason(HARDWARE.find(x=>x.id==="laptop")))return"laptop hardware unavailable";if(!nodeStorageReady())return"storage below chain requirement";if((state.nodeSync?.primaryLag||0)>0)return`catching up · ${fmtNum(state.nodeSync.primaryLag)} days behind`;return"primary node offline"}
+function backupNodeOfflineReason(){if(!state.backupNode?.enabled)return"not deployed";if(state.debt>0)return"hosting account in arrears";if(backupNodeOutage())return"remote provider outage";if((state.nodeSync?.backupLag||0)>0)return`catching up · ${fmtNum(state.nodeSync.backupLag)} days behind`;return"backup node offline"}
+function nodeOfflineReason(){if(primaryNodeReady()&&(state.nodeSync?.primaryLag||0)>0)return primaryNodeOfflineReason();if(backupNodeReady()&&(state.nodeSync?.backupLag||0)>0)return backupNodeOfflineReason();return state.backupNode?.enabled?`primary: ${primaryNodeOfflineReason()} · backup: ${backupNodeOfflineReason()}`:primaryNodeOfflineReason()}
+function nodeVerificationPath(){if(primaryNodeOnline()&&backupNodeOnline())return"two independent nodes at tip";if(primaryNodeOnline())return"primary node at tip";if(backupNodeOnline())return"remote backup carrying verification";return nodeOfflineReason()}
+function primaryNodeCatchupRate(){return state.node===2?6:state.node===1?3:1.5}
+function nodeSyncProgress(lag,peak){return peak>0?Math.max(0,Math.min(100,(1-lag/peak)*100)):lag<=0?100:0}
+function initialBackupSyncLag(){return Math.max(5,Math.ceil(chainSizeAt(state.time)/40))}
+function nodeVerificationCoverage(){const elapsed=Math.max(1,Math.floor((state.time-START)/DAY));return Math.max(0,Math.min(1,(state.nodeDays||0)/elapsed))}
+function nodeMiningFactor(){return !nodeOnline()?0.97:!primaryNodeOnline()?0.99:state.nodeMode==="relay"?1.015:state.nodeMode==="pruned"?0.99:1}
+function blockRewardAt(t){const localTemplates=hasSkill("blocktemplate")&&primaryNodeOnline()&&state.nodeMode!=="pruned",feeMultiplier=(localTemplates?1.08:1)*(state.nodeMode==="relay"&&primaryNodeOnline()?1.03:1);return subsidyAt(t)+feeAt(t)*feeMultiplier}
+function lightningAvailable(){return state.time>=LIGHTNING&&state.node>=1&&primaryNodeOnline()&&state.nodeMode!=="pruned"}
 function poolEligible(p=poolData()){return !!p&&(!p.requires||hasSkill(p.requires))}
+function lightningRate(){const activity=Math.max(.25,Math.min(3,txAt(state.time)/250000));return .00003*activity}
+function lightningDailyFee(){return lightningAvailable()?lightningLocked()*lightningRate()*(hasSkill("monitoring")?1.08:1)*(state.nodeMode==="relay"?1.2:1):0}
 function claims(){return state.wallets.mtgox+state.wallets.bitfinex+state.wallets.quadriga+state.wallets.frontier+state.wallets.exchange+state.wallets.frozen}
 function totalBtc(){return controlled()+claims()}
 function marketLiquidBtc(){return state.wallets.hot+["mtgox","bitfinex","quadriga","frontier","exchange"].reduce((sum,id)=>sum+(venueAvailable(id)&&!venueFrozen(id)?state.wallets[id]:0),0)}
@@ -177,7 +202,7 @@ function poolData(id=state.pool){return POOLS.find(x=>x.id===id)||POOLS.find(x=>
 function poolShareAt(id,t){const p=poolData(id);if(!p||id==="solo")return id==="solo"?0:0;const a=p.anchors.map(([d,v])=>[at(d),v]).sort((x,y)=>x[0]-y[0]);if(t<a[0][0])return 0;for(let i=0;i<a.length-1;i++){const [t0,v0]=a[i],[t1,v1]=a[i+1];if(t>=t0&&t<=t1){const f=(t-t0)/(t1-t0);return v0+(v1-v0)*f}}return a[a.length-1][1]}
 function activePoolShare(){return state.mode==="pool"?poolShareAt(state.pool,state.time):0}
 function poolFee(){const p=poolData();return Math.max(.005,(p?.fee||.02)-(hasSkill("poolops")?.004:0))}
-function operating(){const fs=fleet();return state.power&&state.debt<=0&&!state.policyLock&&!siteOutage()&&!relocating()&&fs.within&&fs.hash>0}
+function operating(){const fs=fleet();return state.power&&state.debt<=0&&!state.policyLock&&!siteOutage()&&!relocating()&&fs.within}
 function asicCount(){return HARDWARE.filter(h=>h.era==="ASIC"||h.era==="HYDRO ASIC").reduce((n,h)=>n+(state.hardware[h.id]||0),0)}
 function firmwarePatchDue(){return asicCount()>0&&state.time>=at("2017-04-26")&&state.time>(state.ops?.firmwarePatchedUntil||0)}
 function firmwareHijacked(){return state.time<(state.ops?.hijackUntil||0)}
@@ -228,9 +253,9 @@ function servicePlan(h,count){const technicians=fieldTechnicianCount(),committed
 function advanceMaintenance(){
   state.maintenance.orders=state.maintenance.orders.filter(order=>{if(order.due>state.time)return true;const part=sparePart(order.type)||sparePart("fan");state.maintenance.inventory[part.id]=(state.maintenance.inventory[part.id]||0)+order.qty;log("Spare parts delivered",`+${order.qty} ${part.name}${order.qty===1?"":"s"}`);return false});
   state.maintenance.serviceJobs=state.maintenance.serviceJobs.filter(job=>{if(job.due>state.time)return true;const h=HARDWARE.find(x=>x.id===job.id),repaired=Math.max(1,Number(job.count)||0);state.maintenance.faults[job.id]=Math.max(0,hardwareFaultCount(h)-repaired);state.maintenance.condition[job.id]=Math.min(100,maintenanceCondition(h)+Math.max(18,60*repaired/Math.max(1,state.hardware[job.id]||1)));log(`Service completed: ${h?.name||job.id}`,`${repaired} unit${repaired===1?"":"s"} repaired · ${job.crew}-technician crew`);showToast("Service completed",`${repaired} × ${h?.name||"miner"} returned to service.`);return false});
-  if(!thermalPowerAvailable())return;
-  const technicians=fieldTechnicianCount(),wearFactor=(technicians?Math.max(.35,.6-.08*Math.min(2,technicians-1)-.02*Math.max(0,technicians-3)):1)*temperatureWearMultiplier(),failureHeat=temperatureFailureMultiplier();
-  HARDWARE.forEach(h=>{const n=state.hardware[h.id]||0;if(!n||hardwareOfflineReason(h)!=="")return;const age=Math.max(0,(state.time-at(h.date))/DAY/365),condition=maintenanceCondition(h),repairing=Math.min(n,Math.max(hardwareFaultCount(h),Number(activeServiceJob(h.id)?.count||0))),paused=Math.min(n-repairing,hardwarePoweredDownCount(h)),active=Math.max(0,n-repairing-paused);if(!active)return;const wear=((h.era==="HYDRO ASIC"?.035:.018)+Math.min(.04,age*.002))*wearFactor*(active/n);state.maintenance.condition[h.id]=Math.max(0,condition-wear);const base=h.era==="HYDRO ASIC"?.0015:h.era==="ASIC"?.0009:h.era==="GPU"?.00065:.00035,stress=(1+(100-condition)/55+age*.12)*failureHeat,failures=Math.min(active,poisson(active*base*stress*(technicians?0.72:1)));if(failures){state.maintenance.faults[h.id]=hardwareFaultCount(h)+failures;log(`${h.name} fault detected`,`${failures} unit${failures===1?"":"s"} offline · ${roomTemperatureC().toFixed(0)}°C room`,`fleet`);showToast("Fleet fault",`${failures} × ${h.name} went offline at ${roomTemperatureC().toFixed(0)}°C. Cool the room or schedule a repair in Operations.`);renderFullQueued=true}});
+  const fs=fleet();fs.offline.forEach(()=>{});
+  const technicians=fieldTechnicianCount(),wearFactor=technicians?Math.max(.35,.6-.08*Math.min(2,technicians-1)-.02*Math.max(0,technicians-3)):1;
+  HARDWARE.forEach(h=>{const n=state.hardware[h.id]||0;if(!n||hardwareOfflineReason(h)!=="")return;const age=Math.max(0,(state.time-at(h.date))/DAY/365),wear=((h.era==="HYDRO ASIC"?.035:.018)+Math.min(.04,age*.002))*wearFactor,condition=maintenanceCondition(h),active=Math.max(0,n-hardwareFaultCount(h)-Number(activeServiceJob(h.id)?.count||0));state.maintenance.condition[h.id]=Math.max(0,condition-wear);if(!active)return;const base=h.era==="HYDRO ASIC"?.0015:h.era==="ASIC"?.0009:h.era==="GPU"?.00065:.00035,stress=1+(100-condition)/55+age*.12,failures=Math.min(active,poisson(active*base*stress*(technicians?0.72:1)));if(failures){state.maintenance.faults[h.id]=hardwareFaultCount(h)+failures;log(`${h.name} fault detected`,`${failures} unit${failures===1?"":"s"} offline · repair parts required`,`fleet`);showToast("Fleet fault",`${failures} × ${h.name} went offline. Schedule a repair in Operations.`);renderFullQueued=true}});
 }
 function orderParts(type,qty=1){
   const part=sparePart(type);if(!part)return;qty=Math.max(1,Math.floor(Number(qty)||1));const covid=covidPartsMarket(),unit=part.cost*(covid?2.25:1),cost=qty*unit,lead=covid?42:14;
@@ -262,7 +287,6 @@ function advanceOperationalRisks(next){
   if(state.ops.outageUntil&&next>=state.ops.outageUntil){state.ops.outageUntil=0;log("Connectivity restored",`${region().name} upstream service resumed`,`operations`);showToast("Internet restored",`${connectivityPlan().name} service is back. Mining and primary-node connectivity can resume.`)}
   if(state.ops.powerOutageUntil&&next>=state.ops.powerOutageUntil){state.ops.powerOutageUntil=0;log("Grid power restored",`${region().name} site energized`,`operations`);showToast("Grid restored",`Power is back at ${facility().name}. The fleet can resume hashing.`)}
   const month=new Date(next).toISOString().slice(0,7);if(state.ops.riskMonth===month)return;state.ops.riskMonth=month;
-  const hotRisk=hotWalletIncidentRisk();if(hotRisk>0&&nextRand()<hotRisk){const lost=state.wallets.hot*(.12+nextRand()*.28);state.wallets.hot=Math.max(0,state.wallets.hot-lost);log("Hot-wallet key compromise",`-${fmtBtc(lost)} · cold storage unaffected`,"custody");showToast("Hot wallet compromised",`${fmtBtc(lost)} was lost from the online wallet. Cold storage and custodial venues were unaffected.`);renderFullQueued=true}
   if(firmwarePatchDue()&&!firmwareHijacked()&&nextRand()<.07){state.ops.hijackUntil=next+DAY*(10+Math.floor(nextRand()*21));log("ASIC fleet hijacked","35% of hash diverted");showToast("Firmware compromise","Unpatched ASIC firmware is pointing part of your hashrate to an attacker. Patch it now.");}
   const r=region(),outageRisk=connectivityIncidentRisk(),gridRisk=Math.min(.28,Math.max(.004,(1-r.rely)*1.15));
   if(!siteOutage()&&(operating()||nodeHostPowered())&&nextRand()<gridRisk){const days=1+Math.floor(nextRand()*(2+gridRisk*45));state.ops.powerOutageUntil=next+DAY*days;log(`${r.name} grid outage`,`${days} days without power`,`operations`);showToast("Grid outage",`${r.name}'s grid is unavailable at ${facility().name}. Mining, cooling and primary-node services pause for ${days} days.`);}
@@ -393,7 +417,6 @@ function tick(silent=false){
   const prev=state.time,next=state.sandbox?prev+DAY:Math.min(END,prev+DAY),unlockCrossed=timeGatedUnlockCrossed(prev,next),previousSubsidy=subsidyAt(prev),nextSubsidy=subsidyAt(next);state.time=next;
   if(state.sandbox&&nextSubsidy<previousSubsidy){log("Protocol halving",`Block subsidy reduced from ${previousSubsidy} BTC to ${nextSubsidy} BTC`);if(!silent)showToast("Bitcoin halving",`The block subsidy is now ${nextSubsidy} BTC. Future mining payouts reflect the new issuance rate.`)}
   advanceLearning();
-  advanceThermals();
   advanceMaintenance();
   advanceProcurement();
   advanceFleetLifecycle();
@@ -479,21 +502,21 @@ function refreshMinePricing(){
   document.querySelectorAll(".catalog .item").forEach(card=>{
     const firstBuy=card.querySelector('[data-action="buy-hw"]');if(!firstBuy)return;
     const h=HARDWARE.find(x=>x.id===firstBuy.dataset.id);if(!h||h.permanent)return;
-    const available=state.time>=at(h.date),owned=state.hardware[h.id]||0,retired=state.decommissionedHardware?.[h.id]||0,cost=hardwareUnitCost(h),resale=resaleHardwareValue(h),capacityMax=Math.max(0,Math.min(Math.floor(availableKw/Math.max(1,h.w)),Math.floor(availableSpace/Math.max(1,h.space)))),fiatMax=Math.max(0,Math.min(Math.floor(state.cash/cost),capacityMax)),price=card.querySelector(".price");
+    const available=state.time>=at(h.date),owned=state.hardware[h.id]||0,cost=hardwareUnitCost(h),resale=resaleHardwareValue(h),capacityMax=Math.max(0,Math.min(Math.floor(availableKw/Math.max(1,h.w)),Math.floor(availableSpace/Math.max(1,h.space)))),fiatMax=Math.max(0,Math.min(Math.floor(state.cash/cost),capacityMax)),price=card.querySelector(".price");
     if(price)price.innerHTML=`Buy · ${fmtCompactUsd(cost)} <small>Sell now · ${fmtCompactUsd(resale)}${marketOpen?` · ${fmtCompactBtc(resale/priceAt(state.time))}`:""}</small>`;
     const fiatActions=card.querySelector(".fiat-buy-actions"),selectedFiatQty=Number(fiatActions?.querySelector("[data-hardware-quantity]")?.value)||1;if(fiatActions)fiatActions.outerHTML=hardwareFiatBuyControls(h,cost,fiatMax,available,selectedFiatQty);
     const btcBuys=[...card.querySelectorAll('[data-action="buy-hw-btc"]')];
     if(marketOpen&&btcBuys.length){const unitBtc=cost/priceAt(state.time),btcMax=Math.max(0,Math.min(Math.floor(state.wallets.hot/unitBtc),capacityMax));btcBuys[0].dataset.value="1";btcBuys[0].disabled=btcMax<1;btcBuys[0].textContent=`Buy 1 · ${fmtCompactBtc(unitBtc)}`;btcBuys[1].dataset.value=String(btcMax);btcBuys[1].disabled=btcMax<1;btcBuys[1].textContent=`Buy max · ${fmtCompactBtc(unitBtc*btcMax)} (${fmtCompactNumber(btcMax)} miners)`}
     const fiatSells=[...card.querySelectorAll('[data-action="sell-hw"]')],btcSells=[...card.querySelectorAll('[data-action="sell-hw-btc"]')];
-    if(fiatSells[0]){fiatSells[0].disabled=retired<1;fiatSells[0].textContent=`Sell 1 · ${fmtCompactUsd(resale)}`}
-    if(fiatSells[1]){fiatSells[1].dataset.value=String(retired);fiatSells[1].disabled=retired<1;fiatSells[1].textContent=`Sell all · ${fmtCompactUsd(resale*retired)} (${fmtCompactNumber(retired)} miners)`}
-    if(btcSells[0]){btcSells[0].disabled=!marketOpen||retired<1;btcSells[0].textContent=`Sell 1 · ${marketOpen?fmtCompactBtc(resale/priceAt(state.time)):"BTC unavailable"}`}
-    if(btcSells[1]){btcSells[1].dataset.value=String(retired);btcSells[1].disabled=!marketOpen||retired<1;btcSells[1].textContent=`Sell all · ${marketOpen?fmtCompactBtc(resale*retired/priceAt(state.time)):"BTC unavailable"} (${fmtCompactNumber(retired)} miners)`}
+    if(fiatSells[0])fiatSells[0].textContent=`Sell 1 · ${fmtCompactUsd(resale)}`;
+    if(fiatSells[1]){fiatSells[1].dataset.value=String(owned);fiatSells[1].textContent=`Sell all · ${fmtCompactUsd(resale*owned)} (${fmtCompactNumber(owned)} miners)`}
+    if(btcSells[0]){btcSells[0].disabled=!marketOpen;btcSells[0].textContent=`Sell 1 · ${marketOpen?fmtCompactBtc(resale/priceAt(state.time)):"BTC unavailable"}`}
+    if(btcSells[1]){btcSells[1].dataset.value=String(owned);btcSells[1].disabled=!marketOpen;btcSells[1].textContent=`Sell all · ${marketOpen?fmtCompactBtc(resale*owned/priceAt(state.time)):"BTC unavailable"} (${fmtCompactNumber(owned)} miners)`}
   });
 }
 function refreshLive(){
   const fs=fleet(),mc=monthlyCost(),online=operating(),p=priceAt(state.time),set=(id,value)=>{const el=document.getElementById(id);if(el)el.textContent=value};
-  const tickerBtc=value=>fmtBtc(value).replace(/ BTC$/,"");set("live-date",dateFmt(state.time));set("live-block",`BLOCK ~${fmtNum(approxHeight(state.time))}`);set("live-fiat",fmtUsd(state.cash));set("live-illiquid-fiat",fmtUsd(equityValue()));set("live-controlled-btc",tickerBtc(controlled()));set("live-custodial-btc",tickerBtc(claims()));set("live-lightning-btc",tickerBtc(lightningLocked()));set("live-price",state.time<MARKET?"NO MARKET":fmtUsd(p));set("live-network-hash",fmtHash(hashAt(state.time)));set("live-difficulty",fmtDiff(difficultyAt(state.time)));set("live-subsidy",`${subsidyAt(state.time)} BTC`);set("live-fees",fmtBtc(feeAt(state.time)));set("live-your-hash",fmtHash(fs.hash));set("live-your-status",online?"online":"offline");set("live-power",`${fs.kw.toFixed(2)} kW`);set("live-power-rate",`${fmtUsd(mc.rate)}/kWh`);set("live-transactions",fmtNum(txAt(state.time)));set("live-worth",fmtUsd(netWorth()));
+  set("live-date",dateFmt(state.time));set("live-block",`BLOCK ~${fmtNum(approxHeight(state.time))}`);set("live-fiat",fmtUsd(state.cash));set("live-illiquid-fiat",fmtUsd(equityValue()));set("live-controlled-btc",fmtBtc(controlled()));set("live-custodial-btc",fmtBtc(claims()));set("live-lightning-btc",fmtBtc(lightningLocked()));set("live-price",state.time<MARKET?"NO MARKET":fmtUsd(p));set("live-network-hash",fmtHash(hashAt(state.time)));set("live-difficulty",fmtDiff(difficultyAt(state.time)));set("live-subsidy",`${subsidyAt(state.time)} BTC`);set("live-fees",fmtBtc(feeAt(state.time)));set("live-your-hash",fmtHash(fs.hash));set("live-your-status",online?"online":"offline");set("live-power",`${fs.kw.toFixed(2)} kW`);set("live-power-rate",`${fmtUsd(mc.rate)}/kWh`);set("live-transactions",fmtNum(txAt(state.time)));set("live-worth",fmtUsd(netWorth()));
   const hash=document.getElementById("live-your-hash");if(hash)hash.classList.toggle("green",online);refreshDashboard();refreshSettlementForecast();refreshLearning();
 }
 function setTimer(){clearInterval(timer);if(state.speed>0)timer=setInterval(tick,Math.max(70,2000/state.speed))}
