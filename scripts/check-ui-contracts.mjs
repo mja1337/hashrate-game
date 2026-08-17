@@ -48,10 +48,14 @@ assert(inline.includes('if(activeTab==="pools")return pools()'), "Pools page is 
 assert(inline.includes('id:"bch"') && inline.includes('id:"bsv"'), "BCH and BSV fork-risk actions are missing");
 assert(inline.includes("UX walkthrough · page flow") && inline.includes("UX walkthrough · operating loop"), "Startup UX walkthrough is incomplete");
 assert(inline.includes('class="mobile-pause-button') && inline.includes('class="mobile-speed-panel"'), "Mobile simulation controls are missing");
+assert(inline.includes('data-action="mobile-menu-section"') && inline.includes('mobileMenuSection="play"'), "Mobile navigation is not grouped into first-tap sections");
+assert(css.includes('.mobile-menu-sections{display:grid;grid-template-columns:repeat(4') && css.includes('.mobile-nav-tabs{display:grid;grid-template-columns:repeat(4'), "Mobile secondary navigation is not condensed for small screens");
 assert(css.includes("#dashboard-mempool{overflow:hidden}") && css.includes(".mp-chain{width:100%;flex:0 0 auto"), "Mobile mempool containment rules are missing");
 assert(inline.includes('const tickerBtc=value=>fmtBtc(value).replace(/ BTC$/,'), "Ticker BTC values still include a redundant unit suffix");
 assert(css.includes(".tick{min-width:115px;overflow:hidden") && css.includes("text-overflow:ellipsis"), "Ticker values can spill into adjacent cards");
 assert(inline.includes("retired=state.decommissionedHardware?.[id]||0") && inline.includes("retired=state.decommissionedHardware?.[h.id]||0"), "Miner sale controls do not consistently use retired inventory");
+assert(inline.includes("function facilityDeskSvg()") && inline.includes('floor-miner ${status} ${h.id==="laptop"?"laptop-desk":""}'), "Mining facilities no longer retain the laptop desk visual");
+assert(css.includes('.tier-1 .floor-units,.tier-2 .floor-units{left:28px') && css.includes('.floor-miner.laptop-desk{position:absolute'), "Home-office miners are not arranged around the laptop desk and shelves");
 
 const optionsStart = inline.indexOf("function hardwareFiatPurchaseOptions(");
 const optionsEnd = inline.indexOf("\nfunction hardwareFiatBuyControls(", optionsStart);
