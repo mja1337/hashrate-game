@@ -16,6 +16,7 @@ document.getElementById("app").addEventListener("click",e=>{
   if(a==="focus-liquidation"){const input=document.getElementById("liquidation-target");document.getElementById("fleet-liquidation")?.scrollIntoView({behavior:"smooth",block:"start"});setTimeout(()=>input?.focus(),350);return}
   if(a==="starting-mode"){if(STARTING_MODES.some(mode=>mode.id===v)){introDifficulty=v;render()}return}
   if(a==="mobile-menu"){mobileMenuOpen=!mobileMenuOpen;render(false);return}
+  if(a==="mobile-menu-section"){mobileMenuSection=v;mobileMenuOpen=true;render(false);return}
   if(a==="begin"){const mode=startingMode(introDifficulty);state.cash=1500;state.startingCash=1500;state.time=mode.start;state.campaignStart=mode.start;state.lastMonth=new Date(mode.start).toISOString().slice(0,7);state.difficulty=mode.id;state.started=true;state.seen=["genesis"];log("Campaign start selected",`${mode.label} · ${dateFmt(mode.start)}`,"operations");if(!state.startingGrant){state.points+=1;state.startingGrant=true;log("Genesis operator grant","+1 skill point")}state.speed=1;save();setTimer();render()}
   else if(a==="intro-next"){introStep=Math.min(INTRO_SLIDES.length-1,introStep+1);render()}
   else if(a==="intro-back"){introStep=Math.max(0,introStep-1);render()}

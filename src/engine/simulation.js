@@ -22,7 +22,7 @@ const initialState=()=>({
   blocks:0,mined:0,nodeDays:0,uptimeDays:0,powerSpent:0,nextMilestone:100,
   connectivity:"fixed",history:[],activity:[],activitySeq:0,log:[{time:START,text:"Client synced to the network tip",amount:"~block "+approxHeight(START)}]
 });
-let state,loadedHasHardwareAlerts=false,activeTab="dashboard",mobileMenuOpen=false,activityFilter="all",activityLimit=100,tradePercentages={},custodyLesson="malware",introDifficulty="hard",pendingTransaction=null,toast=null,toastTimer=null,timer=null,faucet=null,faucetTimer=null,introStep=0,renderQueued=false,renderFullQueued=false,lastRenderAt=0;
+let state,loadedHasHardwareAlerts=false,activeTab="dashboard",mobileMenuOpen=false,mobileMenuSection="play",activityFilter="all",activityLimit=100,tradePercentages={},custodyLesson="malware",introDifficulty="hard",pendingTransaction=null,toast=null,toastTimer=null,timer=null,faucet=null,faucetTimer=null,introStep=0,renderQueued=false,renderFullQueued=false,lastRenderAt=0;
 try{const raw=localStorage.getItem(SAVE_KEY);if(raw){const parsed=JSON.parse(raw);loadedHasHardwareAlerts=!!parsed.hardwareAlerts;state=Object.assign(initialState(),parsed)}else state=initialState()}catch(e){state=initialState()}
 const ACTIVITY_CATEGORIES=["trade","fleet","finance","reward","custody","learning","operations"];
 function activityCategory(text=""){
