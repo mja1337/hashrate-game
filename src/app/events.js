@@ -2,7 +2,7 @@
 
 let recentTouchTab=null;
 document.getElementById("app").addEventListener("click",e=>{
-  const b=e.target.closest("[data-action]");if(!b||b.disabled)return;const a=b.dataset.action,v=b.dataset.value,id=b.dataset.id;
+  const b=e.target.closest("[data-action]");if(!b||b.disabled)return;const a=b.dataset.action,v=b.dataset.value,id=b.dataset.id,part=b.dataset.part;
   if(a==="tab"&&recentTouchTab&&recentTouchTab.value===v&&Date.now()-recentTouchTab.at<800){recentTouchTab=null;return}
   if(a==="percent-snap"){updateTradePercentage(id,Number(v));return}
   if(a==="close-hardware-alert"){closeHardwareAlert(false);return}
@@ -25,6 +25,8 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(a==="learning-check")answerLearningCheck(v);
   else if(a==="order-parts")orderParts(id,Number(v));
   else if(a==="service-hw")serviceHardware(id);
+  else if(a==="service-part")serviceHardwarePart(id,part);
+  else if(a==="focus-service"){const row=document.querySelector(`[data-service-row="${id}"]`);if(row){row.scrollIntoView({behavior:"smooth",block:"center"});row.classList.add("focus-flash");setTimeout(()=>row.classList.remove("focus-flash"),1600)}}
   else if(a==="hardware-power")setHardwarePower(id,v==="on",Number(b.dataset.qty)||1);
   else if(a==="buy-cooling")buyCooling(id);
   else if(a==="custody-lesson"){custodyLesson=v;render()}
@@ -39,7 +41,8 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(a==="contract")setContract(id);
   else if(a==="connectivity")setConnectivityPlan(id);
   else if(a==="treasury-policy")setTreasuryPolicy(id);
-  else if(a==="settle-btc")payPendingWithBtc();
+  else if(a==="settle-btc"){state.settlementSaleMode=true;activeTab="market";save();render()}
+  else if(a==="cancel-settlement-sale"){state.settlementSaleMode=false;render()}
   else if(a==="settle-liquidate")liquidateForSettlement();
   else if(a==="settle-bridge")takeBridgeFinance();
   else if(a==="settle-receivership")enterReceivership();
@@ -48,10 +51,10 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(a==="project-loan")takeProjectLoan();
   else if(a==="repay-loan")repayProjectLoan();
   else if(a==="speed"){state.speed=Number(v);state.returnSpeed=state.speed||state.returnSpeed;setTimer();save();render()}
-  else if(a==="tab"){activeTab=v;mobileMenuOpen=false;render(false);window.scrollTo({top:0,behavior:"smooth"})}
+  else if(a==="tab"){activeTab=v;mobileMenuOpen=false;render(false);const anchor=b.dataset.anchor;if(anchor)setTimeout(()=>document.getElementById(anchor)?.scrollIntoView({behavior:"smooth",block:"start"}),60);else window.scrollTo({top:0,behavior:"smooth"})}
   else if(a==="activate-hw")activateHardware(id);else if(a==="decommission-hw")decommissionHardware(id,Number(v));else if(a==="buy-hw")buyHardware(id,Number(v));else if(a==="buy-hw-btc")buyHardwareBtc(id,Number(v));else if(a==="sell-hw")sellHardware(id,Number(v));else if(a==="sell-hw-btc")sellHardwareBtc(id,Number(v));else if(a==="facility")upgradeFacility(id);else if(a==="region")moveRegion(id);else if(a==="buy-node")buyNode(Number(v));
   else if(a==="buy-btc")buyBtc(id,actionFraction(b));else if(a==="sell-btc")sellBtc(id,actionFraction(b));else if(a==="lightning")deployLightning(Number(v));else if(a==="lightning-withdraw")withdrawLightning();else if(a==="transfer")transfer(b.dataset.from,b.dataset.to,actionFraction(b));else if(a==="speculate")takeSpeculation(id,Number(v));else if(a==="skill")unlockSkill(id);
-  else if(a==="mode"){if(state.mode!==v){state.mode=v;log(v==="pool"?"Pool mining selected":"Solo mining selected",v==="pool"?poolData().name:"No pool fee","operations")}save();render()}else if(a==="pool"){const selected=poolData(v);if(availablePool()&&selected&&poolEligible(selected)){state.pool=v;state.mode="pool";log("Mining pool changed",`${selected.name} · ${(poolFee()*100).toFixed(2)}% fee`,"operations");save();render()}}else if(a==="toggle-power"){state.power=!state.power;log(state.power?"Mining fleet started":"Mining fleet stopped","manual","operations");save();render()}
+  else if(a==="mode"){if(state.mode!==v){state.mode=v;log(v==="pool"?"Pool mining selected":"Solo mining selected",v==="pool"?poolData().name:"No pool fee","operations")}save();render()}else if(a==="pool"){const selected=poolData(v);if(availablePool()&&selected&&poolEligible(selected)){state.pool=v;state.mode="pool";log("Mining pool changed",`${selected.name} · ${(poolFee()*100).toFixed(2)}% fee`,"operations");save();render()}}else if(a==="toggle-power"){state.power=!state.power;log(state.power?"Mining fleet started":"Mining fleet stopped","manual","operations");save();render()}else if(a==="toggle-overdrive"){state.overdrive=!state.overdrive;log(state.overdrive?"Overdrive engaged":"Overdrive disengaged",state.overdrive?"+15% hash · +25% power draw · elevated wear and fault risk":"Back to rated settings","fleet");save();render()}
   else if(a==="pay-debt")payDebt();else if(a==="story"){state.activeEvent=id;state.eventResume=false;render()}
   else if(a==="close-event"){state.activeEvent=null;if(state.eventResume&&!state.pendingSettlement){state.speed=state.returnSpeed||1;state.eventResume=false}activateNextHardwareAlert();setTimer();save();render()}
   else if(a==="continue-run"){state.ended=false;state.endDismissed=true;state.sandbox=true;state.speed=state.returnSpeed||1;log("Sandbox continuation started","historical feed complete");save();setTimer();render()}

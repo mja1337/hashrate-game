@@ -36,6 +36,7 @@ const SKILLS=[
   {id:"curtailment",branch:"Energy",name:"Demand-response control",desc:"Power costs fall by a further 4% through flexible load management.",cost:5,req:"liquidcool",date:"2020-01-01",minFacility:4},
   {id:"poolops",branch:"Operations",name:"Pool operations",desc:"Pool fees fall by 0.4 percentage points.",cost:2,date:"2010-12-16"},
   {id:"monitoring",branch:"Operations",name:"Fleet monitoring",desc:"Uptime improves one point and connectivity incidents fall 25%.",cost:3,req:"poolops",date:"2011-01-01",minFacility:2},
+  {id:"fieldservice",branch:"Operations",name:"Field service technique",desc:"Halves the chance of a complication at every stage of a repair.",cost:4,req:"monitoring",date:"2014-01-01",minFacility:3},
   {id:"blocktemplate",branch:"Operations",name:"Block-template construction",desc:"With an online archival or relay node, construct candidate blocks locally, capture 8% more transaction fees and unlock OCEAN's miner-selected templates.",cost:4,req:"monitoring",date:"2012-01-01"},
   {id:"relocation",branch:"Operations",name:"Relocation playbook",desc:"Moving regions costs 20% less.",cost:4,req:"blocktemplate",date:"2013-01-01"},
   {id:"spares",branch:"Operations",name:"Critical spares inventory",desc:"Transit damage during facility moves destroys fewer miners.",cost:4,req:"relocation",date:"2015-01-01"},

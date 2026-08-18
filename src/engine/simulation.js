@@ -14,15 +14,15 @@ const initialState=()=>({
   cash:1500,startingCash:1500,difficulty:"medium",campaignStart:START,debt:0,bill:0,billLedger:{energy:0,rent:0,internet:0,staff:0,insurance:0,nodeNetwork:0,other:0},lastMonth:new Date(START).toISOString().slice(0,7),power:true,policyLock:null,
   wallets:{hot:0,cold:0,mtgox:0,bitfinex:0,quadriga:0,frontier:0,exchange:0,etf:0,frozen:0},
   lightning:{locked:0,earned:0},
-  hardware:{laptop:1},poweredDownHardware:{},facility:"home",region:"na",thermal:{temperature:22,equipment:{}},node:0,nodeStorage:50,nodePruned:false,nodeMode:"archival",nodeSync:{primaryLag:0,primaryPeak:0,backupLag:0,backupPeak:0},backupNode:{enabled:false,outageUntil:0},mode:"solo",pool:"f2pool",
+  hardware:{laptop:1},poweredDownHardware:{},facility:"home",region:"na",thermal:{temperature:22,equipment:{}},overdrive:false,settlementSaleMode:false,node:0,nodeStorage:50,nodePruned:false,nodeMode:"archival",nodeSync:{primaryLag:0,primaryPeak:0,backupLag:0,backupPeak:0},backupNode:{enabled:false,outageUntil:0},mode:"solo",pool:"f2pool",
   skills:[],points:0,startingGrant:false,seen:[],activeEvent:null,storyPause:true,shoppingPause:false,speculations:[],powerRateShock:null,hardwareAlerts:{seen:[],queue:[],active:null,resumeSpeed:0},
   treasuryPolicy:"cover",pendingSettlement:null,endReason:null,
   operator:{eras:{},periodMined:0,periodUptime:0,periodDays:0,lastRevenueUsd:0,totalMonths:0,solventMonths:0,profitableMonths:0,competitiveMonths:0,bridgeLoans:0,restructures:0},
-  knowledge:0,nextKnowledge:3,learning:null,completedLearning:[],maintenance:{condition:{},faults:{},parts:0,inventory:{fan:0,hashboard:0,powerPcb:0,coolantPump:0,coolingManifold:0},inventoryMigrated:true,orders:[],serviceJobs:[]},procurementOrders:[],inactiveHardware:{},commissioningJobs:[],decommissionedHardware:{},relocationJob:null,ops:{firmwarePatchedUntil:0,hijackUntil:0,outageUntil:0,powerOutageUntil:0,venueFreezes:{},riskMonth:""},strategy:{mstr:0,strk:0,strf:0,strd:0,strc:0,yieldEarned:0},sandbox:false,contract:"standard",staff:[],projectLoan:0,insured:false,milestones:[],donations:[],
+  knowledge:0,nextKnowledge:3,learning:null,completedLearning:[],maintenance:{condition:{},faults:{},faultsByPart:{},parts:0,inventory:{fan:0,hashboard:0,powerPcb:0,coolantPump:0,coolingManifold:0},inventoryMigrated:true,orders:[],serviceJobs:[]},procurementOrders:[],inactiveHardware:{},commissioningJobs:[],decommissionedHardware:{},relocationJob:null,ops:{firmwarePatchedUntil:0,hijackUntil:0,outageUntil:0,powerOutageUntil:0,venueFreezes:{},riskMonth:""},strategy:{mstr:0,strk:0,strf:0,strd:0,strc:0,yieldEarned:0},sandbox:false,contract:"standard",staff:[],projectLoan:0,insured:false,milestones:[],donations:[],
   blocks:0,mined:0,nodeDays:0,uptimeDays:0,powerSpent:0,nextMilestone:100,
   connectivity:"fixed",history:[],activity:[],activitySeq:0,log:[{time:START,text:"Client synced to the network tip",amount:"~block "+approxHeight(START)}]
 });
-let state,loadedHasHardwareAlerts=false,activeTab="dashboard",mobileMenuOpen=false,mobileMenuSection="play",activityFilter="all",activityLimit=100,tradePercentages={},custodyLesson="malware",introDifficulty="hard",pendingTransaction=null,toast=null,toastTimer=null,timer=null,faucet=null,faucetTimer=null,introStep=0,renderQueued=false,renderFullQueued=false,lastRenderAt=0;
+let state,loadedHasHardwareAlerts=false,activeTab="dashboard",mobileMenuOpen=false,mobileMenuSection="play",activityFilter="all",activityLimit=100,tradePercentages={},custodyLesson="malware",introDifficulty="hard",pendingTransaction=null,toast=null,toastTimer=null,timer=null,faucet=null,faucetTimer=null,mempoolTimer=null,introStep=0,renderQueued=false,renderFullQueued=false,lastRenderAt=0;
 try{const raw=localStorage.getItem(SAVE_KEY);if(raw){const parsed=JSON.parse(raw);loadedHasHardwareAlerts=!!parsed.hardwareAlerts;state=Object.assign(initialState(),parsed)}else state=initialState()}catch(e){state=initialState()}
 const ACTIVITY_CATEGORIES=["trade","fleet","finance","reward","custody","learning","operations"];
 function activityCategory(text=""){
@@ -98,10 +98,21 @@ state.operator=Object.assign({eras:{},periodMined:0,periodUptime:0,periodDays:0,
 state.operator.eras=state.operator.eras&&typeof state.operator.eras==="object"?state.operator.eras:{};
 ["periodMined","periodUptime","periodDays","lastRevenueUsd","totalMonths","solventMonths","profitableMonths","competitiveMonths","bridgeLoans","restructures"].forEach(k=>state.operator[k]=Math.max(0,Number(state.operator[k])||0));
 OPERATOR_ERAS.forEach(era=>{state.operator.eras[era.id]=Object.assign({months:0,solvent:0,profitable:0,uptime:0,competitive:0},state.operator.eras[era.id]||{});["months","solvent","profitable","uptime","competitive"].forEach(k=>state.operator.eras[era.id][k]=Math.max(0,Number(state.operator.eras[era.id][k])||0))});
-HARDWARE.forEach(h=>{if(!Number.isFinite(Number(state.maintenance.condition[h.id])))state.maintenance.condition[h.id]=100;else state.maintenance.condition[h.id]=Math.max(0,Math.min(100,Number(state.maintenance.condition[h.id])));state.maintenance.faults[h.id]=Math.max(0,Math.min(state.hardware?.[h.id]||0,Math.floor(Number(state.maintenance.faults[h.id])||0)))})
+state.maintenance.faultsByPart=state.maintenance.faultsByPart&&typeof state.maintenance.faultsByPart==="object"?state.maintenance.faultsByPart:{};
+HARDWARE.forEach(h=>{
+  if(!Number.isFinite(Number(state.maintenance.condition[h.id])))state.maintenance.condition[h.id]=100;else state.maintenance.condition[h.id]=Math.max(0,Math.min(100,Number(state.maintenance.condition[h.id])));
+  const legacyFaults=Math.max(0,Math.floor(Number(state.maintenance.faults[h.id])||0));
+  const byPart=state.maintenance.faultsByPart[h.id]&&typeof state.maintenance.faultsByPart[h.id]==="object"?state.maintenance.faultsByPart[h.id]:{};
+  Object.keys(byPart).forEach(part=>{byPart[part]=Math.max(0,Math.floor(Number(byPart[part])||0))||0});
+  if(legacyFaults&&!Object.values(byPart).some(Boolean)){const fallback=Object.keys(partFaultWeights(h))[0]||"fan";byPart[fallback]=(byPart[fallback]||0)+legacyFaults}
+  state.maintenance.faultsByPart[h.id]=byPart;
+  state.maintenance.faults[h.id]=Object.values(byPart).reduce((sum,n)=>sum+n,0);
+})
 const numericDefaults={cash:1500,debt:0,bill:0,points:0,rng:123456789};
 Object.keys(numericDefaults).forEach(k=>{if(!Number.isFinite(Number(state[k])))state[k]=numericDefaults[k];else state[k]=Number(state[k])});
 if(state.shoppingPause){state.shoppingPause=false;if(state.started&&state.speed<=0&&!state.activeEvent&&!state.ended)state.speed=Number(state.returnSpeed)||1}
+state.overdrive=!!state.overdrive;
+state.settlementSaleMode=!!state.settlementSaleMode&&!!state.pendingSettlement;
 state.hardware=state.hardware&&typeof state.hardware==="object"?state.hardware:{};
 HARDWARE.forEach(h=>{if(!Number.isFinite(Number(state.hardware[h.id])))state.hardware[h.id]=h.permanent?1:0;else state.hardware[h.id]=Math.max(h.permanent?1:0,Math.floor(Number(state.hardware[h.id])));state.poweredDownHardware[h.id]=Math.max(0,Math.min(state.hardware[h.id],Math.floor(Number(state.poweredDownHardware[h.id])||0)))});
 function hasSkill(id){return state.skills.includes(id)}
@@ -118,7 +129,17 @@ function connectivityIncidentRisk(s=state){const r=REGIONS.find(x=>x.id===s.regi
 function skillGateReason(skill){if(skill.req&&!hasSkill(skill.req))return`Requires ${SKILLS.find(x=>x.id===skill.req)?.name||skill.req}`;if(skill.date&&state.time<at(skill.date))return`Unlocks ${dateFmt(at(skill.date),true)}`;if(skill.minFacility&&facilityTier()<skill.minFacility)return`Requires ${FACILITIES[skill.minFacility-1]?.name||`tier ${skill.minFacility} facility`}`;return""}
 function staffHiringAvailable(s=state){return facilityTier(s)>=3}
 function maintenanceCondition(h,s=state){const value=Number(s.maintenance?.condition?.[h.id]);return Number.isFinite(value)?Math.max(0,Math.min(100,value)):100}
-function hardwareFaultCount(h,s=state){return Math.max(0,Math.min(s.hardware?.[h.id]||0,Math.floor(Number(s.maintenance?.faults?.[h.id])||0)))}
+function hardwareFaultBreakdown(h,s=state){
+  const n=s.hardware?.[h.id]||0,byPart=s.maintenance?.faultsByPart?.[h.id]||{},out={};let total=0;
+  Object.entries(byPart).forEach(([part,count])=>{const c=Math.max(0,Math.floor(Number(count)||0));if(c){out[part]=c;total+=c}});
+  if(total>n){let allocated=0;const keys=Object.keys(out);keys.forEach((part,i)=>{out[part]=i===keys.length-1?Math.max(0,n-allocated):Math.floor(out[part]*n/total);allocated+=out[part]})}
+  return out;
+}
+function hardwareFaultCount(h,s=state){return Object.values(hardwareFaultBreakdown(h,s)).reduce((sum,n)=>sum+n,0)}
+function hardwareRepairState(h,s=state){
+  const n=s.hardware?.[h.id]||0,servicing=activeServiceJob(h.id,s)?.count||0,faultsByPart=hardwareFaultBreakdown(h,s),faults=Object.values(faultsByPart).reduce((sum,c)=>sum+c,0),repairing=Math.min(n,Math.max(servicing,faults)),paused=Math.min(Math.max(0,n-repairing),hardwarePoweredDownCount(h,s)),active=Math.max(0,n-repairing-paused);
+  return{n,active,repairing,paused,faults,faultsByPart,servicing};
+}
 function hardwareLaunchFactor(h,t=state.time){if(!h.edge||t<at(h.date))return 1;const age=(t-at(h.date))/DAY;if(age<=365)return h.edge;if(age>=730)return 1;return 1+(h.edge-1)*(730-age)/365}
 function hardwareOfflineReason(h,s=state){
   const condition=maintenanceCondition(h,s);
@@ -130,9 +151,10 @@ function hardwareOfflineReason(h,s=state){
 function fitsInstalledFleet(s){const fs=fleet(s),f=FACILITIES.find(x=>x.id===s.facility)||FACILITIES[0];return fs.potentialKw<=fs.cap&&fs.space<=f.space}
 function fleet(s=state){
   let hash=0,minerW=0,space=0,value=0,count=0,activeCount=0,potentialW=0,offline=[];
-  HARDWARE.forEach(h=>{const n=s.hardware[h.id]||0,reason=hardwareOfflineReason(h,s),servicing=activeServiceJob(h.id,s)?.count||0,faults=hardwareFaultCount(h,s),repairing=Math.min(n,Math.max(servicing,faults)),paused=Math.min(Math.max(0,n-repairing),hardwarePoweredDownCount(h,s));space+=h.space*n;value+=h.cost*n;count+=n;potentialW+=h.w*n;if(n&&reason){offline.push({h,n,reason});return}if(repairing)offline.push({h,n:repairing,reason:servicing?"Repair in progress":"Unexpected hardware fault"});if(paused)offline.push({h,n:paused,reason:"Manually powered down"});const active=Math.max(0,n-repairing-paused),effectiveHash=h.hash*hardwareLaunchFactor(h,s.time);activeCount+=active;hash+=effectiveHash*active;minerW+=h.w*active;if(s.skills.includes("asictune")&&(h.era==="ASIC"||h.era==="HYDRO ASIC"))hash+=effectiveHash*active*.05});
+  HARDWARE.forEach(h=>{const n=s.hardware[h.id]||0,reason=hardwareOfflineReason(h,s),rs=hardwareRepairState(h,s),{repairing,paused,active,servicing}=rs;space+=h.space*n;value+=h.cost*n;count+=n;potentialW+=h.w*n;if(n&&reason){offline.push({h,n,reason});return}if(repairing)offline.push({h,n:repairing,reason:servicing?"Repair in progress":"Unexpected hardware fault"});if(paused)offline.push({h,n:paused,reason:"Manually powered down"});const effectiveHash=h.hash*hardwareLaunchFactor(h,s.time);activeCount+=active;hash+=effectiveHash*active;minerW+=h.w*active;if(s.skills.includes("asictune")&&(h.era==="ASIC"||h.era==="HYDRO ASIC"))hash+=effectiveHash*active*.05});
   if(s.skills.includes("firmware"))hash*=1.04;if(s.skills.includes("undervolt"))minerW*=.95;
-  const coolingW=coolingPowerWatts(s,minerW),w=minerW+coolingW;potentialW*=s.skills.includes("undervolt")?.95:1;potentialW+=coolingPeakWatts(s);
+  if(s.overdrive){hash*=1.15;minerW*=1.25}
+  const coolingW=coolingPowerWatts(s,minerW),w=minerW+coolingW;potentialW*=s.skills.includes("undervolt")?.95:1;if(s.overdrive)potentialW*=1.25;potentialW+=coolingPeakWatts(s);
   const f=FACILITIES.find(x=>x.id===s.facility)||FACILITIES[0],cap=f.kw*(s.skills.includes("capacity")?1.1:1);
   const expandedCap=cap*(s.skills.includes("substation")?1.1:1);
   return{hash,w,minerW,coolingW,kw:w/1000,space,value,count,activeCount,cap:expandedCap,potentialKw:potentialW/1000,offline,offlineCount:offline.reduce((a,x)=>a+x.n,0),within:w/1000<=expandedCap&&space<=f.space};
@@ -171,7 +193,13 @@ function log(text,amount="",category=""){
   const entry={id:++state.activitySeq,time:state.time,text,amount,category:category||activityCategory(text),cash:Number(state.cash)||0,btc:controlled(),hash:fleet().hash,price:state.time>=MARKET?priceAt(state.time):null};
   state.activity.unshift(entry);state.log=state.activity.slice(0,8);
 }
-function showToast(title,message){toast={title,message};const markup=`<div class="toast"><div><b>${title}</b><span>${message}</span></div></div>`,existing=document.querySelector(".toast"),host=document.getElementById("app");if(existing)existing.outerHTML=markup;else if(host&&state.started)host.insertAdjacentHTML("beforeend",markup);clearTimeout(toastTimer);toastTimer=setTimeout(()=>{toast=null;document.querySelector(".toast")?.remove()},8500)}
+function showToast(title,message,kind="info"){toast={title,message,kind};const markup=`<div class="toast ${kind==="bad"?"toast-bad":""}"><div><b>${title}</b><span>${message}</span></div></div>`,existing=document.querySelector(".toast"),host=document.getElementById("app");if(existing)existing.outerHTML=markup;else if(host&&state.started)host.insertAdjacentHTML("beforeend",markup);clearTimeout(toastTimer);toastTimer=setTimeout(()=>{toast=null;document.querySelector(".toast")?.remove()},8500);if(kind==="bad"&&state.started)triggerImpactEffect()}
+function triggerImpactEffect(){
+  const flash=document.createElement("div");flash.className="impact-flash";document.body.appendChild(flash);
+  flash.addEventListener("animationend",()=>flash.remove());
+  const shell=document.querySelector(".app");
+  if(shell){shell.classList.remove("impact-shake");void shell.offsetWidth;shell.classList.add("impact-shake");shell.addEventListener("animationend",()=>shell.classList.remove("impact-shake"),{once:true})}
+}
 function availablePool(){return state.time>=at("2010-12-16")}
 function poolData(id=state.pool){return POOLS.find(x=>x.id===id)||POOLS.find(x=>x.id==="f2pool")}
 function poolShareAt(id,t){const p=poolData(id);if(!p||id==="solo")return id==="solo"?0:0;const a=p.anchors.map(([d,v])=>[at(d),v]).sort((x,y)=>x[0]-y[0]);if(t<a[0][0])return 0;for(let i=0;i<a.length-1;i++){const [t0,v0]=a[i],[t1,v1]=a[i+1];if(t>=t0&&t<=t1){const f=(t-t0)/(t1-t0);return v0+(v1-v0)*f}}return a[a.length-1][1]}
@@ -214,6 +242,36 @@ function advanceLearning(){
 }
 function covidPartsMarket(){return state.time>=at("2020-03-12")&&state.time<at("2021-07-01")}
 function sparePart(id){return SPARE_PARTS.find(part=>part.id===id)}
+const PART_FAULT_LABELS={fan:"Fan bearing seizure",hashboard:"Hashboard chip failure",powerPcb:"PSU/power PCB failure",coolantPump:"Coolant pump failure",coolingManifold:"Cooling manifold leak"};
+function partFaultWeights(h){
+  if(h.era==="HYDRO ASIC")return{hashboard:.30,powerPcb:.25,fan:.15,coolantPump:.15,coolingManifold:.15};
+  if(h.era==="ASIC")return{hashboard:.45,powerPcb:.35,fan:.20};
+  if(h.era==="FPGA")return{powerPcb:.55,fan:.45};
+  if(h.era==="GPU")return{fan:.55,powerPcb:.45};
+  return{fan:1};
+}
+function pickWeightedPart(weights){
+  const entries=Object.entries(weights),total=entries.reduce((sum,[,w])=>sum+w,0)||1;
+  let roll=nextRand()*total;
+  for(const[part,weight]of entries){roll-=weight;if(roll<=0)return part}
+  return entries[entries.length-1][0];
+}
+const REPAIR_STAGES=[
+  {id:"powerdown",name:"Power down",weight:.05},
+  {id:"disconnect",name:"Disconnect",weight:.10},
+  {id:"work",name:"Work",weight:.50},
+  {id:"reconnect",name:"Reconnect",weight:.10},
+  {id:"fitup",name:"Fit & rack",weight:.10},
+  {id:"stabilitycheck",name:"Stability check",weight:.15}
+];
+const REPAIR_COMPLICATIONS={
+  powerdown:"Breaker interlock didn't isolate cleanly",
+  disconnect:"Cabling was more tangled than expected",
+  work:"Deeper damage than expected turned up",
+  reconnect:"A re-seated connection came in loose",
+  fitup:"The rack didn't want to line back up",
+  stabilitycheck:"It failed the burn-in and needs another pass"
+};
 function serviceRequirements(h,count){
   const units=divisor=>Math.max(1,Math.ceil(count/divisor));
   if(h.era==="HYDRO ASIC")return {hashboard:units(10),powerPcb:units(20),coolantPump:units(24),coolingManifold:units(16)};
@@ -224,13 +282,85 @@ function serviceRequirements(h,count){
 }
 function serviceRequirementText(requirements){return Object.entries(requirements).map(([id,qty])=>`${qty} ${sparePart(id)?.name||id}${qty===1?"":"s"}`).join(" · ")}
 function hasServiceParts(requirements){return Object.entries(requirements).every(([id,qty])=>(state.maintenance.inventory[id]||0)>=qty)}
-function servicePlan(h,count){const technicians=fieldTechnicianCount(),committed=(state.maintenance.serviceJobs||[]).reduce((sum,job)=>sum+Number(job.crew||0),0),available=Math.max(0,technicians-committed),crew=technicians===0?1:Math.min(3,available),complexity=h.era==="HYDRO ASIC"?2.2:h.era==="ASIC"?1.5:h.era==="GPU"?1.2:1,workDays=Math.max(1,Math.ceil(count*complexity/20)),days=crew?Math.max(1,Math.ceil(workDays/crew)):Infinity;return{technicians,committed,available,crew,workDays,days,contracted:technicians===0}}
+function servicePlan(h,count){const technicians=fieldTechnicianCount(),committed=(state.maintenance.serviceJobs||[]).reduce((sum,job)=>sum+Number(job.crew||0),0),available=Math.max(0,technicians-committed),contractorBusy=technicians===0&&(state.maintenance.serviceJobs||[]).some(job=>job.contracted),crew=technicians===0?(contractorBusy?0:1):Math.min(3,available),complexity=h.era==="HYDRO ASIC"?2.2:h.era==="ASIC"?1.5:h.era==="GPU"?1.2:1,workDays=Math.max(1,Math.ceil(count*complexity/20)),days=crew?Math.max(1,Math.ceil(workDays/crew)):Infinity;return{technicians,committed,available,crew,workDays,days,contracted:technicians===0,contractorBusy}}
 function advanceMaintenance(){
   state.maintenance.orders=state.maintenance.orders.filter(order=>{if(order.due>state.time)return true;const part=sparePart(order.type)||sparePart("fan");state.maintenance.inventory[part.id]=(state.maintenance.inventory[part.id]||0)+order.qty;log("Spare parts delivered",`+${order.qty} ${part.name}${order.qty===1?"":"s"}`);return false});
-  state.maintenance.serviceJobs=state.maintenance.serviceJobs.filter(job=>{if(job.due>state.time)return true;const h=HARDWARE.find(x=>x.id===job.id),repaired=Math.max(1,Number(job.count)||0);state.maintenance.faults[job.id]=Math.max(0,hardwareFaultCount(h)-repaired);state.maintenance.condition[job.id]=Math.min(100,maintenanceCondition(h)+Math.max(18,60*repaired/Math.max(1,state.hardware[job.id]||1)));log(`Service completed: ${h?.name||job.id}`,`${repaired} unit${repaired===1?"":"s"} repaired · ${job.crew}-technician crew`);showToast("Service completed",`${repaired} × ${h?.name||"miner"} returned to service.`);return false});
+  state.maintenance.serviceJobs=state.maintenance.serviceJobs.filter(job=>{
+    const h=HARDWARE.find(x=>x.id===job.id),legacy=!Number.isFinite(Number(job.stage));
+    if(legacy){
+      if(job.due>state.time)return true;
+    }else{
+      while(job.stage<REPAIR_STAGES.length&&job.stageDue<=state.time){
+        const stage=REPAIR_STAGES[job.stage],complicationChance=Math.min(.6,.10*(job.contracted?1.3:1)*(hasSkill("fieldservice")?.5:1));
+        if(nextRand()<complicationChance){
+          const delay=(.5+nextRand())*DAY;
+          job.stageDue+=delay;job.due+=delay;
+          let note=REPAIR_COMPLICATIONS[stage.id];
+          if(stage.id==="work"&&nextRand()<.3){
+            const breakdown=hardwareFaultBreakdown(job.id),weights=partFaultWeights(h);
+            let extra=pickWeightedPart(weights),tries=0;while((extra===job.part||breakdown[extra])&&tries<4){extra=pickWeightedPart(weights);tries++}
+            const byPart=state.maintenance.faultsByPart[job.id]||(state.maintenance.faultsByPart[job.id]={});
+            byPart[extra]=(byPart[extra]||0)+1;
+            note=`Found a second fault — ${sparePart(extra)?.name||extra} also needs attention`;
+            renderFullQueued=true;
+          }
+          const surcharge=Math.round((job.labor||0)*.15);
+          if(surcharge>0&&state.cash>=surcharge){state.cash-=surcharge;note+=` · +${fmtUsd(surcharge)} callback fee`}
+          log(`${h?.name||job.id} · ${stage.name} complication`,note,"fleet");
+          showToast("Repair complication",`${h?.name||job.id}: ${note}. +${(delay/DAY).toFixed(1)} day${delay/DAY>=1.05?"s":""}.`,"bad");
+          renderFullQueued=true;
+          break;
+        }
+        job.stage++;
+        if(job.stage<REPAIR_STAGES.length)job.stageDue=state.time+REPAIR_STAGES[job.stage].weight*(job.totalDays||1)*DAY;
+      }
+      if(job.stage<REPAIR_STAGES.length)return true;
+    }
+    const repaired=Math.max(1,Number(job.count)||0);
+    if(job.part){
+      const byPart=state.maintenance.faultsByPart[job.id]||(state.maintenance.faultsByPart[job.id]={}),partName=sparePart(job.part)?.name||job.part;
+      byPart[job.part]=Math.max(0,(byPart[job.part]||0)-repaired);
+      state.maintenance.condition[job.id]=Math.min(100,maintenanceCondition(h)+Math.max(6,20*repaired/Math.max(1,state.hardware[job.id]||1)));
+      log(`Service completed: ${h?.name||job.id}`,`${repaired} ${partName}${repaired===1?"":"s"} replaced · ${job.crew}-technician crew`);
+      showToast("Service completed",`${repaired} × ${h?.name||"miner"} ${partName.toLowerCase()} swap finished.`);
+    }else{
+      state.maintenance.faultsByPart[job.id]={};
+      state.maintenance.condition[job.id]=Math.min(100,maintenanceCondition(h)+Math.max(18,60*repaired/Math.max(1,state.hardware[job.id]||1)));
+      log(`Service completed: ${h?.name||job.id}`,`${repaired} unit${repaired===1?"":"s"} repaired · ${job.crew}-technician crew`);
+      showToast("Service completed",`${repaired} × ${h?.name||"miner"} returned to service.`);
+    }
+    return false;
+  });
   if(!thermalPowerAvailable())return;
   const technicians=fieldTechnicianCount(),wearFactor=(technicians?Math.max(.35,.6-.08*Math.min(2,technicians-1)-.02*Math.max(0,technicians-3)):1)*temperatureWearMultiplier(),failureHeat=temperatureFailureMultiplier();
-  HARDWARE.forEach(h=>{const n=state.hardware[h.id]||0;if(!n||hardwareOfflineReason(h)!=="")return;const age=Math.max(0,(state.time-at(h.date))/DAY/365),condition=maintenanceCondition(h),repairing=Math.min(n,Math.max(hardwareFaultCount(h),Number(activeServiceJob(h.id)?.count||0))),paused=Math.min(n-repairing,hardwarePoweredDownCount(h)),active=Math.max(0,n-repairing-paused);if(!active)return;const wear=((h.era==="HYDRO ASIC"?.035:.018)+Math.min(.04,age*.002))*wearFactor*(active/n);state.maintenance.condition[h.id]=Math.max(0,condition-wear);const base=h.era==="HYDRO ASIC"?.0015:h.era==="ASIC"?.0009:h.era==="GPU"?.00065:.00035,stress=(1+(100-condition)/55+age*.12)*failureHeat,failures=Math.min(active,poisson(active*base*stress*(technicians?0.72:1)));if(failures){state.maintenance.faults[h.id]=hardwareFaultCount(h)+failures;log(`${h.name} fault detected`,`${failures} unit${failures===1?"":"s"} offline · ${roomTemperatureC().toFixed(0)}°C room`,`fleet`);showToast("Fleet fault",`${failures} × ${h.name} went offline at ${roomTemperatureC().toFixed(0)}°C. Cool the room or schedule a repair in Operations.`);renderFullQueued=true}});
+  HARDWARE.forEach(h=>{
+    const n=state.hardware[h.id]||0;if(!n||hardwareOfflineReason(h)!=="")return;
+    const age=Math.max(0,(state.time-at(h.date))/DAY/365),condition=maintenanceCondition(h),active=hardwareRepairState(h).active;if(!active)return;
+    const wear=((h.era==="HYDRO ASIC"?.035:.018)+Math.min(.04,age*.002))*wearFactor*(active/n)*(state.overdrive?1.6:1);
+    state.maintenance.condition[h.id]=Math.max(0,condition-wear);
+    const base=h.era==="HYDRO ASIC"?.0015:h.era==="ASIC"?.0009:h.era==="GPU"?.00065:.00035,stress=(1+(100-condition)/55+age*.12)*failureHeat*(state.overdrive?2.2:1),failures=Math.min(active,poisson(active*base*stress*(technicians?0.72:1)));
+    if(failures){
+      const weights=partFaultWeights(h),byPart=state.maintenance.faultsByPart[h.id]||(state.maintenance.faultsByPart[h.id]={}),gained={};
+      for(let i=0;i<failures;i++){const part=pickWeightedPart(weights);byPart[part]=(byPart[part]||0)+1;gained[part]=(gained[part]||0)+1}
+      const detail=Object.entries(gained).map(([part,count])=>`${count}× ${PART_FAULT_LABELS[part]||sparePart(part)?.name||part}`).join(" · ");
+      log(`${h.name} fault detected`,`${detail} · ${roomTemperatureC().toFixed(0)}°C room`,`fleet`);
+      showToast("Fleet fault",`${detail} on ${h.name} at ${roomTemperatureC().toFixed(0)}°C. Cool the room or replace the part on the Mine floor.`,"bad");
+      renderFullQueued=true;
+    }
+  });
+  HARDWARE.forEach(h=>{
+    const existingFaults=hardwareFaultCount(h);
+    if(!existingFaults||activeServiceJob(h.id))return;
+    if(nextRand()<Math.min(.25,existingFaults*.02)){
+      const breakdown=hardwareFaultBreakdown(h),weights=partFaultWeights(h);
+      let extra=pickWeightedPart(weights),tries=0;while(breakdown[extra]&&tries<4){extra=pickWeightedPart(weights);tries++}
+      const byPart=state.maintenance.faultsByPart[h.id]||(state.maintenance.faultsByPart[h.id]={});
+      byPart[extra]=(byPart[extra]||0)+1;
+      log(`${h.name} fault spreading`,`Ignored damage reaches ${PART_FAULT_LABELS[extra]||sparePart(extra)?.name||extra}`,"fleet");
+      showToast("Fault spreading",`An unrepaired fault on ${h.name} has spread to ${sparePart(extra)?.name||extra}. Service it before it compounds further.`,"bad");
+      renderFullQueued=true;
+    }
+  });
 }
 function orderParts(type,qty=1){
   const part=sparePart(type);if(!part)return;qty=Math.max(1,Math.floor(Number(qty)||1));const covid=covidPartsMarket(),unit=part.cost*(covid?2.25:1),cost=qty*unit,lead=covid?42:14;
@@ -242,10 +372,24 @@ function serviceHardware(id){
   if(activeServiceJob(id))return showToast("Service already scheduled",`${h.name} is already in the maintenance bay.`);
   const condition=maintenanceCondition(h),faults=hardwareFaultCount(h);if(condition>=95&&!faults)return showToast("Service not needed",`${h.name} is at ${condition.toFixed(0)}% condition with no failed units.`);
   const repairCount=condition<65?count:Math.max(faults,Math.ceil(count*.15)),requirements=serviceRequirements(h,repairCount),plan=servicePlan(h,repairCount),labor=Math.max(40,h.cost*.008*repairCount)*(plan.contracted?1.35:1);
-  if(!plan.crew)return showToast("Technician crew busy",`${plan.committed} technician${plan.committed===1?" is":"s are"} assigned to active repairs. Hire another field technician or wait for a service job to complete.`);
+  if(!plan.crew)return showToast(plan.contractorBusy?"No contractor available":"Technician crew busy",plan.contractorBusy?"An outside contractor is already covering another repair. Hire a field technician or wait for that job to finish.":`${plan.committed} technician${plan.committed===1?" is":"s are"} assigned to active repairs. Hire another field technician or wait for a service job to complete.`);
   if(!hasServiceParts(requirements))return showToast("Parts required",`Service needs ${serviceRequirementText(requirements)}; order the missing components first.`);
   if(state.cash<labor)return showToast("Not enough cash",`Service labour costs ${fmtUsd(labor)}.`);
-  state.cash-=labor;Object.entries(requirements).forEach(([part,qty])=>state.maintenance.inventory[part]-=qty);state.maintenance.serviceJobs.push({id,count:repairCount,due:state.time+plan.days*DAY,crew:plan.crew});log(`Service started: ${h.name}`,`${repairCount} units · ${plan.days} days · ${fmtUsd(labor)}`);showToast("Service scheduled",`${repairCount} × ${h.name} is offline for ${plan.days} simulation day${plan.days===1?"":"s"}. ${plan.contracted?"An external technician is covering the job.":`${plan.crew} of ${plan.technicians} technicians assigned.`}`);save();render();
+  state.cash-=labor;Object.entries(requirements).forEach(([part,qty])=>state.maintenance.inventory[part]-=qty);state.maintenance.serviceJobs.push({id,count:repairCount,due:state.time+plan.days*DAY,crew:plan.crew,contracted:plan.contracted,labor,totalDays:plan.days,stage:0,stageDue:state.time+REPAIR_STAGES[0].weight*plan.days*DAY});log(`Service started: ${h.name}`,`${repairCount} units · ${plan.days} days · ${fmtUsd(labor)}`);showToast("Service scheduled",`${repairCount} × ${h.name} is offline for ${plan.days} simulation day${plan.days===1?"":"s"}. ${plan.contracted?"An external technician is covering the job.":`${plan.crew} of ${plan.technicians} technicians assigned.`}`);save();render();
+}
+function serviceHardwarePart(id,part){
+  const h=HARDWARE.find(x=>x.id===id),count=state.hardware[id]||0,partDef=sparePart(part);if(!h||!count||!partDef)return;
+  if(activeServiceJob(id))return showToast("Service already scheduled",`${h.name} is already in the maintenance bay.`);
+  const faulted=hardwareFaultBreakdown(h)[part]||0;if(!faulted)return showToast("Service not needed",`No ${partDef.name.toLowerCase()} faults are currently reported on ${h.name}.`);
+  const requirements={[part]:Math.max(1,Math.ceil(faulted/7))},plan=servicePlan(h,faulted),labor=Math.max(25,h.cost*.004*faulted)*(plan.contracted?1.35:1);
+  if(!plan.crew)return showToast(plan.contractorBusy?"No contractor available":"Technician crew busy",plan.contractorBusy?"An outside contractor is already covering another repair. Hire a field technician or wait for that job to finish.":`${plan.committed} technician${plan.committed===1?" is":"s are"} assigned to active repairs. Hire another field technician or wait for a service job to complete.`);
+  if(!hasServiceParts(requirements))return showToast("Parts required",`Replacing ${partDef.name.toLowerCase()}s needs ${serviceRequirementText(requirements)}; order the missing components first.`);
+  if(state.cash<labor)return showToast("Not enough cash",`Targeted service labour costs ${fmtUsd(labor)}.`);
+  state.cash-=labor;Object.entries(requirements).forEach(([p,qty])=>state.maintenance.inventory[p]-=qty);
+  state.maintenance.serviceJobs.push({id,count:faulted,part,due:state.time+plan.days*DAY,crew:plan.crew,contracted:plan.contracted,labor,totalDays:plan.days,stage:0,stageDue:state.time+REPAIR_STAGES[0].weight*plan.days*DAY});
+  log(`Service started: ${h.name}`,`${faulted} × ${partDef.name} · ${plan.days} day${plan.days===1?"":"s"} · ${fmtUsd(labor)}`);
+  showToast("Service scheduled",`${faulted} × ${partDef.name} swap on ${h.name}, ${plan.days} simulation day${plan.days===1?"":"s"}. ${plan.contracted?"An external technician is covering the job.":`${plan.crew} of ${plan.technicians} technicians assigned.`}`);
+  save();render();
 }
 function patchFirmware(){
   const count=asicCount(),cost=Math.max(75,count*18);if(!count)return showToast("No ASIC fleet","Firmware patching applies to ASIC and hydro ASIC hardware.");
@@ -262,13 +406,13 @@ function advanceOperationalRisks(next){
   if(state.ops.outageUntil&&next>=state.ops.outageUntil){state.ops.outageUntil=0;log("Connectivity restored",`${region().name} upstream service resumed`,`operations`);showToast("Internet restored",`${connectivityPlan().name} service is back. Mining and primary-node connectivity can resume.`)}
   if(state.ops.powerOutageUntil&&next>=state.ops.powerOutageUntil){state.ops.powerOutageUntil=0;log("Grid power restored",`${region().name} site energized`,`operations`);showToast("Grid restored",`Power is back at ${facility().name}. The fleet can resume hashing.`)}
   const month=new Date(next).toISOString().slice(0,7);if(state.ops.riskMonth===month)return;state.ops.riskMonth=month;
-  const hotRisk=hotWalletIncidentRisk();if(hotRisk>0&&nextRand()<hotRisk){const lost=state.wallets.hot*(.12+nextRand()*.28);state.wallets.hot=Math.max(0,state.wallets.hot-lost);log("Hot-wallet key compromise",`-${fmtBtc(lost)} · cold storage unaffected`,"custody");showToast("Hot wallet compromised",`${fmtBtc(lost)} was lost from the online wallet. Cold storage and custodial venues were unaffected.`);renderFullQueued=true}
-  if(firmwarePatchDue()&&!firmwareHijacked()&&nextRand()<.07){state.ops.hijackUntil=next+DAY*(10+Math.floor(nextRand()*21));log("ASIC fleet hijacked","35% of hash diverted");showToast("Firmware compromise","Unpatched ASIC firmware is pointing part of your hashrate to an attacker. Patch it now.");}
+  const hotRisk=hotWalletIncidentRisk();if(hotRisk>0&&nextRand()<hotRisk){const lost=state.wallets.hot*(.12+nextRand()*.28);state.wallets.hot=Math.max(0,state.wallets.hot-lost);log("Hot-wallet key compromise",`-${fmtBtc(lost)} · cold storage unaffected`,"custody");showToast("Hot wallet compromised",`${fmtBtc(lost)} was lost from the online wallet. Cold storage and custodial venues were unaffected.`,"bad");renderFullQueued=true}
+  if(firmwarePatchDue()&&!firmwareHijacked()&&nextRand()<.07){state.ops.hijackUntil=next+DAY*(10+Math.floor(nextRand()*21));log("ASIC fleet hijacked","35% of hash diverted");showToast("Firmware compromise","Unpatched ASIC firmware is pointing part of your hashrate to an attacker. Patch it now.","bad");}
   const r=region(),outageRisk=connectivityIncidentRisk(),gridRisk=Math.min(.28,Math.max(.004,(1-r.rely)*1.15));
-  if(!siteOutage()&&(operating()||nodeHostPowered())&&nextRand()<gridRisk){const days=1+Math.floor(nextRand()*(2+gridRisk*45));state.ops.powerOutageUntil=next+DAY*days;log(`${r.name} grid outage`,`${days} days without power`,`operations`);showToast("Grid outage",`${r.name}'s grid is unavailable at ${facility().name}. Mining, cooling and primary-node services pause for ${days} days.`);}
-  else if(!siteOutage()&&(operating()||nodeHostPowered())&&nextRand()<outageRisk){const days=1+Math.floor(nextRand()*(3+outageRisk*90));state.ops.outageUntil=next+DAY*days;log(`${r.name} connectivity outage`,`${days} days offline`,`operations`);showToast("Internet outage",`${connectivityPlan().name} has lost upstream service in ${r.name}. Mining and primary-node services pause for ${days} days.`);}
-  if(state.backupNode.enabled&&!backupNodeOutage()&&nextRand()<.006){const days=1+Math.floor(nextRand()*3);state.backupNode.outageUntil=next+DAY*days;log("Remote node provider outage",`${days} days offline`);showToast("Backup-node outage",`The remote node site is unavailable for ${days} simulation day${days===1?"":"s"}. The primary node is unaffected.`);}
-  [["bitfinex",.022],["quadriga",.065],["frontier",.04],["exchange",.007]].forEach(([id,risk])=>{if(state.wallets[id]>0&&!venueFrozen(id)&&nextRand()<risk){const days=7+Math.floor(nextRand()*24);state.ops.venueFreezes[id]=next+DAY*days;log(`${walletName(id)} withdrawals frozen`,`${days} days`);showToast("Withdrawal freeze",`${walletName(id)} has paused withdrawals. Move funds only when service resumes.`);}});
+  if(!siteOutage()&&(operating()||nodeHostPowered())&&nextRand()<gridRisk){const days=1+Math.floor(nextRand()*(2+gridRisk*45));state.ops.powerOutageUntil=next+DAY*days;log(`${r.name} grid outage`,`${days} days without power`,`operations`);showToast("Grid outage",`${r.name}'s grid is unavailable at ${facility().name}. Mining, cooling and primary-node services pause for ${days} days.`,"bad");}
+  else if(!siteOutage()&&(operating()||nodeHostPowered())&&nextRand()<outageRisk){const days=1+Math.floor(nextRand()*(3+outageRisk*90));state.ops.outageUntil=next+DAY*days;log(`${r.name} connectivity outage`,`${days} days offline`,`operations`);showToast("Internet outage",`${connectivityPlan().name} has lost upstream service in ${r.name}. Mining and primary-node services pause for ${days} days.`,"bad");}
+  if(state.backupNode.enabled&&!backupNodeOutage()&&nextRand()<.006){const days=1+Math.floor(nextRand()*3);state.backupNode.outageUntil=next+DAY*days;log("Remote node provider outage",`${days} days offline`);showToast("Backup-node outage",`The remote node site is unavailable for ${days} simulation day${days===1?"":"s"}. The primary node is unaffected.`,"bad");}
+  [["bitfinex",.022],["quadriga",.065],["frontier",.04],["exchange",.007]].forEach(([id,risk])=>{if(state.wallets[id]>0&&!venueFrozen(id)&&nextRand()<risk){const days=7+Math.floor(nextRand()*24);state.ops.venueFreezes[id]=next+DAY*days;log(`${walletName(id)} withdrawals frozen`,`${days} days`);showToast("Withdrawal freeze",`${walletName(id)} has paused withdrawals. Move funds only when service resumes.`,"bad");}});
 }
 function monthlyCost(){
   const fs=fleet(),r=region(),f=facility(),nodeW=nodePowerWatts();
@@ -309,15 +453,12 @@ function treasurySaleForSettlement(due){
 }
 function finishMonthlySettlement(kind="cash",automatic=false){
   const pending=state.pendingSettlement;if(!pending||state.cash+1e-8<pending.due)return false;state.cash-=pending.due;const interest=pending.loanInterest||0;log("Operating bill settled",fmtUsd(pending.due));if(interest>0)log("Project finance interest",fmtUsd(interest));recordOperatorMonth(pending.snapshot,kind==="cash"||kind==="policy");state.bill=0;state.billLedger=blankBillLedger();state.lastMonth=pending.month;state.pendingSettlement=null;state.debt=0;state.power=!state.policyLock;clearTimeout(toastTimer);toast=null;
-  let hardwareOpened=false;if(!state.ended){state.speed=pending.resumeSpeed||state.returnSpeed||1;hardwareOpened=activateNextHardwareAlert();setTimer()}save();if(automatic&&!hardwareOpened){refreshLive();requestAnimationFrame(()=>{refreshDashboardVisuals();refreshMinePricing()})}else render();return true;
+  let hardwareOpened=false;if(!state.ended){state.speed=pending.resumeSpeed||state.returnSpeed||0;hardwareOpened=activateNextHardwareAlert();setTimer()}save();if(automatic&&!hardwareOpened){refreshLive();requestAnimationFrame(()=>{refreshDashboardVisuals();refreshMinePricing()})}else render();return true;
 }
 function queueMonthlySettlement(due,month,loanInterest){
-  const snapshot=settlementSnapshot(due,month),resumeSpeed=state.speed||state.returnSpeed||1;treasurySaleForSettlement(due);state.pendingSettlement={due,month,loanInterest,snapshot,resumeSpeed};
+  const snapshot=settlementSnapshot(due,month),resumeSpeed=state.speed||state.returnSpeed||0;treasurySaleForSettlement(due);state.pendingSettlement={due,month,loanInterest,snapshot,resumeSpeed};
   if(state.cash>=due){finishMonthlySettlement(treasuryPolicy().id==="cover"?"policy":"cash",true);return}
-  state.speed=0;renderFullQueued=true;log("Settlement decision required",`${fmtUsd(due-state.cash)} short`);showToast("Settlement paused","Choose how to cover the shortfall. Time will not move until the decision is resolved.");setTimer();
-}
-function payPendingWithBtc(){
-  const p=state.pendingSettlement;if(!p||state.time<MARKET)return;const fee=.006,needed=Math.max(0,p.due-state.cash)/(priceAt(state.time)*(1-fee));if(controlled()+1e-12<needed)return showToast("Not enough self-held BTC",`You need ${fmtBtc(needed)} to close this settlement.`);const sold=sellControlledBtc(needed),proceeds=sold*priceAt(state.time)*(1-fee);state.cash+=proceeds;log("Emergency BTC sale",`${fmtBtc(sold)} · +${fmtUsd(proceeds)}`);finishMonthlySettlement("btc-rescue");
+  state.speed=0;renderFullQueued=true;log("Settlement decision required",`${fmtUsd(due-state.cash)} short`);showToast("Settlement paused","Choose how to cover the shortfall. Time will not move until the decision is resolved.","bad");setTimer();
 }
 function liquidationCandidates(onlyId=null){
   return HARDWARE.filter(h=>!h.permanent&&(!onlyId||h.id===onlyId)&&(state.decommissionedHardware?.[h.id]||0)>0).map(h=>{const profitability=hardwareProfitability(h);return{h,owned:state.decommissionedHardware[h.id]||0,unit:Math.max(1,resaleHardwareValue(h)),margin:profitability.netPerUnit,efficiency:h.hash/Math.max(1,h.w)}}).sort((a,b)=>{const marginA=Number.isFinite(a.margin)?a.margin:Infinity,marginB=Number.isFinite(b.margin)?b.margin:Infinity;return marginA-marginB||a.efficiency-b.efficiency});
@@ -341,7 +482,7 @@ function takeBridgeFinance(){
 }
 function enterReceivership(){
   const p=state.pendingSettlement;if(!p)return;state.operator.restructures++;const haircut=Math.min(.25,.1+(state.operator.restructures-1)*.05),btcSeized=controlled()*haircut;sellControlledBtc(btcSeized);let machines=0;HARDWARE.filter(h=>!h.permanent).forEach(h=>{const qty=Math.ceil((state.hardware[h.id]||0)*.25);state.hardware[h.id]=Math.max(0,(state.hardware[h.id]||0)-qty);machines+=qty});recordOperatorMonth(p.snapshot,false);state.bill=0;state.billLedger=blankBillLedger();state.debt=0;state.cash=0;state.lastMonth=p.month;state.pendingSettlement=null;state.power=false;clearTimeout(toastTimer);toast=null;log("Receivership",`${Math.round(haircut*100)}% of self-held BTC and ${machines} miners seized`);
-  if(state.operator.restructures>=3){state.ended=true;state.endReason="receivership";state.speed=0;log("Scored campaign ended","third receivership")}else state.speed=p.resumeSpeed||state.returnSpeed||1;setTimer();save();render();
+  if(state.operator.restructures>=3){state.ended=true;state.endReason="receivership";state.speed=0;log("Scored campaign ended","third receivership")}else state.speed=p.resumeSpeed||state.returnSpeed||0;setTimer();save();render();
 }
 function strategySecurity(id){return STRATEGY_SECURITIES.find(x=>x.id===id)}
 function strategyPrice(id,t=state.time){const s=strategySecurity(id);if(!s||t<at(s.date))return 0;const ratio=priceAt(t)/priceAt(at(s.date));return Math.max(1,s.base*(1+s.btcBeta*(ratio-1)))}
@@ -493,8 +634,9 @@ function refreshMinePricing(){
 }
 function refreshLive(){
   const fs=fleet(),mc=monthlyCost(),online=operating(),p=priceAt(state.time),set=(id,value)=>{const el=document.getElementById(id);if(el)el.textContent=value};
-  const tickerBtc=value=>fmtBtc(value).replace(/ BTC$/,"");set("live-date",dateFmt(state.time));set("live-block",`BLOCK ~${fmtNum(approxHeight(state.time))}`);set("live-fiat",fmtUsd(state.cash));set("live-illiquid-fiat",fmtUsd(equityValue()));set("live-controlled-btc",tickerBtc(controlled()));set("live-custodial-btc",tickerBtc(claims()));set("live-lightning-btc",tickerBtc(lightningLocked()));set("live-price",state.time<MARKET?"NO MARKET":fmtUsd(p));set("live-network-hash",fmtHash(hashAt(state.time)));set("live-difficulty",fmtDiff(difficultyAt(state.time)));set("live-subsidy",`${subsidyAt(state.time)} BTC`);set("live-fees",fmtBtc(feeAt(state.time)));set("live-your-hash",fmtHash(fs.hash));set("live-your-status",online?"online":"offline");set("live-power",`${fs.kw.toFixed(2)} kW`);set("live-power-rate",`${fmtUsd(mc.rate)}/kWh`);set("live-transactions",fmtNum(txAt(state.time)));set("live-worth",fmtUsd(netWorth()));
+  const tickerBtc=value=>fmtBtc(value).replace(/ BTC$/,"");set("live-date",dateFmt(state.time));set("live-block",`BLOCK ~${fmtNum(approxHeight(state.time))}`);set("live-fiat",fmtUsd(state.cash));set("live-illiquid-fiat",fmtUsd(equityValue()));set("live-controlled-btc",tickerBtc(controlled()));set("live-custodial-btc",tickerBtc(claims()));set("live-lightning-btc",tickerBtc(lightningLocked()));set("live-price",state.time<MARKET?"NO MARKET":fmtUsd(p));set("live-network-hash",fmtHash(competitiveHashAt(state.time,fs.hash)));set("live-difficulty",fmtDiff(difficultyAt(state.time)));set("live-subsidy",`${subsidyAt(state.time)} BTC`);set("live-fees",fmtBtc(feeAt(state.time)));set("live-your-hash",fmtHash(fs.hash));set("live-your-status",online?"online":"offline");set("live-power",`${fs.kw.toFixed(2)} kW`);set("live-power-rate",`${fmtUsd(mc.rate)}/kWh`);set("live-transactions",fmtNum(txAt(state.time)));set("live-worth",fmtUsd(netWorth()));
   const hash=document.getElementById("live-your-hash");if(hash)hash.classList.toggle("green",online);refreshDashboard();refreshSettlementForecast();refreshLearning();
 }
 function setTimer(){clearInterval(timer);if(state.speed>0)timer=setInterval(tick,Math.max(70,2000/state.speed))}
+function startMempoolTimer(){clearInterval(mempoolTimer);mempoolTimer=setInterval(()=>{if(activeTab==="dashboard")refreshDashboardVisuals()},1200)}
 function save(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(state))}catch(e){}}

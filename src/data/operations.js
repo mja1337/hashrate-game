@@ -21,7 +21,7 @@ const COOLING_EQUIPMENT=[
   {id:"coolingtower",name:"Industrial cooling tower",date:"2023-01-01",minTier:7,maxTier:8,cost:7200000,coolingKw:72000,watts:2400000,desc:"Campus-scale heat rejection for dense liquid-cooled fleets."}
 ];
 const REGIONS=[
-  {id:"na",name:"North America",date:"2009-01-03",kwh:.12,rely:.995,netRisk:.008,internet:75,move:0,ambientC:18,seasonalC:11,policy:"Stable, expensive",desc:"Reliable grid access and deep capital markets; middling power prices."},
+  {id:"na",name:"North America",date:"2009-01-03",kwh:.12,rely:.995,netRisk:.008,internet:25,move:0,ambientC:18,seasonalC:11,policy:"Stable, expensive",desc:"Reliable grid access and deep capital markets; middling power prices."},
   {id:"iceland",name:"Iceland",date:"2013-01-01",kwh:.075,rely:.998,netRisk:.006,internet:130,move:18000,ambientC:7,seasonalC:6,policy:"Cool & dependable",desc:"Cooling and renewable generation help; logistics and space cost more."},
   {id:"sichuan",name:"Sichuan",date:"2014-01-01",kwh:.045,rely:.96,netRisk:.035,internet:95,move:22000,ambientC:20,seasonalC:9,policy:"Cheap, exposed",desc:"Seasonal hydropower is cheap until political permission disappears."},
   {id:"kazakhstan",name:"Kazakhstan",date:"2018-01-01",kwh:.055,rely:.91,netRisk:.055,internet:80,move:30000,ambientC:12,seasonalC:16,policy:"Cheap, constrained",desc:"Low rates attract miners; grid curtailment and unrest are material."},

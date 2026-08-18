@@ -92,9 +92,9 @@ function upgradeFacility(id){
   state.cash-=f.cost;state.facility=id;
   const incidentRoll=nextRand();if(incidentRoll<risk&&!state.insured){
     const incident=nextRand();
-    if(incident<.42){const until=state.time+DAY*90;state.powerRateShock={multiplier:1.22,until};log("Facility migration: power contract repriced","+22% power for 90 days");showToast("Migration issue","The new site's power contract is 22% higher for 90 days.")}
-    else if(incident<.78){const candidates=HARDWARE.filter(h=>!h.permanent&&(state.hardware[h.id]||0)>0);const h=candidates[Math.floor(nextRand()*candidates.length)];if(h){const lost=Math.max(1,Math.ceil((state.hardware[h.id]||0)*(.05+nextRand()*.1)*(hasSkill("spares")?.5:1)));state.hardware[h.id]=Math.max(0,state.hardware[h.id]-lost);log("Facility migration: miners damaged",`-${lost} ${h.name}`);showToast("Migration issue",`${lost} ${h.name} damaged in transit.`)}else{const fee=Math.min(state.cash,fleet().value*.025);state.cash-=fee;log("Facility migration: customs inspection",`-${fmtUsd(fee)}`);showToast("Migration issue","A customs inspection added an unexpected handling cost.")}}
-    else{const fee=Math.min(state.cash,fleet().value*(.03+nextRand()*.04));state.cash-=fee;log("Facility migration: equipment held",`-${fmtUsd(fee)}`);showToast("Migration issue","Equipment was held during the move; release fees were required.")}
+    if(incident<.42){const until=state.time+DAY*90;state.powerRateShock={multiplier:1.22,until};log("Facility migration: power contract repriced","+22% power for 90 days");showToast("Migration issue","The new site's power contract is 22% higher for 90 days.","bad")}
+    else if(incident<.78){const candidates=HARDWARE.filter(h=>!h.permanent&&(state.hardware[h.id]||0)>0);const h=candidates[Math.floor(nextRand()*candidates.length)];if(h){const lost=Math.max(1,Math.ceil((state.hardware[h.id]||0)*(.05+nextRand()*.1)*(hasSkill("spares")?.5:1)));state.hardware[h.id]=Math.max(0,state.hardware[h.id]-lost);log("Facility migration: miners damaged",`-${lost} ${h.name}`);showToast("Migration issue",`${lost} ${h.name} damaged in transit.`,"bad")}else{const fee=Math.min(state.cash,fleet().value*.025);state.cash-=fee;log("Facility migration: customs inspection",`-${fmtUsd(fee)}`);showToast("Migration issue","A customs inspection added an unexpected handling cost.","bad")}}
+    else{const fee=Math.min(state.cash,fleet().value*(.03+nextRand()*.04));state.cash-=fee;log("Facility migration: equipment held",`-${fmtUsd(fee)}`);showToast("Migration issue","Equipment was held during the move; release fees were required.","bad")}
   }else if(incidentRoll<risk&&state.insured){log("Migration incident insured","claim paid");showToast("Insurance claim","The policy absorbed the migration incident.")}
   log(`Moved into ${f.name}`,`-${fmtUsd(f.cost)}`);save();render();
 }
@@ -181,7 +181,9 @@ function sellBtc(bucket,fraction){
   if(venueFrozen(bucket))return showToast("Withdrawals frozen",`${walletName(bucket)} has paused withdrawals until ${dateFmt(state.ops.venueFreezes[bucket])}.`);
   fraction=clamp(Number(fraction)||0,0.01,1);const btc=state.wallets[bucket]*fraction;if(btc<=0)return;
   const fee=venueTradeFee(bucket);
-  const usd=btc*priceAt(state.time)*(1-fee);state.wallets[bucket]-=btc;state.cash+=usd;log(bucket==="etf"?"Sold ETF exposure":"Sold bitcoin",`-${fmtBtc(btc)} · +${fmtUsd(usd)} at ${fmtUsd(priceAt(state.time))}`,"trade");save();render();
+  const usd=btc*priceAt(state.time)*(1-fee);state.wallets[bucket]-=btc;state.cash+=usd;log(bucket==="etf"?"Sold ETF exposure":"Sold bitcoin",`-${fmtBtc(btc)} · +${fmtUsd(usd)} at ${fmtUsd(priceAt(state.time))}`,"trade");
+  if(state.settlementSaleMode&&state.pendingSettlement&&state.cash+1e-8>=state.pendingSettlement.due){state.settlementSaleMode=false;finishMonthlySettlement("btc-rescue");return}
+  save();render();
 }
 function transfer(from,to,fraction){
   if(venueFrozen(from))return showToast("Withdrawals frozen",`${walletName(from)} has paused withdrawals until ${dateFmt(state.ops.venueFreezes[from])}.`);
