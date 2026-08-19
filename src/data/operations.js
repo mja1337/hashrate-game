@@ -11,7 +11,6 @@ const FACILITIES=[
   {id:"megacampus",name:"Sovereign megacampus",date:"2025-01-01",kw:180000,space:360000,rent:1500000,cost:90000000,passiveCoolingKw:60000,desc:"Utility-scale mining campus designed for national-scale power agreements and geopolitical risk."}
 ];
 const COOLING_EQUIPMENT=[
-  {id:"casefan",name:"120 mm high-static fan",date:"2009-01-03",minTier:1,maxTier:2,cost:24,coolingKw:.28,watts:7,desc:"Cheap directed airflow for a laptop, tower or one crowded shelf."},
   {id:"boxfan",name:"Workshop box fan",date:"2009-01-03",minTier:1,maxTier:3,cost:95,coolingKw:1.6,watts:85,desc:"Moves room air cheaply; useful at home and in a small garage."},
   {id:"exhaust",name:"Ducted exhaust kit",date:"2010-01-01",minTier:2,maxTier:4,cost:780,coolingKw:10,watts:420,desc:"Pulls a deliberate hot aisle out of a garage or small industrial unit."},
   {id:"axial",name:"Industrial axial fan wall",date:"2012-01-01",minTier:3,maxTier:6,cost:5200,coolingKw:68,watts:2600,desc:"High-volume intake and extraction for rows of air-cooled miners."},

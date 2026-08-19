@@ -2,7 +2,7 @@
 
 /* PRESENTATION HELPERS. */
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
-function fmtUsd(n){n=Number(n);if(!Number.isFinite(n))return"—";const abs=Math.abs(n),sign=n<0?"-":"";if(abs===0)return"$0.00";if(abs<1e-8)return`${sign}<$0.00000001`;if(abs<.001)return`${sign}$${abs.toFixed(8).replace(/0+$/,"")}`;if(abs<1)return`${sign}$${abs.toFixed(abs<.01?5:3).replace(/0+$/,"").replace(/\.$/,"")}`;return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:abs<100?2:0}).format(n)}
+function fmtUsd(n){n=Number(n);if(!Number.isFinite(n))return"—";const abs=Math.abs(n),sign=n<0?"-":"";if(abs===0)return"$0.00";if(abs<1e-8)return`${sign}<$0.00000001`;if(abs<.001)return`${sign}$${abs.toFixed(8).replace(/0+$/,"")}`;if(abs<1)return`${sign}$${abs.toFixed(abs<.01?6:4).replace(/0+$/,"").replace(/\.$/,"")}`;return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:abs<100?2:0}).format(n)}
 function fmtBtc(n){n=Number(n);if(!Number.isFinite(n))return"—";const abs=Math.abs(n),sign=n<0?"-":"";if(abs===0)return"0 BTC";if(abs<1e-8)return`${sign}<0.00000001 BTC`;if(abs>=1000)return new Intl.NumberFormat("en-US",{maximumFractionDigits:2}).format(n)+" BTC";if(abs>=1)return n.toFixed(4)+" BTC";return n.toFixed(8)+" BTC"}
 function fmtCompactNumber(n){n=Number(n);if(!Number.isFinite(n))return"—";const abs=Math.abs(n),units=[[1e12,"t"],[1e9,"b"],[1e6,"m"],[1e3,"k"]],unit=units.find(([value])=>abs>=value);if(abs>0&&abs<.01)return new Intl.NumberFormat("en-US",{maximumSignificantDigits:3}).format(n);if(!unit)return new Intl.NumberFormat("en-US",{maximumFractionDigits:abs<10?2:abs<100?1:0}).format(n);const scaled=n/unit[0],digits=Math.abs(scaled)>=10?1:2;return scaled.toFixed(digits).replace(/\.0+$|(\.\d*[1-9])0+$/,"$1")+unit[1]}
 function fmtCompactUsd(n){return `${n<0?"-$":"$"}${fmtCompactNumber(Math.abs(n))}`}
@@ -105,9 +105,10 @@ function treasuryPolicyVisual(){
 let mempoolFrame=0;
 function mempoolViz(){
   mempoolFrame++;
-  const tip=approxHeight(state.time),txDay=txAt(state.time),perBlock=Math.max(1,Math.round(txDay/144)),seed=(state.rng||1)+mempoolFrame*97.31;
+  const tip=approxHeight(state.time),txDay=txAt(state.time),perBlock=Math.max(.15,txDay/144),seed=(state.rng||1)+mempoolFrame*97.31;
   const rnd=i=>{const x=Math.sin(seed*.0001+i*12.9898)*43758.5453;return x-Math.floor(x)};
-  const blocks=[];for(let i=5;i>=0;i--){const h=Math.max(0,tip-i),jitter=.5+rnd(i+1)*1;blocks.push({h,tx:Math.max(1,Math.round(perBlock*jitter))})}
+  const spread=perBlock<4?1.8:perBlock<40?1.1:perBlock<400?.55:.3,jitterAbs=Math.max(0,1.6-perBlock*.4);
+  const blocks=[];for(let i=5;i>=0;i--){const h=Math.max(0,tip-i),variance=rnd(i*7+3)+rnd(i*13+11)-1,tx=Math.max(0,Math.round(perBlock+perBlock*spread*variance+jitterAbs*variance));blocks.push({h,tx})}
   const blocksHtml=blocks.map((b,i)=>`<div class="mp-block${i===blocks.length-1?" latest":""}"><span class="mp-block-h">#${fmtNum(b.h)}</span><span class="mp-block-tx">${fmtNum(b.tx)} tx</span></div>`).join(`<div class="mp-arrow">→</div>`);
   const TX_COUNT=300,cells=[];for(let i=0;i<TX_COUNT;i++){const r=rnd(100+i),tier=r>.88?"hi":r>.55?"mid":"lo",sr=rnd(900+i),size=sr>.95?"sz3":sr>.8?"sz2":"";cells.push(`<span class="mp-cell ${tier} ${size}"></span>`)}
   const waitMin=(2+rnd(777)*8).toFixed(1);

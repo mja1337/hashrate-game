@@ -3,9 +3,10 @@
 /* SIMULATION LAYER — deterministic state and economics. */
 const SAVE_KEY="hashrate-genesis-save-v1";
 const STARTING_MODES=[
-  {id:"easy",label:"Easy",start:1233100800000,desc:"Begin five days earlier, while the network is a little quieter."},
-  {id:"medium",label:"Standard",start:1233619200000,desc:"Begin on the original campaign opening: 03 February 2009."},
-  {id:"hard",label:"Hard",start:1288483200000,desc:"Join late, after the earliest mining opportunity has passed."}
+  {id:"easy",label:"Easy",start:GENESIS,desc:"Start at the Genesis Block itself, 03 January 2009 — the earliest possible day, with the longest runway to compound."},
+  {id:"medium",label:"Standard",start:START,desc:"Begin on the original campaign opening: 03 February 2009, a month after Genesis."},
+  {id:"hard",label:"Hard",start:1359417600000,desc:"Join as the first ASICs ship, 29 January 2013. CPUs, GPUs and FPGAs are already obsolete for competitive mining."},
+  {id:"impossible",label:"Impossible",start:1735689600000,desc:"Start 01 January 2025 with $1,500, near-peak difficulty, and under 20 months before the historical record ends. Good luck."}
 ];
 function startingMode(id){return STARTING_MODES.find(mode=>mode.id===id)||STARTING_MODES[0]}
 function startingModeForCash(cash){return null}
@@ -14,16 +15,16 @@ const initialState=()=>({
   cash:1500,startingCash:1500,difficulty:"medium",campaignStart:START,debt:0,bill:0,billLedger:{energy:0,rent:0,internet:0,staff:0,insurance:0,nodeNetwork:0,other:0},lastMonth:new Date(START).toISOString().slice(0,7),power:true,policyLock:null,
   wallets:{hot:0,cold:0,mtgox:0,bitfinex:0,quadriga:0,frontier:0,exchange:0,etf:0,frozen:0},
   lightning:{locked:0,earned:0},
-  hardware:{laptop:1},poweredDownHardware:{},facility:"home",region:"na",thermal:{temperature:22,equipment:{}},overdrive:false,settlementSaleMode:false,node:0,nodeStorage:50,nodePruned:false,nodeMode:"archival",nodeSync:{primaryLag:0,primaryPeak:0,backupLag:0,backupPeak:0},backupNode:{enabled:false,outageUntil:0},mode:"solo",pool:"f2pool",
-  skills:[],points:0,startingGrant:false,seen:[],activeEvent:null,storyPause:true,shoppingPause:false,speculations:[],powerRateShock:null,hardwareAlerts:{seen:[],queue:[],active:null,resumeSpeed:0},
+  hardware:{laptop:1},poweredDownHardware:{},facility:"home",region:"na",thermal:{temperature:22,equipment:{}},overdrive:false,settlementSaleMode:false,autoRepair:false,node:0,nodeStorage:50,nodePruned:false,nodeMode:"archival",nodeSync:{primaryLag:0,primaryPeak:0,backupLag:0,backupPeak:0},backupNode:{enabled:false,outageUntil:0},mode:"solo",pool:"f2pool",
+  skills:[],points:0,startingGrant:false,seen:[],activeEvent:null,storyPause:true,shoppingPause:false,speculations:[],powerRateShock:null,hardwareAlerts:{seen:[],queue:[],active:null,resumeSpeed:0},hardwareToastSeen:[],
   treasuryPolicy:"cover",pendingSettlement:null,endReason:null,
   operator:{eras:{},periodMined:0,periodUptime:0,periodDays:0,lastRevenueUsd:0,totalMonths:0,solventMonths:0,profitableMonths:0,competitiveMonths:0,bridgeLoans:0,restructures:0},
-  knowledge:0,nextKnowledge:3,learning:null,completedLearning:[],maintenance:{condition:{},faults:{},faultsByPart:{},parts:0,inventory:{fan:0,hashboard:0,powerPcb:0,coolantPump:0,coolingManifold:0},inventoryMigrated:true,orders:[],serviceJobs:[]},procurementOrders:[],inactiveHardware:{},commissioningJobs:[],decommissionedHardware:{},relocationJob:null,ops:{firmwarePatchedUntil:0,hijackUntil:0,outageUntil:0,powerOutageUntil:0,venueFreezes:{},riskMonth:""},strategy:{mstr:0,strk:0,strf:0,strd:0,strc:0,yieldEarned:0},sandbox:false,contract:"standard",staff:[],projectLoan:0,insured:false,milestones:[],donations:[],
+  knowledge:0,nextKnowledge:3,learning:null,completedLearning:[],maintenance:{condition:{},faults:{},faultsByPart:{},parts:0,inventory:{fan:0,hashboard:0,powerPcb:0,coolantPump:0,coolingManifold:0},inventoryMigrated:true,orders:[],serviceJobs:[]},procurementOrders:[],inactiveHardware:{},commissioningJobs:[],decommissionedHardware:{},relocationJob:null,facilityUpgradeJob:null,ops:{firmwarePatchedUntil:0,hijackUntil:0,outageUntil:0,powerOutageUntil:0,venueFreezes:{},riskMonth:""},strategy:{mstr:0,strk:0,strf:0,strd:0,strc:0,yieldEarned:0},sandbox:false,contract:"standard",staff:[],projectLoan:0,insured:false,milestones:[],donations:[],
   blocks:0,mined:0,nodeDays:0,uptimeDays:0,powerSpent:0,nextMilestone:100,
   connectivity:"fixed",history:[],activity:[],activitySeq:0,log:[{time:START,text:"Client synced to the network tip",amount:"~block "+approxHeight(START)}]
 });
-let state,loadedHasHardwareAlerts=false,activeTab="dashboard",mobileMenuOpen=false,mobileMenuSection="play",activityFilter="all",activityLimit=100,tradePercentages={},custodyLesson="malware",introDifficulty="hard",pendingTransaction=null,toast=null,toastTimer=null,timer=null,faucet=null,faucetTimer=null,mempoolTimer=null,introStep=0,renderQueued=false,renderFullQueued=false,lastRenderAt=0;
-try{const raw=localStorage.getItem(SAVE_KEY);if(raw){const parsed=JSON.parse(raw);loadedHasHardwareAlerts=!!parsed.hardwareAlerts;state=Object.assign(initialState(),parsed)}else state=initialState()}catch(e){state=initialState()}
+let state,loadedHasHardwareAlerts=false,loadedHasHardwareToastSeen=false,activeTab="dashboard",mobileMenuOpen=false,mobileMenuSection="play",activityFilter="all",activityLimit=100,tradePercentages={},custodyLesson="malware",introDifficulty="hard",pendingTransaction=null,toast=null,toastTimer=null,timer=null,faucet=null,faucetTimer=null,mempoolTimer=null,introStep=0,renderQueued=false,renderFullQueued=false,lastRenderAt=0;
+try{const raw=localStorage.getItem(SAVE_KEY);if(raw){const parsed=JSON.parse(raw);loadedHasHardwareAlerts=!!parsed.hardwareAlerts;loadedHasHardwareToastSeen=!!parsed.hardwareToastSeen;state=Object.assign(initialState(),parsed)}else state=initialState()}catch(e){state=initialState()}
 const ACTIVITY_CATEGORIES=["trade","fleet","finance","reward","custody","learning","operations"];
 function activityCategory(text=""){
   if(/bought|sold|treasury policy|ETF exposure|strategy/i.test(text))return"trade";
@@ -41,6 +42,12 @@ function migrateActivity(target){
 }
 migrateActivity(state);
 function asicHardware(){return HARDWARE.filter(h=>h.era==="ASIC"||h.era==="HYDRO ASIC").sort((a,b)=>at(a.date)-at(b.date))}
+function minorHardware(){return HARDWARE.filter(h=>!h.permanent&&h.era!=="ASIC"&&h.era!=="HYDRO ASIC").sort((a,b)=>at(a.date)-at(b.date))}
+function migrateHardwareToastSeen(target,hadToastSeen=true){
+  const valid=new Set(minorHardware().map(h=>h.id));
+  target.hardwareToastSeen=Array.isArray(target.hardwareToastSeen)?[...new Set(target.hardwareToastSeen.filter(id=>valid.has(id)))]:[];
+  if(!hadToastSeen)target.hardwareToastSeen=minorHardware().filter(h=>at(h.date)<=Number(target.time||START)).map(h=>h.id);
+}
 function migrateHardwareAlerts(target,hadAlerts=true){
   const valid=new Set(asicHardware().map(h=>h.id)),defaults={seen:[],queue:[],active:null,resumeSpeed:0},alerts=Object.assign(defaults,target.hardwareAlerts||{});
   alerts.seen=Array.isArray(alerts.seen)?[...new Set(alerts.seen.filter(id=>valid.has(id)))]:[];alerts.queue=Array.isArray(alerts.queue)?[...new Set(alerts.queue.filter(id=>valid.has(id)))]:[];
@@ -49,6 +56,7 @@ function migrateHardwareAlerts(target,hadAlerts=true){
   target.hardwareAlerts=alerts;
 }
 migrateHardwareAlerts(state,loadedHasHardwareAlerts);
+migrateHardwareToastSeen(state,loadedHasHardwareToastSeen);
 const savedStartingMode=STARTING_MODES.some(mode=>mode.id===state.difficulty)?startingMode(state.difficulty):null;
 state.difficulty=savedStartingMode?.id||"medium";state.campaignStart=Math.max(START-DAY*5,Number(state.campaignStart)||START);
 if(!state.started){introDifficulty=(savedStartingMode||startingMode("medium")).id;const mode=startingMode(introDifficulty);state.cash=1500;state.startingCash=1500;state.time=mode.start;state.campaignStart=mode.start;state.lastMonth=new Date(mode.start).toISOString().slice(0,7);state.difficulty=mode.id}
@@ -77,6 +85,7 @@ state.commissioningJobs=Array.isArray(state.commissioningJobs)?state.commissioni
 state.decommissionedHardware=state.decommissionedHardware&&typeof state.decommissionedHardware==="object"?state.decommissionedHardware:{};
 HARDWARE.forEach(h=>state.decommissionedHardware[h.id]=Math.max(0,Math.floor(Number(state.decommissionedHardware[h.id])||0)));
 state.relocationJob=state.relocationJob&&REGIONS.some(r=>r.id===state.relocationJob.id)&&Number.isFinite(Number(state.relocationJob.due))?state.relocationJob:null;
+state.facilityUpgradeJob=state.facilityUpgradeJob&&FACILITIES.some(f=>f.id===state.facilityUpgradeJob.id)&&Number.isFinite(Number(state.facilityUpgradeJob.due))?state.facilityUpgradeJob:null;
 state.ops=Object.assign({firmwarePatchedUntil:0,hijackUntil:0,outageUntil:0,powerOutageUntil:0,venueFreezes:{},riskMonth:""},state.ops||{});
 state.ops.venueFreezes=state.ops.venueFreezes&&typeof state.ops.venueFreezes==="object"?state.ops.venueFreezes:{};
 state.nodeSync=Object.assign({primaryLag:0,primaryPeak:0,backupLag:0,backupPeak:0},state.nodeSync||{});
@@ -92,6 +101,7 @@ state.skills=Array.isArray(state.skills)?[...new Set(state.skills.filter(id=>SKI
 state.seen=Array.isArray(state.seen)?state.seen:[];
 state.milestones=Array.isArray(state.milestones)?state.milestones:[];
 state.startingGrant=!!state.startingGrant;
+state.autoRepair=!!state.autoRepair;
 state.treasuryPolicy=TREASURY_POLICIES.some(x=>x.id===state.treasuryPolicy)?state.treasuryPolicy:"cover";
 state.pendingSettlement=state.pendingSettlement&&typeof state.pendingSettlement==="object"?state.pendingSettlement:null;
 state.operator=Object.assign({eras:{},periodMined:0,periodUptime:0,periodDays:0,lastRevenueUsd:0,totalMonths:0,solventMonths:0,profitableMonths:0,competitiveMonths:0,bridgeLoans:0,restructures:0},state.operator||{});
@@ -167,9 +177,9 @@ function operatorEraAt(t=state.time){return OPERATOR_ERAS.find(era=>t>=era.start
 function operatorEraStats(era=operatorEraAt()){return state.operator.eras[era.id]}
 function operatorEraScore(stats){if(!stats||stats.months<=0)return 0;return Math.round(35*stats.solvent/stats.months+30*stats.profitable/stats.months+20*stats.uptime/stats.months+15*stats.competitive/stats.months)}
 function operatorScoreBreakdown(){
-  const eraPoints=OPERATOR_ERAS.reduce((sum,era)=>sum+operatorEraScore(operatorEraStats(era)),0),performance=eraPoints/600*800;
-  const milestones=Math.min(80,(state.milestones?.length||0)/4*80),allBtc=totalBtc()+lightningLocked(),custody=allBtc>0?Math.min(40,controlled()/allBtc*40):0,monthly=monthlyCost().total,runway=monthly>0?state.cash/monthly:6,balance=(state.debt||state.projectLoan>Math.max(state.cash,state.operator.lastRevenueUsd*6))?0:Math.min(40,runway/6*40),resilience=Math.max(0,40-state.operator.restructures*20-state.operator.bridgeLoans*5),total=Math.max(0,Math.min(1000,Math.round(performance+milestones+custody+balance+resilience)));
-  return{total,performance:Math.round(performance),milestones:Math.round(milestones),custody:Math.round(custody),balance:Math.round(balance),resilience:Math.round(resilience),eraPoints};
+  const eraPoints=OPERATOR_ERAS.reduce((sum,era)=>sum+operatorEraScore(operatorEraStats(era)),0),performance=eraPoints/(OPERATOR_ERAS.length*100)*800;
+  const milestones=Math.min(80,(state.milestones?.length||0)/4*80),allBtc=totalBtc()+lightningLocked(),holdings=Math.min(40,Math.log2(1+allBtc)/Math.log2(11)*40),monthly=monthlyCost().total,runway=monthly>0?state.cash/monthly:6,balance=(state.debt||state.projectLoan>Math.max(state.cash,state.operator.lastRevenueUsd*6))?0:Math.min(40,runway/6*40),resilience=Math.max(0,40-state.operator.restructures*20-state.operator.bridgeLoans*5),total=Math.max(0,Math.min(1000,Math.round(performance+milestones+holdings+balance+resilience)));
+  return{total,performance:Math.round(performance),milestones:Math.round(milestones),holdings:Math.round(holdings),balance:Math.round(balance),resilience:Math.round(resilience),eraPoints};
 }
 function operatorGrade(score=operatorScoreBreakdown().total){return score>=900?"Legendary":score>=750?"Elite":score>=600?"Durable":score>=450?"Solvent":score>=300?"Survivor":"At risk"}
 function lightningLocked(){return state.lightning?.locked||0}
@@ -178,6 +188,8 @@ function powerOutage(){return state.time<(state.ops?.powerOutageUntil||0)}
 function siteOutage(){return connectivityOutage()||powerOutage()}
 function activeSiteIncident(){if(powerOutage())return{kind:"Grid outage",until:state.ops.powerOutageUntil};if(connectivityOutage())return{kind:"Internet outage",until:state.ops.outageUntil};return null}
 function relocating(){return !!state.relocationJob&&state.time<state.relocationJob.due}
+function upgradingFacility(){return !!state.facilityUpgradeJob&&state.time<state.facilityUpgradeJob.due}
+function fleetGrounded(){return relocating()||upgradingFacility()}
 function poolEligible(p=poolData()){return !!p&&(!p.requires||hasSkill(p.requires))}
 function claims(){return state.wallets.mtgox+state.wallets.bitfinex+state.wallets.quadriga+state.wallets.frontier+state.wallets.exchange+state.wallets.frozen}
 function totalBtc(){return controlled()+claims()}
@@ -193,7 +205,8 @@ function log(text,amount="",category=""){
   const entry={id:++state.activitySeq,time:state.time,text,amount,category:category||activityCategory(text),cash:Number(state.cash)||0,btc:controlled(),hash:fleet().hash,price:state.time>=MARKET?priceAt(state.time):null};
   state.activity.unshift(entry);state.log=state.activity.slice(0,8);
 }
-function showToast(title,message,kind="info"){toast={title,message,kind};const markup=`<div class="toast ${kind==="bad"?"toast-bad":""}"><div><b>${title}</b><span>${message}</span></div></div>`,existing=document.querySelector(".toast"),host=document.getElementById("app");if(existing)existing.outerHTML=markup;else if(host&&state.started)host.insertAdjacentHTML("beforeend",markup);clearTimeout(toastTimer);toastTimer=setTimeout(()=>{toast=null;document.querySelector(".toast")?.remove()},8500);if(kind==="bad"&&state.started)triggerImpactEffect()}
+function toastMarkup(t){const linked=!!t.tab;return `<div class="toast ${t.kind==="bad"?"toast-bad":""} ${linked?"toast-clickable":""}" ${linked?`data-action="tab" data-value="${t.tab}"${t.anchor?` data-anchor="${t.anchor}"`:""}`:""}><div><b>${t.title}</b><span>${t.message}</span></div>${linked?'<i class="toast-go">→</i>':""}</div>`}
+function showToast(title,message,kind="info",tab=null,anchor=null){toast={title,message,kind,tab,anchor};const markup=toastMarkup(toast),existing=document.querySelector(".toast"),host=document.getElementById("app");if(existing)existing.outerHTML=markup;else if(host&&state.started)host.insertAdjacentHTML("beforeend",markup);clearTimeout(toastTimer);toastTimer=setTimeout(()=>{toast=null;document.querySelector(".toast")?.remove()},8500);if(kind==="bad"&&state.started)triggerImpactEffect()}
 function triggerImpactEffect(){
   const flash=document.createElement("div");flash.className="impact-flash";document.body.appendChild(flash);
   flash.addEventListener("animationend",()=>flash.remove());
@@ -205,7 +218,7 @@ function poolData(id=state.pool){return POOLS.find(x=>x.id===id)||POOLS.find(x=>
 function poolShareAt(id,t){const p=poolData(id);if(!p||id==="solo")return id==="solo"?0:0;const a=p.anchors.map(([d,v])=>[at(d),v]).sort((x,y)=>x[0]-y[0]);if(t<a[0][0])return 0;for(let i=0;i<a.length-1;i++){const [t0,v0]=a[i],[t1,v1]=a[i+1];if(t>=t0&&t<=t1){const f=(t-t0)/(t1-t0);return v0+(v1-v0)*f}}return a[a.length-1][1]}
 function activePoolShare(){return state.mode==="pool"?poolShareAt(state.pool,state.time):0}
 function poolFee(){const p=poolData();return Math.max(.005,(p?.fee||.02)-(hasSkill("poolops")?.004:0))}
-function operating(){const fs=fleet();return state.power&&state.debt<=0&&!state.policyLock&&!siteOutage()&&!relocating()&&fs.within&&fs.hash>0}
+function operating(){const fs=fleet();return state.power&&state.debt<=0&&!state.policyLock&&!siteOutage()&&!fleetGrounded()&&fs.within&&fs.hash>0}
 function asicCount(){return HARDWARE.filter(h=>h.era==="ASIC"||h.era==="HYDRO ASIC").reduce((n,h)=>n+(state.hardware[h.id]||0),0)}
 function firmwarePatchDue(){return asicCount()>0&&state.time>=at("2017-04-26")&&state.time>(state.ops?.firmwarePatchedUntil||0)}
 function firmwareHijacked(){return state.time<(state.ops?.hijackUntil||0)}
@@ -233,12 +246,12 @@ function learningItem(){return state.learning?LEARNING.find(x=>x.id===state.lear
 function awardLearning(item,multiplier=1){
   const gain=item.reward*multiplier;state.knowledge+=gain;state.completedLearning.push(item.id);state.learning=null;
   while(state.knowledge>=state.nextKnowledge){state.points++;state.nextKnowledge+=3;log("Learning milestone","+1 skill point")}
-  log(`Completed ${item.title}`,`+${gain.toFixed(gain%1?1:0)} knowledge`);showToast("Learning complete",`${item.title} added ${gain.toFixed(gain%1?1:0)} knowledge.`);renderFullQueued=true;
+  log(`Completed ${item.title}`,`+${gain.toFixed(gain%1?1:0)} knowledge`);showToast("Learning complete",`${item.title} added ${gain.toFixed(gain%1?1:0)} knowledge.`,"info","learn");renderFullQueued=true;
 }
 function advanceLearning(){
   const item=learningItem();if(!item||state.learning.waiting)return;
   state.learning.progress=(state.learning.progress||0)+1;
-  if(state.learning.progress>=item.days){if(item.check){state.learning.waiting=true;renderFullQueued=true;showToast("Knowledge check",`Finish ${item.title} in the Learn tab.`)}else awardLearning(item)}
+  if(state.learning.progress>=item.days){if(item.check){state.learning.waiting=true;renderFullQueued=true;showToast("Knowledge check",`Finish ${item.title} in the Learn tab.`,"info","learn")}else awardLearning(item)}
 }
 function covidPartsMarket(){return state.time>=at("2020-03-12")&&state.time<at("2021-07-01")}
 function sparePart(id){return SPARE_PARTS.find(part=>part.id===id)}
@@ -264,6 +277,8 @@ const REPAIR_STAGES=[
   {id:"fitup",name:"Fit & rack",weight:.10},
   {id:"stabilitycheck",name:"Stability check",weight:.15}
 ];
+function shuffledSlots(n){const arr=Array.from({length:n},(_,i)=>i);for(let i=arr.length-1;i>0;i--){const j=Math.floor(nextRand()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]]}return arr}
+function shuffledPairSlots(pairs){const arr=[];for(let i=0;i<pairs;i++)arr.push(i,i);for(let i=arr.length-1;i>0;i--){const j=Math.floor(nextRand()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]]}return arr}
 const REPAIR_COMPLICATIONS={
   powerdown:"Breaker interlock didn't isolate cleanly",
   disconnect:"Cabling was more tangled than expected",
@@ -291,7 +306,18 @@ function advanceMaintenance(){
       if(job.due>state.time)return true;
     }else{
       while(job.stage<REPAIR_STAGES.length&&job.stageDue<=state.time){
-        const stage=REPAIR_STAGES[job.stage],complicationChance=Math.min(.6,.10*(job.contracted?1.3:1)*(hasSkill("fieldservice")?.5:1));
+        const stage=REPAIR_STAGES[job.stage];
+        if(stage.id==="work"&&job.part&&!job.auto&&!job.workDone){
+          if(job.puzzleType===undefined){
+            job.puzzleType=Math.floor(nextRand()*3);job.oldRemoved=false;
+            if(job.puzzleType===0){job.tapOrder=shuffledSlots(4);job.tapProgress=[]}
+            else if(job.puzzleType===1){job.cableSlots=shuffledPairSlots(3);job.cableLocked=[false,false,false,false,false,false];job.cableSelected=null}
+            else{job.dialTarget=20+Math.floor(nextRand()*61);const offsets=[-16,-14,-12,-10,-8,-6,6,8,10,12,14,16];job.dialValue=job.dialTarget+offsets[Math.floor(nextRand()*offsets.length)]}
+            renderFullQueued=true;
+          }
+          break;
+        }
+        const complicationChance=Math.min(.6,.10*(job.contracted?1.3:1)*(hasSkill("fieldservice")?.5:1));
         if(nextRand()<complicationChance){
           const delay=(.5+nextRand())*DAY;
           job.stageDue+=delay;job.due+=delay;
@@ -307,7 +333,7 @@ function advanceMaintenance(){
           const surcharge=Math.round((job.labor||0)*.15);
           if(surcharge>0&&state.cash>=surcharge){state.cash-=surcharge;note+=` · +${fmtUsd(surcharge)} callback fee`}
           log(`${h?.name||job.id} · ${stage.name} complication`,note,"fleet");
-          showToast("Repair complication",`${h?.name||job.id}: ${note}. +${(delay/DAY).toFixed(1)} day${delay/DAY>=1.05?"s":""}.`,"bad");
+          showToast("Repair complication",`${h?.name||job.id}: ${note}. +${(delay/DAY).toFixed(1)} day${delay/DAY>=1.05?"s":""}.`,"bad","mine");
           renderFullQueued=true;
           break;
         }
@@ -322,12 +348,12 @@ function advanceMaintenance(){
       byPart[job.part]=Math.max(0,(byPart[job.part]||0)-repaired);
       state.maintenance.condition[job.id]=Math.min(100,maintenanceCondition(h)+Math.max(6,20*repaired/Math.max(1,state.hardware[job.id]||1)));
       log(`Service completed: ${h?.name||job.id}`,`${repaired} ${partName}${repaired===1?"":"s"} replaced · ${job.crew}-technician crew`);
-      showToast("Service completed",`${repaired} × ${h?.name||"miner"} ${partName.toLowerCase()} swap finished.`);
+      showToast("Service completed",`${repaired} × ${h?.name||"miner"} ${partName.toLowerCase()} swap finished.`,"info","mine");
     }else{
       state.maintenance.faultsByPart[job.id]={};
       state.maintenance.condition[job.id]=Math.min(100,maintenanceCondition(h)+Math.max(18,60*repaired/Math.max(1,state.hardware[job.id]||1)));
       log(`Service completed: ${h?.name||job.id}`,`${repaired} unit${repaired===1?"":"s"} repaired · ${job.crew}-technician crew`);
-      showToast("Service completed",`${repaired} × ${h?.name||"miner"} returned to service.`);
+      showToast("Service completed",`${repaired} × ${h?.name||"miner"} returned to service.`,"info","mine");
     }
     return false;
   });
@@ -338,13 +364,13 @@ function advanceMaintenance(){
     const age=Math.max(0,(state.time-at(h.date))/DAY/365),condition=maintenanceCondition(h),active=hardwareRepairState(h).active;if(!active)return;
     const wear=((h.era==="HYDRO ASIC"?.035:.018)+Math.min(.04,age*.002))*wearFactor*(active/n)*(state.overdrive?1.6:1);
     state.maintenance.condition[h.id]=Math.max(0,condition-wear);
-    const base=h.era==="HYDRO ASIC"?.0015:h.era==="ASIC"?.0009:h.era==="GPU"?.00065:.00035,stress=(1+(100-condition)/55+age*.12)*failureHeat*(state.overdrive?2.2:1),failures=Math.min(active,poisson(active*base*stress*(technicians?0.72:1)));
+    const base=h.era==="HYDRO ASIC"?.00075:h.era==="ASIC"?.00045:h.era==="GPU"?.000325:.000175,stress=(1+(100-condition)/55+age*.12)*failureHeat*(state.overdrive?2.2:1),failures=Math.min(active,poisson(active*base*stress*(technicians?0.72:1)));
     if(failures){
       const weights=partFaultWeights(h),byPart=state.maintenance.faultsByPart[h.id]||(state.maintenance.faultsByPart[h.id]={}),gained={};
       for(let i=0;i<failures;i++){const part=pickWeightedPart(weights);byPart[part]=(byPart[part]||0)+1;gained[part]=(gained[part]||0)+1}
       const detail=Object.entries(gained).map(([part,count])=>`${count}× ${PART_FAULT_LABELS[part]||sparePart(part)?.name||part}`).join(" · ");
       log(`${h.name} fault detected`,`${detail} · ${roomTemperatureC().toFixed(0)}°C room`,`fleet`);
-      showToast("Fleet fault",`${detail} on ${h.name} at ${roomTemperatureC().toFixed(0)}°C. Cool the room or replace the part on the Mine floor.`,"bad");
+      showToast("Fleet fault",`${detail} on ${h.name} at ${roomTemperatureC().toFixed(0)}°C. Cool the room or replace the part on the Mine floor.`,"bad","mine");
       renderFullQueued=true;
     }
   });
@@ -357,8 +383,24 @@ function advanceMaintenance(){
       const byPart=state.maintenance.faultsByPart[h.id]||(state.maintenance.faultsByPart[h.id]={});
       byPart[extra]=(byPart[extra]||0)+1;
       log(`${h.name} fault spreading`,`Ignored damage reaches ${PART_FAULT_LABELS[extra]||sparePart(extra)?.name||extra}`,"fleet");
-      showToast("Fault spreading",`An unrepaired fault on ${h.name} has spread to ${sparePart(extra)?.name||extra}. Service it before it compounds further.`,"bad");
+      showToast("Fault spreading",`An unrepaired fault on ${h.name} has spread to ${sparePart(extra)?.name||extra}. Service it before it compounds further.`,"bad","mine");
       renderFullQueued=true;
+    }
+  });
+  if(state.autoRepair&&fieldTechnicianCount()>0)HARDWARE.forEach(h=>{
+    if(!(state.hardware[h.id]>0)||activeServiceJob(h.id))return;
+    const count=state.hardware[h.id],condition=maintenanceCondition(h);
+    if(condition<65){
+      const plan=servicePlan(h,count),requirements=serviceRequirements(h,count),labor=Math.max(40,h.cost*.008*count);
+      if(plan.crew&&!plan.contracted&&hasServiceParts(requirements)&&state.cash>=labor){serviceHardware(h.id,true);return}
+    }
+    const breakdown=hardwareFaultBreakdown(h),candidates=Object.entries(breakdown).filter(([,c])=>c>0).sort((a,b)=>b[1]-a[1]);
+    for(const[part,faulted]of candidates){
+      const requirements={[part]:Math.max(1,Math.ceil(faulted/7))};if(!hasServiceParts(requirements))continue;
+      const plan=servicePlan(h,faulted);if(!plan.crew||plan.contracted)continue;
+      const labor=Math.max(25,h.cost*.004*faulted);if(state.cash<labor)continue;
+      serviceHardwarePart(h.id,part,true);
+      return;
     }
   });
 }
@@ -367,7 +409,7 @@ function orderParts(type,qty=1){
   if(state.cash<cost)return showToast("Not enough cash",`${qty} ${part.name}${qty===1?"":"s"} cost ${fmtUsd(cost)}.`);
   state.cash-=cost;state.maintenance.orders.push({type:part.id,qty,due:state.time+lead*DAY});log("Spare parts ordered",`${qty} ${part.name}${qty===1?"":"s"} · -${fmtUsd(cost)} · ${lead} days`);save();render();
 }
-function serviceHardware(id){
+function serviceHardware(id,auto=false){
   const h=HARDWARE.find(x=>x.id===id),count=state.hardware[id]||0;if(!h||!count)return;
   if(activeServiceJob(id))return showToast("Service already scheduled",`${h.name} is already in the maintenance bay.`);
   const condition=maintenanceCondition(h),faults=hardwareFaultCount(h);if(condition>=95&&!faults)return showToast("Service not needed",`${h.name} is at ${condition.toFixed(0)}% condition with no failed units.`);
@@ -375,9 +417,9 @@ function serviceHardware(id){
   if(!plan.crew)return showToast(plan.contractorBusy?"No contractor available":"Technician crew busy",plan.contractorBusy?"An outside contractor is already covering another repair. Hire a field technician or wait for that job to finish.":`${plan.committed} technician${plan.committed===1?" is":"s are"} assigned to active repairs. Hire another field technician or wait for a service job to complete.`);
   if(!hasServiceParts(requirements))return showToast("Parts required",`Service needs ${serviceRequirementText(requirements)}; order the missing components first.`);
   if(state.cash<labor)return showToast("Not enough cash",`Service labour costs ${fmtUsd(labor)}.`);
-  state.cash-=labor;Object.entries(requirements).forEach(([part,qty])=>state.maintenance.inventory[part]-=qty);state.maintenance.serviceJobs.push({id,count:repairCount,due:state.time+plan.days*DAY,crew:plan.crew,contracted:plan.contracted,labor,totalDays:plan.days,stage:0,stageDue:state.time+REPAIR_STAGES[0].weight*plan.days*DAY});log(`Service started: ${h.name}`,`${repairCount} units · ${plan.days} days · ${fmtUsd(labor)}`);showToast("Service scheduled",`${repairCount} × ${h.name} is offline for ${plan.days} simulation day${plan.days===1?"":"s"}. ${plan.contracted?"An external technician is covering the job.":`${plan.crew} of ${plan.technicians} technicians assigned.`}`);save();render();
+  state.cash-=labor;Object.entries(requirements).forEach(([part,qty])=>state.maintenance.inventory[part]-=qty);state.maintenance.serviceJobs.push({id,count:repairCount,due:state.time+plan.days*DAY,crew:plan.crew,contracted:plan.contracted,labor,totalDays:plan.days,stage:0,stageDue:state.time+REPAIR_STAGES[0].weight*plan.days*DAY,auto});log(`Service started: ${h.name}`,`${repairCount} units · ${plan.days} days · ${fmtUsd(labor)}`);showToast(auto?"Auto-repair started":"Service scheduled",`${repairCount} × ${h.name} is offline for ${plan.days} simulation day${plan.days===1?"":"s"}. ${plan.contracted?"An external technician is covering the job.":auto?"Your technician crew is handling it automatically.":`${plan.crew} of ${plan.technicians} technicians assigned.`}`,"info","mine");save();render();
 }
-function serviceHardwarePart(id,part){
+function serviceHardwarePart(id,part,auto=false){
   const h=HARDWARE.find(x=>x.id===id),count=state.hardware[id]||0,partDef=sparePart(part);if(!h||!count||!partDef)return;
   if(activeServiceJob(id))return showToast("Service already scheduled",`${h.name} is already in the maintenance bay.`);
   const faulted=hardwareFaultBreakdown(h)[part]||0;if(!faulted)return showToast("Service not needed",`No ${partDef.name.toLowerCase()} faults are currently reported on ${h.name}.`);
@@ -386,9 +428,57 @@ function serviceHardwarePart(id,part){
   if(!hasServiceParts(requirements))return showToast("Parts required",`Replacing ${partDef.name.toLowerCase()}s needs ${serviceRequirementText(requirements)}; order the missing components first.`);
   if(state.cash<labor)return showToast("Not enough cash",`Targeted service labour costs ${fmtUsd(labor)}.`);
   state.cash-=labor;Object.entries(requirements).forEach(([p,qty])=>state.maintenance.inventory[p]-=qty);
-  state.maintenance.serviceJobs.push({id,count:faulted,part,due:state.time+plan.days*DAY,crew:plan.crew,contracted:plan.contracted,labor,totalDays:plan.days,stage:0,stageDue:state.time+REPAIR_STAGES[0].weight*plan.days*DAY});
+  state.maintenance.serviceJobs.push({id,count:faulted,part,due:state.time+plan.days*DAY,crew:plan.crew,contracted:plan.contracted,labor,totalDays:plan.days,stage:0,stageDue:state.time+REPAIR_STAGES[0].weight*plan.days*DAY,auto});
   log(`Service started: ${h.name}`,`${faulted} × ${partDef.name} · ${plan.days} day${plan.days===1?"":"s"} · ${fmtUsd(labor)}`);
-  showToast("Service scheduled",`${faulted} × ${partDef.name} swap on ${h.name}, ${plan.days} simulation day${plan.days===1?"":"s"}. ${plan.contracted?"An external technician is covering the job.":`${plan.crew} of ${plan.technicians} technicians assigned.`}`);
+  showToast(auto?"Auto-repair started":"Service scheduled",`${faulted} × ${partDef.name} swap on ${h.name}, ${plan.days} simulation day${plan.days===1?"":"s"}. ${plan.contracted?"An external technician is covering the job.":auto?`Your technician crew is handling it automatically.`:`${plan.crew} of ${plan.technicians} technicians assigned.`}`,"info","mine");
+  save();render();
+}
+function repairRemoveOldPart(id){
+  const job=activeServiceJob(id);if(!job||!job.part||job.auto||job.oldRemoved)return;
+  const h=HARDWARE.find(x=>x.id===id),partDef=sparePart(job.part);
+  job.oldRemoved=true;
+  showToast("Old part pulled",`${partDef?.name||job.part} removed from ${h?.name||id}. Fit the replacement to finish the job.`,"info","mine");
+  save();render();
+}
+function completeRepairWork(job,successNote){
+  const h=HARDWARE.find(x=>x.id===job.id),partDef=sparePart(job.part);
+  job.workDone=true;job.stage++;
+  if(job.stage<REPAIR_STAGES.length)job.stageDue=state.time+REPAIR_STAGES[job.stage].weight*(job.totalDays||1)*DAY;
+  log(`${h?.name||job.id} · part seated`,successNote,"fleet");
+  showToast("Part seated",`${partDef?.name||job.part} is fitted correctly on ${h?.name||job.id}. Reconnecting.`,"info","mine");
+  save();render();
+}
+function repairTapSlot(id,slot){
+  const job=activeServiceJob(id);slot=Number(slot);if(!job||!job.part||job.auto||!job.oldRemoved||job.workDone||job.puzzleType!==0||!Array.isArray(job.tapOrder))return;
+  job.tapProgress=Array.isArray(job.tapProgress)?job.tapProgress:[];
+  const pos=job.tapProgress.length;
+  if(job.tapOrder[pos]===slot){
+    job.tapProgress.push(slot);
+    if(job.tapProgress.length>=job.tapOrder.length)return completeRepairWork(job,"Torqued down in the correct cross pattern");
+  }else{
+    job.tapProgress=[];
+    showToast("Out of sequence",`Wrong mounting point — the ${sparePart(job.part)?.name?.toLowerCase()||"part"} shifted. Reset and retry the pattern.`,"bad","mine");
+  }
+  save();render();
+}
+function repairCableClick(id,slot){
+  const job=activeServiceJob(id);slot=Number(slot);if(!job||!job.part||job.auto||!job.oldRemoved||job.workDone||job.puzzleType!==1||!Array.isArray(job.cableSlots))return;
+  if(job.cableLocked[slot])return;
+  if(job.cableSelected===null||job.cableSelected===undefined){job.cableSelected=slot;save();render();return}
+  if(job.cableSelected===slot){job.cableSelected=null;save();render();return}
+  if(job.cableSlots[job.cableSelected]===job.cableSlots[slot]){
+    job.cableLocked[job.cableSelected]=true;job.cableLocked[slot]=true;job.cableSelected=null;
+    if(job.cableLocked.every(Boolean))return completeRepairWork(job,"Every cable pair reconnected to its matching terminal");
+  }else{
+    job.cableSelected=null;
+    showToast("Wrong terminal",`That pair doesn't match — the connectors don't seat. Try again.`,"bad","mine");
+  }
+  save();render();
+}
+function repairNudgeDial(id,delta){
+  const job=activeServiceJob(id);delta=Number(delta);if(!job||!job.part||job.auto||!job.oldRemoved||job.workDone||job.puzzleType!==2||!Number.isFinite(job.dialValue))return;
+  job.dialValue+=delta;
+  if(job.dialValue===job.dialTarget)return completeRepairWork(job,"Torqued to exact spec");
   save();render();
 }
 function patchFirmware(){
@@ -398,20 +488,20 @@ function patchFirmware(){
   log("ASIC firmware patched",`${count} machines · protected for 18 months`);showToast("Fleet patched","Signed firmware is current for 18 simulation months.");save();render();
 }
 function advanceNodeSync(silent=false){
-  const syncPath=(lagKey,peakKey,ready,rate,label)=>{const before=state.nodeSync[lagKey];if(ready){state.nodeSync[lagKey]=Math.max(0,before-rate);if(before>0&&state.nodeSync[lagKey]===0){state.nodeSync[peakKey]=0;log(`${label} caught up`,`Verification resumed at the chain tip`);if(!silent)showToast("Node synchronized",`${label} has validated its backlog and reached the chain tip.`)}}else{state.nodeSync[lagKey]=Math.min(365,state.nodeSync[lagKey]+1);state.nodeSync[peakKey]=Math.max(state.nodeSync[peakKey],state.nodeSync[lagKey])}};
+  const syncPath=(lagKey,peakKey,ready,rate,label)=>{const before=state.nodeSync[lagKey];if(ready){state.nodeSync[lagKey]=Math.max(0,before-rate);if(before>0&&state.nodeSync[lagKey]===0){state.nodeSync[peakKey]=0;log(`${label} caught up`,`Verification resumed at the chain tip`);if(!silent)showToast("Node synchronized",`${label} has validated its backlog and reached the chain tip.`,"info","custody")}}else{state.nodeSync[lagKey]=Math.min(365,state.nodeSync[lagKey]+1);state.nodeSync[peakKey]=Math.max(state.nodeSync[peakKey],state.nodeSync[lagKey])}};
   syncPath("primaryLag","primaryPeak",primaryNodeReady(),primaryNodeCatchupRate(),"Primary full node");
   if(state.backupNode.enabled)syncPath("backupLag","backupPeak",backupNodeReady(),4,"Geographic backup node");
 }
 function advanceOperationalRisks(next){
-  if(state.ops.outageUntil&&next>=state.ops.outageUntil){state.ops.outageUntil=0;log("Connectivity restored",`${region().name} upstream service resumed`,`operations`);showToast("Internet restored",`${connectivityPlan().name} service is back. Mining and primary-node connectivity can resume.`)}
-  if(state.ops.powerOutageUntil&&next>=state.ops.powerOutageUntil){state.ops.powerOutageUntil=0;log("Grid power restored",`${region().name} site energized`,`operations`);showToast("Grid restored",`Power is back at ${facility().name}. The fleet can resume hashing.`)}
+  if(state.ops.outageUntil&&next>=state.ops.outageUntil){state.ops.outageUntil=0;log("Connectivity restored",`${region().name} upstream service resumed`,`operations`);showToast("Internet restored",`${connectivityPlan().name} service is back. Mining and primary-node connectivity can resume.`,"info","facilities")}
+  if(state.ops.powerOutageUntil&&next>=state.ops.powerOutageUntil){state.ops.powerOutageUntil=0;log("Grid power restored",`${region().name} site energized`,`operations`);showToast("Grid restored",`Power is back at ${facility().name}. The fleet can resume hashing.`,"info","facilities")}
   const month=new Date(next).toISOString().slice(0,7);if(state.ops.riskMonth===month)return;state.ops.riskMonth=month;
-  const hotRisk=hotWalletIncidentRisk();if(hotRisk>0&&nextRand()<hotRisk){const lost=state.wallets.hot*(.12+nextRand()*.28);state.wallets.hot=Math.max(0,state.wallets.hot-lost);log("Hot-wallet key compromise",`-${fmtBtc(lost)} · cold storage unaffected`,"custody");showToast("Hot wallet compromised",`${fmtBtc(lost)} was lost from the online wallet. Cold storage and custodial venues were unaffected.`,"bad");renderFullQueued=true}
+  const hotRisk=hotWalletIncidentRisk();if(hotRisk>0&&nextRand()<hotRisk){const lost=state.wallets.hot*(.12+nextRand()*.28);state.wallets.hot=Math.max(0,state.wallets.hot-lost);log("Hot-wallet key compromise",`-${fmtBtc(lost)} · cold storage unaffected`,"custody");showToast("Hot wallet compromised",`${fmtBtc(lost)} was lost from the online wallet. Cold storage and custodial venues were unaffected.`,"bad","custody");renderFullQueued=true}
   if(firmwarePatchDue()&&!firmwareHijacked()&&nextRand()<.07){state.ops.hijackUntil=next+DAY*(10+Math.floor(nextRand()*21));log("ASIC fleet hijacked","35% of hash diverted");showToast("Firmware compromise","Unpatched ASIC firmware is pointing part of your hashrate to an attacker. Patch it now.","bad");}
   const r=region(),outageRisk=connectivityIncidentRisk(),gridRisk=Math.min(.28,Math.max(.004,(1-r.rely)*1.15));
-  if(!siteOutage()&&(operating()||nodeHostPowered())&&nextRand()<gridRisk){const days=1+Math.floor(nextRand()*(2+gridRisk*45));state.ops.powerOutageUntil=next+DAY*days;log(`${r.name} grid outage`,`${days} days without power`,`operations`);showToast("Grid outage",`${r.name}'s grid is unavailable at ${facility().name}. Mining, cooling and primary-node services pause for ${days} days.`,"bad");}
-  else if(!siteOutage()&&(operating()||nodeHostPowered())&&nextRand()<outageRisk){const days=1+Math.floor(nextRand()*(3+outageRisk*90));state.ops.outageUntil=next+DAY*days;log(`${r.name} connectivity outage`,`${days} days offline`,`operations`);showToast("Internet outage",`${connectivityPlan().name} has lost upstream service in ${r.name}. Mining and primary-node services pause for ${days} days.`,"bad");}
-  if(state.backupNode.enabled&&!backupNodeOutage()&&nextRand()<.006){const days=1+Math.floor(nextRand()*3);state.backupNode.outageUntil=next+DAY*days;log("Remote node provider outage",`${days} days offline`);showToast("Backup-node outage",`The remote node site is unavailable for ${days} simulation day${days===1?"":"s"}. The primary node is unaffected.`,"bad");}
+  if(!siteOutage()&&(operating()||nodeHostPowered())&&nextRand()<gridRisk){const days=1+Math.floor(nextRand()*(2+gridRisk*45));state.ops.powerOutageUntil=next+DAY*days;log(`${r.name} grid outage`,`${days} days without power`,`operations`);showToast("Grid outage",`${r.name}'s grid is unavailable at ${facility().name}. Mining, cooling and primary-node services pause for ${days} days.`,"bad","facilities");}
+  else if(!siteOutage()&&(operating()||nodeHostPowered())&&nextRand()<outageRisk){const days=1+Math.floor(nextRand()*(3+outageRisk*90));state.ops.outageUntil=next+DAY*days;log(`${r.name} connectivity outage`,`${days} days offline`,`operations`);showToast("Internet outage",`${connectivityPlan().name} has lost upstream service in ${r.name}. Mining and primary-node services pause for ${days} days.`,"bad","facilities");}
+  if(state.backupNode.enabled&&!backupNodeOutage()&&nextRand()<.006){const days=1+Math.floor(nextRand()*3);state.backupNode.outageUntil=next+DAY*days;log("Remote node provider outage",`${days} days offline`);showToast("Backup-node outage",`The remote node site is unavailable for ${days} simulation day${days===1?"":"s"}. The primary node is unaffected.`,"bad","custody");}
   [["bitfinex",.022],["quadriga",.065],["frontier",.04],["exchange",.007]].forEach(([id,risk])=>{if(state.wallets[id]>0&&!venueFrozen(id)&&nextRand()<risk){const days=7+Math.floor(nextRand()*24);state.ops.venueFreezes[id]=next+DAY*days;log(`${walletName(id)} withdrawals frozen`,`${days} days`);showToast("Withdrawal freeze",`${walletName(id)} has paused withdrawals. Move funds only when service resumes.`,"bad");}});
 }
 function monthlyCost(){
@@ -423,6 +513,16 @@ function monthlyCost(){
 function advanceFleetLifecycle(){
   state.commissioningJobs=state.commissioningJobs.filter(job=>{if(job.due>state.time)return true;const h=HARDWARE.find(item=>item.id===job.id);state.hardware[job.id]=(state.hardware[job.id]||0)+job.qty;log(`Commissioned ${job.qty} × ${h?.name||job.id}`,"Racked, configured and hashing","fleet");showToast("Commissioning complete",`${job.qty} × ${h?.name||"miner"} is now connected to the fleet.`);renderFullQueued=true;return false});
   const job=state.relocationJob;if(job&&job.due<=state.time){const destination=REGIONS.find(r=>r.id===job.id);state.region=job.id;state.relocationJob=null;state.policyLock=null;state.power=state.debt<=0;log(`Fleet arrived in ${destination?.name||job.id}`,"Site commissioning complete","operations");showToast("Relocation complete",`The fleet is live at ${destination?.name||job.id}.`);renderFullQueued=true}
+  const upgradeJob=state.facilityUpgradeJob;if(upgradeJob&&upgradeJob.due<=state.time){
+    const destination=FACILITIES.find(x=>x.id===upgradeJob.id);state.facility=upgradeJob.id;state.facilityUpgradeJob=null;state.power=state.debt<=0;
+    const incidentRoll=nextRand();if(incidentRoll<upgradeJob.risk&&!state.insured){
+      const incident=nextRand();
+      if(incident<.42){const until=state.time+DAY*90;state.powerRateShock={multiplier:1.22,until};log("Facility upgrade: power contract repriced","+22% power for 90 days");showToast("Upgrade issue","The new site's power contract is 22% higher for 90 days.","bad")}
+      else if(incident<.78){const candidates=HARDWARE.filter(h=>!h.permanent&&(state.hardware[h.id]||0)>0);const h=candidates[Math.floor(nextRand()*candidates.length)];if(h){const lost=Math.max(1,Math.ceil((state.hardware[h.id]||0)*(.05+nextRand()*.1)*(hasSkill("spares")?.5:1)));state.hardware[h.id]=Math.max(0,state.hardware[h.id]-lost);log("Facility upgrade: miners damaged",`-${lost} ${h.name}`);showToast("Upgrade issue",`${lost} ${h.name} damaged in transit.`,"bad")}else{const fee=Math.min(state.cash,fleet().value*.025);state.cash-=fee;log("Facility upgrade: customs inspection",`-${fmtUsd(fee)}`);showToast("Upgrade issue","A customs inspection added an unexpected handling cost.","bad")}}
+      else{const fee=Math.min(state.cash,fleet().value*(.03+nextRand()*.04));state.cash-=fee;log("Facility upgrade: equipment held",`-${fmtUsd(fee)}`);showToast("Upgrade issue","Equipment was held during the move; release fees were required.","bad")}
+    }else if(incidentRoll<upgradeJob.risk&&state.insured){log("Upgrade incident insured","claim paid");showToast("Insurance claim","The policy absorbed the facility-upgrade incident.")}
+    log(`Moved into ${destination?.name||upgradeJob.id}`,"Site commissioning complete","operations");showToast("Facility upgrade complete",`The fleet is live at ${destination?.name||upgradeJob.id}.`);renderFullQueued=true
+  }
 }
 function blankBillLedger(){return{energy:0,rent:0,internet:0,staff:0,insurance:0,nodeNetwork:0,other:0}}
 function accruedBillBreakdown(){const result=Object.assign(blankBillLedger(),state.billLedger||{}),accounted=Object.values(result).reduce((sum,value)=>sum+value,0);if(state.bill>accounted+1e-8)result.other+=state.bill-accounted;return result}
@@ -458,7 +558,7 @@ function finishMonthlySettlement(kind="cash",automatic=false){
 function queueMonthlySettlement(due,month,loanInterest){
   const snapshot=settlementSnapshot(due,month),resumeSpeed=state.speed||state.returnSpeed||0;treasurySaleForSettlement(due);state.pendingSettlement={due,month,loanInterest,snapshot,resumeSpeed};
   if(state.cash>=due){finishMonthlySettlement(treasuryPolicy().id==="cover"?"policy":"cash",true);return}
-  state.speed=0;renderFullQueued=true;log("Settlement decision required",`${fmtUsd(due-state.cash)} short`);showToast("Settlement paused","Choose how to cover the shortfall. Time will not move until the decision is resolved.","bad");setTimer();
+  state.speed=0;renderFullQueued=true;log("Settlement decision required",`${fmtUsd(due-state.cash)} short`);showToast("Settlement paused","Choose how to cover the shortfall. Time will not move until the decision is resolved.","bad","finance");setTimer();
 }
 function liquidationCandidates(onlyId=null){
   return HARDWARE.filter(h=>!h.permanent&&(!onlyId||h.id===onlyId)&&(state.decommissionedHardware?.[h.id]||0)>0).map(h=>{const profitability=hardwareProfitability(h);return{h,owned:state.decommissionedHardware[h.id]||0,unit:Math.max(1,resaleHardwareValue(h)),margin:profitability.netPerUnit,efficiency:h.hash/Math.max(1,h.w)}}).sort((a,b)=>{const marginA=Number.isFinite(a.margin)?a.margin:Infinity,marginB=Number.isFinite(b.margin)?b.margin:Infinity;return marginA-marginB||a.efficiency-b.efficiency});
@@ -517,6 +617,10 @@ function queueAsicReleases(prev,next){
   const alerts=state.hardwareAlerts,releases=asicHardware().filter(h=>crossedDate(prev,next,h.date)&&!alerts.seen.includes(h.id));
   releases.forEach(h=>{alerts.seen.push(h.id);if(!alerts.queue.includes(h.id)&&alerts.active!==h.id)alerts.queue.push(h.id);log(`New hardware released: ${h.name}`,`${fmtHash(h.hash)} · ${h.w} W · ${fmtJth(hardwareEfficiency(h))} J/TH`,"fleet")});
 }
+function queueMinorHardwareReleases(prev,next){
+  const seen=state.hardwareToastSeen,releases=minorHardware().filter(h=>crossedDate(prev,next,h.date)&&!seen.includes(h.id));
+  releases.forEach(h=>{seen.push(h.id);log(`New hardware available: ${h.name}`,`${fmtHash(h.hash)} · ${h.w} W`,"fleet");showToast("New generation available",`${h.name} (${h.maker}) just reached the catalog — ${fmtHash(h.hash)} at ${h.w} W.`,"info","mine")});
+}
 function activateNextHardwareAlert(){
   const alerts=state.hardwareAlerts;if(alerts.active||!alerts.queue.length||state.activeEvent||state.pendingSettlement||pendingTransaction||state.ended)return false;
   const id=alerts.queue.shift();if(!asicHardware().some(h=>h.id===id))return activateNextHardwareAlert();
@@ -531,8 +635,8 @@ function closeHardwareAlert(inspect=false){
 function tick(silent=false){
   if(!state.started||state.ended||state.pendingSettlement)return;
   state.lastReal=Date.now();
-  const prev=state.time,next=state.sandbox?prev+DAY:Math.min(END,prev+DAY),unlockCrossed=timeGatedUnlockCrossed(prev,next),previousSubsidy=subsidyAt(prev),nextSubsidy=subsidyAt(next);state.time=next;
-  if(state.sandbox&&nextSubsidy<previousSubsidy){log("Protocol halving",`Block subsidy reduced from ${previousSubsidy} BTC to ${nextSubsidy} BTC`);if(!silent)showToast("Bitcoin halving",`The block subsidy is now ${nextSubsidy} BTC. Future mining payouts reflect the new issuance rate.`)}
+  const prev=state.time,next=state.sandbox?Math.min(SANDBOX_END,prev+DAY):Math.min(END,prev+DAY),unlockCrossed=timeGatedUnlockCrossed(prev,next),previousSubsidy=subsidyAt(prev),nextSubsidy=subsidyAt(next);state.time=next;
+  if(state.sandbox&&nextSubsidy<previousSubsidy){log("Protocol halving",`Block subsidy reduced from ${previousSubsidy} BTC to ${nextSubsidy} BTC`);if(!silent)showToast("Bitcoin halving",`The block subsidy is now ${nextSubsidy} BTC. Future mining payouts reflect the new issuance rate.`,"info","mine")}
   advanceLearning();
   advanceThermals();
   advanceMaintenance();
@@ -545,7 +649,7 @@ function tick(silent=false){
   advanceNodeSync(silent);
   if(!silent&&!faucet&&faucetActive(next)&&nextRand()<.05)triggerFaucet(next);
   const fs=fleet(),r=region(),f=facility(),nodeW=nodePowerWatts();state.operator.periodDays++;
-  const rate=powerRate(r,next),minerWatts=state.power&&state.debt<=0&&!state.policyLock&&!relocating()?fs.w*contractLoadFactor():0,nodeWatts=nodeHostPowered()?nodeW:0,dailyCosts={energy:dailyEnergyCostForWatts(minerWatts+nodeWatts,next,r),rent:f.rent/30.4375,internet:internetMonthlyCost()/30.4375,staff:staffMonthlyCost()/30.4375,insurance:insuranceMonthlyCost()/30.4375,nodeNetwork:totalNodeMonthlyOverhead()/30.4375},daily=Object.values(dailyCosts).reduce((sum,value)=>sum+value,0);
+  const rate=powerRate(r,next),minerWatts=state.power&&state.debt<=0&&!state.policyLock&&!fleetGrounded()?fs.w*contractLoadFactor():0,nodeWatts=nodeHostPowered()?nodeW:0,dailyCosts={energy:dailyEnergyCostForWatts(minerWatts+nodeWatts,next,r),rent:f.rent/30.4375,internet:internetMonthlyCost()/30.4375,staff:staffMonthlyCost()/30.4375,insurance:insuranceMonthlyCost()/30.4375,nodeNetwork:totalNodeMonthlyOverhead()/30.4375},daily=Object.values(dailyCosts).reduce((sum,value)=>sum+value,0);
   Object.entries(dailyCosts).forEach(([key,value])=>state.billLedger[key]=(state.billLedger[key]||0)+value);state.bill+=daily;state.powerSpent+=daily;
   if(operating()){
     const lambda=expectedBlocksPerDayForHash(fs.hash,next)*Math.min(1,r.rely+(hasSkill("monitoring")?.01:0))*contractUptimeFactor()*connectivityMiningFactor()*nodeMiningFactor();
@@ -567,17 +671,19 @@ function tick(silent=false){
     if(strategyYield>0)log("Strategy preferred income",`+${fmtUsd(strategyYield*30.4375)}`);
     state.history.push({t:next,p:priceAt(next),btc:controlled(),worth:netWorth(),hash:fs.hash});state.history=state.history.slice(-240);
   }
+  queueMinorHardwareReleases(prev,next);
   while(state.blocks>=state.nextMilestone){state.points++;state.nextMilestone*=10;log("Mining milestone","+1 skill point")}
   checkMilestones();
   activateNextHardwareAlert();
   if(next>=END&&!state.sandbox&&!state.pendingSettlement){state.time=END;state.speed=0;state.ended=true;log("Historical record complete","final ledger")}
+  if(next>=SANDBOX_END&&state.sandbox&&!state.pendingSettlement){state.time=SANDBOX_END;state.speed=0;state.ended=true;state.endReason="sandbox-complete";log("Procedural record complete","100 simulated years since the historical cutoff")}
   if(!silent){save();queueRender(unlockCrossed)}
 }
 function queueRender(full=false){
   const now=performance.now();
   renderFullQueued=renderFullQueued||full;
   if(renderQueued)return;
-  const refreshInterval=state.speed>=16?1000:state.speed>=8?700:state.speed>=4?450:250;
+  const refreshInterval=state.speed>=8?300:state.speed>=4?450:250;
   const delay=Math.max(0,refreshInterval-(now-lastRenderAt));
   renderQueued=true;
   setTimeout(()=>{const needsFull=renderFullQueued;renderQueued=false;renderFullQueued=false;lastRenderAt=performance.now();if(!needsFull&&state.started&&!state.activeEvent&&!state.ended)refreshLive();else render()},delay);
@@ -622,9 +728,11 @@ function refreshMinePricing(){
     const h=HARDWARE.find(x=>x.id===firstBuy.dataset.id);if(!h||h.permanent)return;
     const available=state.time>=at(h.date),owned=state.hardware[h.id]||0,retired=state.decommissionedHardware?.[h.id]||0,cost=hardwareUnitCost(h),resale=resaleHardwareValue(h),capacityMax=Math.max(0,Math.min(Math.floor(availableKw/Math.max(1,h.w)),Math.floor(availableSpace/Math.max(1,h.space)))),fiatMax=Math.max(0,Math.min(Math.floor(state.cash/cost),capacityMax)),price=card.querySelector(".price");
     if(price)price.innerHTML=`Buy · ${fmtCompactUsd(cost)} <small>Sell now · ${fmtCompactUsd(resale)}${marketOpen?` · ${fmtCompactBtc(resale/priceAt(state.time))}`:""}</small>`;
-    const fiatActions=card.querySelector(".fiat-buy-actions"),selectedFiatQty=Number(fiatActions?.querySelector("[data-hardware-quantity]")?.value)||1;if(fiatActions)fiatActions.outerHTML=hardwareFiatBuyControls(h,cost,fiatMax,available,selectedFiatQty);
-    const btcBuys=[...card.querySelectorAll('[data-action="buy-hw-btc"]')];
-    if(marketOpen&&btcBuys.length){const unitBtc=cost/priceAt(state.time),btcMax=Math.max(0,Math.min(Math.floor(state.wallets.hot/unitBtc),capacityMax));btcBuys[0].dataset.value="1";btcBuys[0].disabled=btcMax<1;btcBuys[0].textContent=`Buy 1 · ${fmtCompactBtc(unitBtc)}`;btcBuys[1].dataset.value=String(btcMax);btcBuys[1].disabled=btcMax<1;btcBuys[1].textContent=`Buy max · ${fmtCompactBtc(unitBtc*btcMax)} (${fmtCompactNumber(btcMax)} miners)`}
+    const buyWrap=card.querySelector(".hardware-buy-controls");
+    if(buyWrap){
+      const unitBtc=marketOpen?cost/Math.max(1e-9,priceAt(state.time)):Infinity,btcMax=marketOpen?Math.max(0,Math.min(Math.floor(Math.max(0,Number(state.wallets.hot)||0)/unitBtc),capacityMax)):0,currency=buyWrap.querySelector("[data-hardware-currency]")?.value==="btc"?"btc":"usd",selectedQty=Number(buyWrap.querySelector("[data-hardware-qty]")?.value)||1;
+      buyWrap.outerHTML=hardwareBuyControls(h,cost,fiatMax,btcMax,available,marketOpen,selectedQty,currency);
+    }
     const fiatSells=[...card.querySelectorAll('[data-action="sell-hw"]')],btcSells=[...card.querySelectorAll('[data-action="sell-hw-btc"]')];
     if(fiatSells[0]){fiatSells[0].disabled=retired<1;fiatSells[0].textContent=`Sell 1 · ${fmtCompactUsd(resale)}`}
     if(fiatSells[1]){fiatSells[1].dataset.value=String(retired);fiatSells[1].disabled=retired<1;fiatSells[1].textContent=`Sell all · ${fmtCompactUsd(resale*retired)} (${fmtCompactNumber(retired)} miners)`}

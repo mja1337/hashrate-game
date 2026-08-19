@@ -11,18 +11,42 @@ function interp(list,time,log=true){
   return log&&a[1]>0&&b[1]>0?Math.exp(Math.log(a[1])+(Math.log(b[1])-Math.log(a[1]))*t):a[1]+(b[1]-a[1])*t;
 }
 function stepAt(list,time){if(time<=anchorTime(list[0]))return list[0][1];if(time>=anchorTime(list[list.length-1]))return list[list.length-1][1];const i=upperAnchorIndex(list,time);return anchorTime(list[i])===time?list[i][1]:list[i-1][1]}
-const priceAt=t=>interp(PRICE,t),hashAt=t=>interp(HASH,t),txAt=t=>Math.round(interp(TX,t)),heightAt=t=>HEIGHT.length?interp(HEIGHT,t,false):Math.max(0,(t-GENESIS)/DAY*144);
-const difficultyAt=t=>DIFFICULTY.length?stepAt(DIFFICULTY,t):hashAt(t)*600/2**32;
+function hashFrac(x){const s=Math.sin(x*12.9898+78.233)*43758.5453;return s-Math.floor(s)}
+const priceAt=t=>t>END?futurePriceAt(t):interp(PRICE,t),hashAt=t=>t>END?futureHashAt(t):interp(HASH,t),txAt=t=>t>END?Math.round(futureTxAt(t)):Math.round(interp(TX,t)),heightAt=t=>t>END?futureHeightAt(t):(HEIGHT.length?interp(HEIGHT,t,false):Math.max(0,(t-GENESIS)/DAY*144));
+const difficultyAt=t=>t>END?hashAt(t)*600/2**32:(DIFFICULTY.length?stepAt(DIFFICULTY,t):hashAt(t)*600/2**32);
 const targetHashAt=t=>difficultyAt(t)*2**32/600;
 function competitiveHashAt(t,playerHash=0){const historicalFloor=Math.max(hashAt(t),targetHashAt(t))*interp(NETWORK_COMPETITION_SCALE,t,false),responsiveFloor=Math.max(0,playerHash)*interp(NETWORK_RESPONSE,t,false);return Math.max(historicalFloor,responsiveFloor)}
 function playerNetworkShareAt(t,playerHash){const competition=competitiveHashAt(t,playerHash);return playerHash>0?playerHash/(competition+playerHash):0}
 function expectedBlocksPerDayForHash(hash,t=START){if(hash<=0)return 0;const recorded=hash*86400/(Math.max(1,difficultyAt(t))*2**32),competitionCap=144*playerNetworkShareAt(t,hash);return Math.min(recorded,competitionCap)}
 function approxHeight(t){return Math.max(0,Math.floor(heightAt(t)))}
-const chainSizeAt=t=>interp(CHAIN_GB,t,false);
+const chainSizeAt=t=>t>END?futureChainSizeAt(t):interp(CHAIN_GB,t,false);
 const FUTURE_HALVING_INTERVAL=210000*600*1000;
 function subsidyHalvingIndex(t){if(t<at("2012-11-28"))return 0;if(t<at("2016-07-09"))return 1;if(t<at("2020-05-11"))return 2;if(t<at("2024-04-19"))return 3;return 4+Math.floor((t-at("2024-04-19"))/FUTURE_HALVING_INTERVAL)}
 function subsidyAt(t){return 50/2**subsidyHalvingIndex(t)}
-function feeAt(t){return FEES.length?Math.max(0,interp(FEES,t,false)):t<at("2013-01-01")?.02:t<at("2017-01-01")?.15:t<at("2020-01-01")?.35:t<at("2023-01-01")?.22:.45}
+function feeAt(t){if(t>END)return futureFeeAt(t);return FEES.length?Math.max(0,interp(FEES,t,false)):t<at("2013-01-01")?.02:t<at("2017-01-01")?.15:t<at("2020-01-01")?.35:t<at("2023-01-01")?.22:.45}
+/* PROCEDURAL CONTINUATION — deterministic, pure functions of t only; never touches nextRand()/state.rng so repeated renders stay stable. */
+function futureYears(t){return Math.max(0,(Math.min(t,SANDBOX_END)-END)/(DAY*365.25))}
+function decayedTrend(v0,g0,gInf,halfLifeYears,years){const k=Math.LN2/halfLifeYears;return v0*Math.exp(gInf*years+(g0-gInf)/k*(1-Math.exp(-k*years)))}
+function instRate(g0,gInf,halfLifeYears,years){const k=Math.LN2/halfLifeYears;return gInf+(g0-gInf)*Math.exp(-k*years)}
+function halvingPhase(t){const epoch=FUTURE_HALVING_INTERVAL,anchor=at("2024-04-19");return(((t-anchor)%epoch)+epoch)%epoch/epoch}
+const PRICE_G0=.22,PRICE_GINF=.03,PRICE_HALFLIFE=15,HASH_G0=.15,HASH_GINF=.02,HASH_HALFLIFE=12;
+function futurePriceAt(t){
+  const years=futureYears(t),v0=interp(PRICE,END),trend=decayedTrend(v0,PRICE_G0,PRICE_GINF,PRICE_HALFLIFE,years);
+  const phase=halvingPhase(t),cycleAmp=.15*Math.exp(-years/40),cycle=1+cycleAmp*Math.sin((phase-.2)*2*Math.PI);
+  const noiseIdx=Math.floor((t-END)/(DAY*30)),noise=1+.08*(hashFrac(noiseIdx*2.7)*2-1);
+  return Math.max(v0*.05,trend*cycle*noise);
+}
+function futureHashAt(t){
+  const years=futureYears(t),v0=interp(HASH,END),trend=decayedTrend(v0,HASH_G0,HASH_GINF,HASH_HALFLIFE,years);
+  const heat=Math.min(1,Math.max(0,(instRate(PRICE_G0,PRICE_GINF,PRICE_HALFLIFE,years)-PRICE_GINF)/(PRICE_G0-PRICE_GINF))),coupling=1+.12*heat;
+  const phase=halvingPhase(t),dip=phase<.08?1-.12*(1-phase/.08):1;
+  const noiseIdx=Math.floor((t-END)/(DAY*30)),noise=1+.05*(hashFrac(noiseIdx*4.1)*2-1);
+  return Math.max(v0*.1,trend*coupling*dip*noise);
+}
+function futureFeeAt(t){const years=futureYears(t),v0=Math.max(.01,interp(FEES,END,false));return decayedTrend(v0,.05,.005,10,years)}
+function futureTxAt(t){const years=futureYears(t),v0=interp(TX,END);return decayedTrend(v0,.03,.005,10,years)}
+function futureHeightAt(t){return interp(HEIGHT,END,false)+Math.floor((Math.min(t,SANDBOX_END)-END)/600000)}
+function futureChainSizeAt(t){const years=futureYears(t),v0=interp(CHAIN_GB,END,false),ceil=3500,k=Math.LN2/20;return v0+(ceil-v0)*(1-Math.exp(-k*years))}
 function eraAt(t){return t<at("2011-01-01")?"The CPU frontier":t<at("2013-01-01")?"The GPU arms race":t<at("2017-01-01")?"ASIC industrialisation":t<at("2020-01-01")?"Global speculation":t<at("2024-01-01")?"Macro asset, sovereign question":"Institutional & geopolitical era"}
 const NARRATIVE_ERAS=[
   {until:"2011-01-01",label:"An unknown experiment",copy:{dashboard:"A few strangers are testing whether money can exist without an issuer. The network is fragile, liquidity is almost nonexistent, and every block you find materially helps it survive. Watch the header for cash runway more than price — there is no price yet.",mine:"Mining is still a hobbyist act of participation: your laptop and a spare CPU are the whole fleet. Keep an eye on room temperature on the live floor even here — a hot desk wears hardware faster than a cool one, long before real servicing exists to fix it.",market:"There is barely a market to observe. Bitcoin moves through forum trades and informal experiments, so conviction matters long before liquidity exists. Every dollar spent on hardware now is a bet with no exit yet.",custody:"At this stage Bitcoin is mostly keys, software and personal responsibility. Losing a wallet can matter more than any market movement — self-custody isn't a strategy yet, it's the only option.",facilities:"Your infrastructure is a desk, a wall socket and an internet connection. Reliability is personal, not industrial — the biggest cost you can control here is the internet bill, not rent.",energy:"Electricity is cheap in absolute terms because the network is tiny, but energy is already the bridge between digital rules and physical cost. A single CPU barely dents your power bill; that will not stay true.",finance:"No lender understands this activity yet. Growth comes from personal fiat, mined coins and a willingness to fund an unproven protocol — there is no project finance to draw on if you overspend.",learn:"There is no established canon — only the whitepaper, source code and conversations among early participants trying to discover what they have built. Spend early knowledge time here; it is cheap and the payoff compounds.",tech:"Every operational improvement is improvised. The useful advantage is understanding the system before specialised industries form around it — bank early skill points on fundamentals you'll lean on for the rest of the campaign."}},
