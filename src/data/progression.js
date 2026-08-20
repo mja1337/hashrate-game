@@ -45,6 +45,8 @@ const SKILLS=[
   {id:"multisig",branch:"Treasury",name:"Multisig discipline",desc:"Cold-storage transfers cost 20% less.",cost:4,req:"counterparty",date:"2012-01-01"}
 ];
 const LEARNING=[
+  {id:"cryptomailinglist",type:"Mailing list",date:"2008-10-31",title:"The Cryptography Mailing List",author:"cryptography@metzdowd.com",days:1,reward:1,desc:"Where Satoshi Nakamoto actually posted \"Bitcoin P2P e-cash paper\" on 31 October 2008, two months before the Genesis Block — the same cypherpunk-descended list a working cryptographer would already have been reading."},
+  {id:"bitcoindev",type:"Mailing list",date:"2009-01-09",title:"Bitcoin-development mailing list",author:"Subscribe to the list",days:14,reward:2,check:{q:"What distinguishes this list from the general Bitcoin Talk forum?",options:["Focused, technical protocol-development discussion","It requires payment to join","It replaced Bitcoin Core entirely"],answer:0},desc:"Protocol discussion moves to a dedicated developer mailing list — hosted first on SourceForge, later the Linux Foundation, and eventually Google Groups."},
   {id:"whitepaper",type:"Paper",date:"2009-01-03",title:"Bitcoin: A Peer-to-Peer Electronic Cash System",author:"Satoshi Nakamoto",days:7,reward:1,check:{q:"What replaces a trusted third party in Bitcoin's payment system?",options:["Proof-of-work and a peer-to-peer network","A central clearing bank","A fixed exchange rate"],answer:0},desc:"Read Bitcoin's nine-page founding paper and understand the double-spend problem, proof-of-work and peer-to-peer consensus."},
   {id:"bitcointalk",type:"Forum",date:"2009-11-22",title:"Bitcoin Talk forum",author:"Read the early threads",days:10,reward:1,check:{q:"What is the main trade-off of leaving coins on an exchange?",options:["You rely on the operator's custody","Blocks stop being mined","Your wallet becomes faster"],answer:0},desc:"Learn the early culture, technical debates and hard-won operational lessons directly from the Bitcoin community."},
   {id:"mastering",type:"Book",date:"2014-12-01",title:"Mastering Bitcoin",author:"Andreas M. Antonopoulos",days:45,reward:3,check:{q:"What does a full node independently verify?",options:["Blocks and consensus rules","The BTC price","Exchange solvency"],answer:0},desc:"A technical foundation for running and securing Bitcoin infrastructure."},
@@ -82,3 +84,10 @@ const NODE_MODES=[
   {id:"relay",name:"Mining relay",watts:120,monthly:180,connections:64,requires:2,desc:"A hardened, high-connectivity relay stack that improves block propagation, routing income and mining reliability."}
 ];
 const BACKUP_NODE={date:"2018-01-01",cost:2400,watts:40,monthly:90,connections:24,name:"Geographic backup node"};
+const WALLET_SOFTWARE=[
+  {id:"original",name:"The original client",date:"2009-01-03",desc:"The rough, all-in-one reference client — wallet, node and miner in a single command-line-flavored executable, run mostly by typing at a prompt."},
+  {id:"qt",name:"Bitcoin-Qt",date:"2011-01-01",desc:"A proper GUI wallet becomes standard; by now dedicated mining software has split off entirely, matching how mining hardware itself has moved on."},
+  {id:"core",name:"Bitcoin Core",date:"2014-03-19",desc:"The project renames itself Bitcoin Core, distinguishing the reference implementation from a growing ecosystem of alternative wallets and node software."},
+  {id:"modern",name:"Modern Bitcoin Core",date:"2021-11-14",desc:"A fully modern, Taproot-ready release — descriptor wallets, PSBT support and a decade of hardening beyond the original client."}
+];
+function walletSoftwareTierAt(t){let tier=0;for(let i=WALLET_SOFTWARE.length-1;i>=0;i--){if(t>=at(WALLET_SOFTWARE[i].date)){tier=i;break}}return tier}

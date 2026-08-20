@@ -66,13 +66,10 @@ function sellHardwareBtc(id,requested=1){
   const qty=Math.min(Math.max(1,Math.floor(Number(requested)||1)),owned),value=resaleHardwareValue(h)*qty,btc=value/priceAt(state.time);
   state.decommissionedHardware[id]-=qty;state.wallets.hot+=btc;log(`Sold ${qty} × ${h.name}`,`+${fmtBtc(btc)} · ${fmtUsd(value)} resale value`,"fleet");save();renderMineContent();
 }
-function liquidateFromDesk(target,onlyId=null){
-  target=Math.max(0,Number(target)||0);if(target<1)return showToast("Enter a cash target","Choose how much fiat the fleet sale should raise.");const plan=executeFleetLiquidation(target,onlyId);if(!plan)return showToast("No saleable miners",onlyId?"There are no miners of this type left to sell.":"There is no non-permanent mining hardware left to sell.");showToast("Fleet sale completed",`${liquidationPlanLabel(plan)} raised ${fmtUsd(plan.total)}${plan.covered?".":`; ${fmtUsd(plan.remaining)} remains to reach the target.`}`,"info","mine");save();renderMineContent();
-}
 function resaleHardwareValue(h){
   const age=Math.max(0,(state.time-at(h.date))/DAY/365),halfLife=h.era==="HYDRO ASIC"?4:h.era==="ASIC"?3:h.era==="FPGA"?2:1.5;
-  const retained=Math.max(.025,.45*Math.pow(.5,age/halfLife)),reference=priceAt(Math.max(MARKET,state.time-DAY*365)),market=Math.max(.7,Math.min(1.3,priceAt(state.time)/reference));
-  return h.cost*retained*market;
+  const retained=Math.max(.025,.45*Math.pow(.5,age/halfLife)),reference=priceAt(Math.max(MARKET,state.time-DAY*365)),market=Math.max(.7,Math.min(1.3,priceAt(state.time)/reference)),glut=state.hardwareGlut&&state.time<state.hardwareGlut.until?1-state.hardwareGlut.discount:1;
+  return h.cost*retained*market*glut;
 }
 function facilityReserve(f){
   const r=region(),fs=fleet(),nodeW=nodePowerWatts();
@@ -134,6 +131,44 @@ function upgradeNodeStorage(gb){
 }
 function setNodeMode(id){const profile=NODE_MODES.find(x=>x.id===id);if(!profile||(profile.requires&&state.node<profile.requires))return;state.nodeMode=id;state.nodePruned=id==="pruned";log(`Node profile: ${profile.name}`,`${nodeModeWatts(profile)} W · ${nodeModeConnections(profile)} peers · ${fmtUsd(nodeModeMonthly(profile))}/mo network`);save();render()}
 function toggleNodePruning(){setNodeMode(state.nodeMode==="pruned"?"archival":"pruned")}
+function deriveWalletKeyHex(rolls){
+  let n=0n;for(const r of rolls)n=n*6n+BigInt(r-1);
+  return n.toString(16).padStart(64,"0").slice(-64);
+}
+function rollDie(){
+  if(state.walletSetup.done||state.walletSetup.rolls.length>=99)return;
+  const buf=new Uint8Array(1);crypto.getRandomValues(buf);
+  state.walletSetup.rolls.push((buf[0]%6)+1);
+  save();render();
+}
+function finishRolling(){
+  if(state.walletSetup.done||state.walletSetup.rolls.length<8)return;
+  const buf=new Uint8Array(99-state.walletSetup.rolls.length);crypto.getRandomValues(buf);
+  buf.forEach(b=>state.walletSetup.rolls.push((b%6)+1));
+  state.walletSetup.step=2;state.walletSetup.keyHex=deriveWalletKeyHex(state.walletSetup.rolls);
+  save();render();
+}
+function skipWalletSetup(){
+  if(state.walletSetup.done)return;
+  const rolls=[];for(let i=0;i<99;i++)rolls.push(Math.floor(nextRand()*6)+1);
+  state.walletSetup.rolls=rolls;state.walletSetup.keyHex=deriveWalletKeyHex(rolls);
+  completeWalletSetup();
+}
+function completeWalletSetup(){
+  if(state.walletSetup.done)return;
+  const tier=walletSoftwareTierAt(state.campaignStart);
+  state.walletSoftware=tier;state.walletSetup.done=true;
+  log("Wallet key generated",`${state.walletSetup.rolls.length} dice rolls · installed ${WALLET_SOFTWARE[tier].name}`,"custody");
+  state.speed=1;save();setTimer();render();
+}
+function upgradeWalletSoftware(){
+  const next=state.walletSoftware+1;if(next>=WALLET_SOFTWARE.length)return;
+  const tier=WALLET_SOFTWARE[next];if(state.time<at(tier.date))return;
+  state.walletSoftware=next;state.points++;
+  log(`Upgraded to ${tier.name}`,"+1 skill point","milestone");
+  showToast(`Upgraded to ${tier.name}`,`${tier.desc} +1 skill point.`,"milestone","custody");
+  save();render();
+}
 function triggerFaucet(t){
   faucet={amount:faucetAmount(t)};clearTimeout(faucetTimer);
   faucetTimer=setTimeout(()=>{faucet=null;render()},6500);render();
@@ -169,7 +204,7 @@ function projectLoanHeadroom(){return state.time<PROJECT_FINANCE_START?0:Math.ma
 function projectFinanceReason(){if(state.time<PROJECT_FINANCE_START)return`Unavailable until ${dateFmt(PROJECT_FINANCE_START,true)}: lenders do not yet finance experimental Bitcoin mining`;const collateral=fiatCollateral(),revenue=state.operator?.lastRevenueUsd||0,headroom=projectLoanHeadroom();if(headroom>0)return`${fmtUsd(headroom)} available against fiat collateral or six months of recent mining revenue`;if(collateral<=0&&revenue<=0)return"Unavailable: establish liquid collateral or a revenue-producing mining record";return"Unavailable: operating-credit capacity is fully drawn; repay principal or grow monthly mining revenue"}
 function takeProjectLoan(){const max=projectLoanHeadroom(),amount=Math.min(max,Math.max(1000,Math.round(projectLoanLimit()*.25/1000)*1000));if(amount<=0)return showToast("Growth funding unavailable",projectFinanceReason());state.projectLoan+=amount;state.cash+=amount;log("Fiat-backed finance drawn",`+${fmtUsd(amount)}`);save();render()}
 function repayProjectLoan(){const amount=Math.min(state.cash,state.projectLoan);if(amount<=0)return;state.cash-=amount;state.projectLoan-=amount;log("Project finance repaid",`-${fmtUsd(amount)}`);save();render()}
-function checkMilestones(){const goals=[{id:"coin",ok:controlled()>=1,label:"First full BTC"},{id:"uptime",ok:state.uptimeDays>=365,label:"One operating year"},{id:"scale",ok:fleet().hash>=1e15,label:"Petahash operator"},{id:"reserve",ok:reserveMilestoneStatus().ok,label:"Six-month cash reserve"}];goals.forEach(g=>{if(g.ok&&!state.milestones.includes(g.id)){state.milestones.push(g.id);state.points++;log(`Milestone: ${g.label}`,"+1 skill point");showToast("Strategic milestone",`${g.label} completed: +1 skill point.`)}})}
+function checkMilestones(){MILESTONES.forEach(m=>{if(!state.milestones.includes(m.id)&&m.check()){state.milestones.push(m.id);state.milestoneLog.push({id:m.id,time:state.time});state.points++;log(`Milestone: ${m.label}`,"+1 skill point","milestone");showToast(m.label,`${m.blurb} +1 skill point.`,"milestone")}})}
 function venueTradeFee(bucket){return bucket==="mtgox"?.008:bucket==="frontier"?.004:bucket==="etf"?.0025:.006}
 function buyBtc(bucket,fraction){
   if(state.time<MARKET)return;fraction=clamp(Number(fraction)||0,0.01,1);const usd=state.cash*fraction;if(usd<1)return showToast("Order too small","Increase the selected percentage so the buy order is at least $1.");
@@ -190,7 +225,7 @@ function transfer(from,to,fraction){
   const baseFee=nodeOnline()&&state.nodeMode==="relay"?0.000035:nodeOnline()&&state.nodeMode!=="pruned"?0.00005:0.0002,fee=baseFee*(hasSkill("multisig")?.8:1);if(gross<=fee)return showToast("Transfer too small",`The selected ${formatPercent(fraction*100)}% is not enough to cover the ${fmtBtc(fee)} network fee.`);const btc=gross-fee;
   state.wallets[from]-=gross;state.wallets[to]+=btc;log(`Moved BTC: ${walletName(from)} → ${walletName(to)}`,`${fmtBtc(gross)} sent · -${fmtBtc(fee)} fee`);save();render();
 }
-const CONFIRMABLE_ACTIONS=new Set(["buy-btc","sell-btc","buy-hw","buy-hw-btc","sell-hw","sell-hw-btc","buy-strategy","sell-strategy","buy-node","buy-backup-node","liquidate-target"]);
+const CONFIRMABLE_ACTIONS=new Set(["buy-btc","sell-btc","buy-hw","buy-hw-btc","sell-hw","sell-hw-btc","buy-strategy","sell-strategy","buy-node","buy-backup-node"]);
 function transactionPreview(button){
   const action=button.dataset.action,id=button.dataset.id||null,base={action,id,from:button.dataset.from||null,to:button.dataset.to||null,resumeSpeed:state.speed,quoteTime:state.time};
   if(action==="buy-btc"){
@@ -224,10 +259,6 @@ function transactionPreview(button){
   if(action==="buy-backup-node"){
     if(state.cash<BACKUP_NODE.cost)return null;return{...base,title:"Review infrastructure purchase · geographic backup",kicker:"Remote node purchase",give:fmtUsd(BACKUP_NODE.cost),giveSub:"Paid from liquid fiat",receive:"Independent remote full node",receiveSub:`${BACKUP_NODE.watts} W remote load · ${fmtUsd(BACKUP_NODE.monthly)}/month ongoing`,reference:`${fmtUsd(BACKUP_NODE.cost)} deployment cost`,fees:"No modelled checkout fee",after:`${fmtUsd(state.cash-BACKUP_NODE.cost)} liquid cash`,confirmLabel:"Confirm backup-node purchase",confirmClass:"primary"}
   }
-  if(action==="liquidate-target"){
-    const target=Math.max(0,Number(document.getElementById("liquidation-target")?.value)||0),plan=fleetLiquidationPlan(target,id);if(target<1||!plan.qty){showToast("No sale plan",target<1?"Enter a fiat target before reviewing the sale.":"There are no eligible miners for this sale.");return null}
-    return{...base,target,title:"Review fleet liquidation",kicker:"Hardware sell · target-based plan",give:liquidationPlanLabel(plan),giveSub:`${fmtCompactNumber(plan.qty)} miner${plan.qty===1?"":"s"} removed · weakest hash margin first`,receive:fmtUsd(plan.total),receiveSub:plan.covered?`Covers the ${fmtUsd(target)} cash target`:`Leaves ${fmtUsd(plan.remaining)} of the target uncovered`,reference:`${fmtUsd(target)} requested proceeds`,fees:"No modelled broker fee",after:`${fmtUsd(state.cash+plan.total)} liquid cash`,confirmLabel:"Confirm fleet sale",confirmClass:"danger"}
-  }
   return null;
 }
 function transactionPreviewValid(preview){return !!preview&&[preview.give,preview.receive,preview.reference,preview.fees,preview.after].every(value=>!/(?:—|NaN|Infinity)/.test(String(value)))}
@@ -236,7 +267,7 @@ function restoreTransactionSpeed(transaction){state.speed=transaction?.resumeSpe
 function cancelTransactionConfirmation(){const transaction=pendingTransaction;pendingTransaction=null;restoreTransactionSpeed(transaction);render()}
 function confirmTransaction(){
   const transaction=pendingTransaction;if(!transaction)return;pendingTransaction=null;restoreTransactionSpeed(transaction);
-  if(transaction.action==="buy-btc")buyBtc(transaction.id,transaction.fraction);else if(transaction.action==="sell-btc")sellBtc(transaction.id,transaction.fraction);else if(transaction.action==="buy-hw")buyHardware(transaction.id,transaction.requested);else if(transaction.action==="buy-hw-btc")buyHardwareBtc(transaction.id,transaction.requested);else if(transaction.action==="sell-hw")sellHardware(transaction.id,transaction.requested);else if(transaction.action==="sell-hw-btc")sellHardwareBtc(transaction.id,transaction.requested);else if(transaction.action==="buy-strategy")buyStrategy(transaction.id,transaction.fraction);else if(transaction.action==="sell-strategy")sellStrategy(transaction.id,transaction.fraction);else if(transaction.action==="buy-node")buyNode(transaction.requested);else if(transaction.action==="buy-backup-node")buyBackupNode();else if(transaction.action==="liquidate-target")liquidateFromDesk(transaction.target,transaction.id);
+  if(transaction.action==="buy-btc")buyBtc(transaction.id,transaction.fraction);else if(transaction.action==="sell-btc")sellBtc(transaction.id,transaction.fraction);else if(transaction.action==="buy-hw")buyHardware(transaction.id,transaction.requested);else if(transaction.action==="buy-hw-btc")buyHardwareBtc(transaction.id,transaction.requested);else if(transaction.action==="sell-hw")sellHardware(transaction.id,transaction.requested);else if(transaction.action==="sell-hw-btc")sellHardwareBtc(transaction.id,transaction.requested);else if(transaction.action==="buy-strategy")buyStrategy(transaction.id,transaction.fraction);else if(transaction.action==="sell-strategy")sellStrategy(transaction.id,transaction.fraction);else if(transaction.action==="buy-node")buyNode(transaction.requested);else if(transaction.action==="buy-backup-node")buyBackupNode();
   if(document.querySelector('[data-action="confirm-transaction"]'))render();
 }
 function unlockSkill(id){
@@ -261,10 +292,10 @@ function venueAvailable(id){
   if(id==="etf")return state.time>=at("2024-01-10");return true;
 }
 function walletName(id){return({hot:"Node-connected hot wallet",cold:"Cold / hardware wallet",mtgox:"Mt. Gox",bitfinex:"Bitfinex",quadriga:"QuadrigaCX",frontier:"Frontier exchange",exchange:"Regulated exchange",etf:"ETF exposure",frozen:"Frozen claims"})[id]||id}
-function resetGame(){if(!confirm("Erase this run and return to the Genesis Block?"))return;state=initialState();migrateActivity(state);activeTab="dashboard";activityFilter="all";activityLimit=100;tradePercentages={};introDifficulty="hard";introStep=0;clearTimeout(faucetTimer);faucet=null;save();setTimer();render()}
+function resetGame(){if(!confirm("Erase this run and return to the Genesis Block?"))return;state=initialState();OPERATOR_ERAS.forEach(era=>state.operator.eras[era.id]={months:0,solvent:0,profitable:0,uptime:0,competitive:0});migrateActivity(state);activeTab="dashboard";activityFilter="all";activityLimit=100;tradePercentages={};introDifficulty="hard";introStep=0;clearTimeout(faucetTimer);faucet=null;save();setTimer();render()}
 function exportSave(){
   const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="hashrate-save.json";a.click();URL.revokeObjectURL(url);
 }
 function importSave(file){
-  const reader=new FileReader();reader.onload=()=>{try{const parsed=JSON.parse(String(reader.result));if(!parsed||parsed.version!==1||!parsed.wallets||!parsed.hardware)throw new Error("invalid");const restored=Object.assign(initialState(),parsed,{lastReal:Date.now()});restored.points=Number.isFinite(Number(restored.points))?Math.max(0,Math.floor(Number(restored.points))):0;restored.skills=Array.isArray(restored.skills)?[...new Set(restored.skills.filter(id=>SKILLS.some(s=>s.id===id)))]:[];restored.seen=Array.isArray(restored.seen)?restored.seen:[];restored.milestones=Array.isArray(restored.milestones)?restored.milestones:[];restored.startingGrant=!!restored.startingGrant;restored.difficulty=STARTING_MODES.some(mode=>mode.id===restored.difficulty)?restored.difficulty:(startingModeForCash(restored.startingCash)?.id||"legacy");restored.treasuryPolicy=TREASURY_POLICIES.some(x=>x.id===restored.treasuryPolicy)?restored.treasuryPolicy:"cover";restored.operator=Object.assign(initialState().operator,restored.operator||{});restored.operator.eras=restored.operator.eras||{};OPERATOR_ERAS.forEach(era=>restored.operator.eras[era.id]=Object.assign({months:0,solvent:0,profitable:0,uptime:0,competitive:0},restored.operator.eras[era.id]||{}));restored.poweredDownHardware=restored.poweredDownHardware&&typeof restored.poweredDownHardware==="object"?restored.poweredDownHardware:{};restored.thermal=Object.assign({temperature:22,equipment:{}},restored.thermal||{});restored.thermal.equipment=restored.thermal.equipment&&typeof restored.thermal.equipment==="object"?restored.thermal.equipment:{};COOLING_EQUIPMENT.forEach(item=>restored.thermal.equipment[item.id]=Math.max(0,Math.floor(Number(restored.thermal.equipment[item.id])||0)));HARDWARE.forEach(h=>restored.poweredDownHardware[h.id]=Math.max(0,Math.min(restored.hardware[h.id]||0,Math.floor(Number(restored.poweredDownHardware[h.id])||0))));migrateActivity(restored);migrateHardwareAlerts(restored,!!parsed.hardwareAlerts);state=restored;activeTab="dashboard";activityFilter="all";activityLimit=100;clearTimeout(faucetTimer);faucet=null;save();setTimer();render();showToast("Run restored","The imported ledger is now active.")}catch(e){showToast("Import failed","That file is not a valid Hashrate save.")}};reader.readAsText(file);
+  const reader=new FileReader();reader.onload=()=>{try{const parsed=JSON.parse(String(reader.result));if(!parsed||parsed.version!==1||!parsed.wallets||!parsed.hardware)throw new Error("invalid");const restored=Object.assign(initialState(),parsed,{lastReal:Date.now()});restored.points=Number.isFinite(Number(restored.points))?Math.max(0,Math.floor(Number(restored.points))):0;restored.skills=Array.isArray(restored.skills)?[...new Set(restored.skills.filter(id=>SKILLS.some(s=>s.id===id)))]:[];restored.seen=Array.isArray(restored.seen)?restored.seen:[];restored.milestones=Array.isArray(restored.milestones)?restored.milestones:[];restored.milestoneLog=Array.isArray(restored.milestoneLog)?restored.milestoneLog:[];restored.startingGrant=!!restored.startingGrant;restored.difficulty=STARTING_MODES.some(mode=>mode.id===restored.difficulty)?restored.difficulty:(startingModeForCash(restored.startingCash)?.id||"legacy");restored.treasuryPolicy=TREASURY_POLICIES.some(x=>x.id===restored.treasuryPolicy)?restored.treasuryPolicy:"cover";restored.operator=Object.assign(initialState().operator,restored.operator||{});restored.operator.eras=restored.operator.eras||{};OPERATOR_ERAS.forEach(era=>restored.operator.eras[era.id]=Object.assign({months:0,solvent:0,profitable:0,uptime:0,competitive:0},restored.operator.eras[era.id]||{}));restored.poweredDownHardware=restored.poweredDownHardware&&typeof restored.poweredDownHardware==="object"?restored.poweredDownHardware:{};restored.thermal=Object.assign({temperature:22,equipment:{}},restored.thermal||{});restored.thermal.equipment=restored.thermal.equipment&&typeof restored.thermal.equipment==="object"?restored.thermal.equipment:{};COOLING_EQUIPMENT.forEach(item=>restored.thermal.equipment[item.id]=Math.max(0,Math.floor(Number(restored.thermal.equipment[item.id])||0)));HARDWARE.forEach(h=>restored.poweredDownHardware[h.id]=Math.max(0,Math.min(restored.hardware[h.id]||0,Math.floor(Number(restored.poweredDownHardware[h.id])||0))));migrateActivity(restored);migrateHardwareAlerts(restored,!!parsed.hardwareAlerts);state=restored;activeTab="dashboard";activityFilter="all";activityLimit=100;clearTimeout(faucetTimer);faucet=null;save();setTimer();render();showToast("Run restored","The imported ledger is now active.")}catch(e){showToast("Import failed","That file is not a valid Hashrate save.")}};reader.readAsText(file);
 }
