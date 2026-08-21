@@ -21,8 +21,12 @@ const HARDWARE=[
   {id:"s21xp",name:"Antminer S21 XP",maker:"Bitmain",date:"2025-01-01",era:"ASIC",hash:2.7e14,w:3645,space:2,cost:6500,edge:1.6,desc:"Efficiency becomes the entire business model."}
 ];
 const SPARE_PARTS=[
-  {id:"fan",name:"120mm cooling fan",cost:65,desc:"Replaceable airflow units for every mining platform."},
-  {id:"hashboard",name:"Hashboard",cost:480,desc:"SHA-256 compute boards used by ASIC and hydro miners."},
+  {id:"laptopfan",name:"Laptop cooling fan",cost:15,desc:"A small internal fan for CPU-era laptops and towers."},
+  {id:"fan",name:"120mm case fan",cost:45,desc:"Standard case airflow for GPU rigs and FPGA boards."},
+  {id:"asicfan",name:"ASIC blower fan",cost:55,desc:"Compact, high-static-pressure blower fans for dense ASIC racks."},
+  {id:"hashboardearly",name:"Early hashboard",cost:180,desc:"SHA-256 compute board for first-generation ASICs."},
+  {id:"hashboard",name:"Hashboard",cost:480,desc:"SHA-256 compute board for mid-generation ASICs."},
+  {id:"hashboardmodern",name:"High-density hashboard",cost:900,desc:"SHA-256 compute board for current-generation ASIC and hydro miners."},
   {id:"powerPcb",name:"Power PCB",cost:180,desc:"Power-control and distribution boards for mining hardware."},
   {id:"coolantPump",name:"Coolant pump",cost:420,desc:"Circulation pumps for closed-loop hydro ASIC cooling systems."},
   {id:"coolingManifold",name:"Cooling manifold",cost:260,desc:"Quick-connect hoses, manifolds and seals for hydro-miner racks."}
