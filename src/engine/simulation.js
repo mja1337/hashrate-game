@@ -19,7 +19,7 @@ const initialState=()=>{const seed=Math.floor(Math.random()*4294967296);return{
   skills:[],points:0,startingGrant:false,seen:[],activeEvent:null,storyPause:true,shoppingPause:false,speculations:[],powerRateShock:null,hardwareGlut:null,hardwareAlerts:{seen:[],queue:[],active:null,resumeSpeed:0},hardwareToastSeen:[],exposureWarned:[],
   treasuryPolicy:"cover",pendingSettlement:null,endReason:null,
   operator:{eras:{},periodMined:0,periodUptime:0,periodDays:0,lastRevenueUsd:0,totalMonths:0,solventMonths:0,profitableMonths:0,competitiveMonths:0,bridgeLoans:0,restructures:0},
-  knowledge:0,nextKnowledge:5,learning:null,completedLearning:[],maintenance:{condition:{},faults:{},faultsByPart:{},parts:0,inventory:{fan:0,hashboard:0,powerPcb:0,coolantPump:0,coolingManifold:0,laptopfan:0,asicfan:0,hashboardearly:0,hashboardmodern:0},inventoryMigrated:true,orders:[],serviceJobs:[]},procurementOrders:[],inactiveHardware:{},commissioningJobs:[],decommissionedHardware:{},relocationJob:null,facilityUpgradeJob:null,ops:{firmwarePatchedUntil:0,hijackUntil:0,outageUntil:0,powerOutageUntil:0,venueFreezes:{},riskMonth:""},strategy:{mstr:0,strk:0,strf:0,strd:0,strc:0,yieldEarned:0},sandbox:false,contract:"standard",staff:[],projectLoan:0,insured:false,milestones:[],milestoneLog:[],walletSetup:{done:false,step:0,rolls:[],keyHex:""},walletSoftware:0,donations:[],
+  knowledge:0,nextKnowledge:5,learning:null,completedLearning:[],maintenance:{condition:{},faults:{},faultsByPart:{},selfRepairs:{},parts:0,inventory:{fan:0,hashboard:0,powerPcb:0,coolantPump:0,coolingManifold:0,laptopfan:0,asicfan:0,hashboardearly:0,hashboardmodern:0},inventoryMigrated:true,orders:[],serviceJobs:[]},procurementOrders:[],inactiveHardware:{},commissioningJobs:[],decommissionedHardware:{},relocationJob:null,facilityUpgradeJob:null,ops:{firmwarePatchedUntil:0,hijackUntil:0,outageUntil:0,powerOutageUntil:0,venueFreezes:{},riskMonth:""},strategy:{mstr:0,strk:0,strf:0,strd:0,strc:0,yieldEarned:0},sandbox:false,contract:"standard",staff:[],projectLoan:0,insured:false,milestones:[],milestoneLog:[],walletSetup:{done:false,step:0,rolls:[],keyHex:""},walletSoftware:0,donations:[],
   blocks:0,mined:0,nodeDays:0,uptimeDays:0,powerSpent:0,nextMilestone:1000,
   connectivity:"fixed",history:[],activity:[],activitySeq:0,log:[{time:START,text:"Client synced to the network tip",amount:"~block "+approxHeight(START)}]
 }};
@@ -101,6 +101,7 @@ state.skills=Array.isArray(state.skills)?[...new Set(state.skills.filter(id=>SKI
 state.seen=Array.isArray(state.seen)?state.seen:[];
 state.milestones=Array.isArray(state.milestones)?state.milestones:[];
 state.exposureWarned=Array.isArray(state.exposureWarned)?state.exposureWarned:[];
+state.maintenance.selfRepairs=state.maintenance.selfRepairs&&typeof state.maintenance.selfRepairs==="object"?state.maintenance.selfRepairs:{};
 state.startingGrant=!!state.startingGrant;
 state.autoRepair=!!state.autoRepair;
 state.treasuryPolicy=TREASURY_POLICIES.some(x=>x.id===state.treasuryPolicy)?state.treasuryPolicy:"cover";
@@ -255,6 +256,11 @@ function advanceLearning(){
   state.learning.progress=(state.learning.progress||0)+1;
   if(state.learning.progress>=item.days){if(item.check){state.learning.waiting=true;renderFullQueued=true;showToast("Knowledge check",`Finish ${item.title} in the Learn tab.`,"info","learn")}else awardLearning(item)}
 }
+function sparePartCost(part){const def=typeof part==="string"?sparePart(part):part;return (def?.cost||0)*(covidPartsMarket()?2.25:1)*(hasSkill("partssourcing")?.8:1)}
+function partsLeadDays(){return Math.max(3,Math.round((covidPartsMarket()?42:14)*(hasSkill("supplychain")?.6:1)))}
+function selfRepairExperience(id){return Math.max(0,Math.floor(Number(state.maintenance.selfRepairs?.[id])||0))}
+function selfDamageChance(h){if(!h)return 0;return Math.max(.02,.4*Math.pow(.72,selfRepairExperience(h.id))*(hasSkill("benchskills")?.4:1))}
+function selfAutoCompleteChance(h){if(!h||!hasSkill("practisedhands"))return 0;return Math.min(.85,.2+.13*selfRepairExperience(h.id))}
 function covidPartsMarket(){return state.time>=at("2020-03-12")&&state.time<at("2021-07-01")}
 function sparePart(id){return SPARE_PARTS.find(part=>part.id===id)}
 const PART_FAULT_LABELS={laptopfan:"Laptop fan bearing wear",fan:"Fan bearing seizure",asicfan:"Blower fan bearing seizure",hashboardearly:"Hashboard chip failure",hashboard:"Hashboard chip failure",hashboardmodern:"Hashboard chip failure",powerPcb:"PSU/power PCB failure",coolantPump:"Coolant pump failure",coolingManifold:"Cooling manifold leak"};
@@ -306,6 +312,8 @@ function servicePlan(h,count){const technicians=fieldTechnicianCount(),committed
 function repairPuzzleRequired(job){return !!job&&!job.auto&&!!job.contracted&&!job.workDone}
 function initRepairPuzzle(job){
   if(!job||job.puzzleType!==undefined)return false;
+  if(job.selfAuto===undefined)job.selfAuto=nextRand()<selfAutoCompleteChance(HARDWARE.find(x=>x.id===job.id));
+  if(job.selfAuto)return false;
   job.puzzleType=Math.floor(nextRand()*3);job.oldRemoved=!job.part;
   if(job.puzzleType===0){job.tapOrder=shuffledSlots(4);job.tapProgress=[]}
   else if(job.puzzleType===1){job.cableSlots=shuffledPairSlots(3);job.cableLocked=[false,false,false,false,false,false];job.cableSelected=null}
@@ -322,6 +330,7 @@ function advanceMaintenance(){
       while(job.stage<REPAIR_STAGES.length&&job.stageDue<=state.time){
         const stage=REPAIR_STAGES[job.stage];
         if(stage.id==="work"&&!job.auto&&job.contracted&&!job.workDone){
+          if(job.selfAuto){completeRepairWork(job,"Finished from practised familiarity — no set-up needed",true);continue}
           if(initRepairPuzzle(job))renderFullQueued=true;
           break;
         }
@@ -414,7 +423,7 @@ function advanceMaintenance(){
   });
 }
 function orderParts(type,qty=1){
-  const part=sparePart(type);if(!part)return;qty=Math.max(1,Math.floor(Number(qty)||1));const covid=covidPartsMarket(),unit=part.cost*(covid?2.25:1),cost=qty*unit,lead=covid?42:14;
+  const part=sparePart(type);if(!part)return;qty=Math.max(1,Math.floor(Number(qty)||1));const unit=sparePartCost(part),cost=qty*unit,lead=partsLeadDays();
   if(state.cash<cost)return showToast("Not enough cash",`${qty} ${part.name}${qty===1?"":"s"} cost ${fmtUsd(cost)}.`);
   state.cash-=cost;state.maintenance.orders.push({type:part.id,qty,due:state.time+lead*DAY});log("Spare parts ordered",`${qty} ${part.name}${qty===1?"":"s"} · -${fmtUsd(cost)} · ${lead} days`);save();render();
 }
@@ -422,7 +431,7 @@ function serviceHardware(id,auto=false){
   const h=HARDWARE.find(x=>x.id===id),count=state.hardware[id]||0;if(!h||!count)return;
   if(activeServiceJob(id))return showToast("Service already scheduled",`${h.name} is already in the maintenance bay.`);
   const condition=maintenanceCondition(h),faults=hardwareFaultCount(h);if(condition>=95&&!faults)return showToast("Service not needed",`${h.name} is at ${condition.toFixed(0)}% condition with no failed units.`);
-  const repairCount=condition<65?count:Math.max(faults,Math.ceil(count*.15)),requirements=serviceRequirements(h,repairCount),plan=servicePlan(h,repairCount),labor=Math.max(40,h.cost*.008*repairCount)*(plan.contracted?1.35:1);
+  const repairCount=condition<65?count:Math.max(faults,Math.ceil(count*.15)),requirements=serviceRequirements(h,repairCount),plan=servicePlan(h,repairCount),labor=plan.contracted?0:Math.max(40,h.cost*.008*repairCount);
   if(!plan.crew)return showToast(plan.contractorBusy?"You are already on a job":"Technician crew busy",plan.contractorBusy?"You can only work one repair at a time yourself. Finish it, or hire a field technician to run jobs in parallel.":`${plan.committed} technician${plan.committed===1?" is":"s are"} assigned to active repairs. Hire another field technician or wait for a service job to complete.`);
   if(!hasServiceParts(requirements))return showToast("Parts required",`Service needs ${serviceRequirementText(requirements)}; order the missing components first.`);
   if(state.cash<labor)return showToast("Not enough cash",`Service labour costs ${fmtUsd(labor)}.`);
@@ -432,7 +441,7 @@ function serviceHardwarePart(id,part,auto=false){
   const h=HARDWARE.find(x=>x.id===id),count=state.hardware[id]||0,partDef=sparePart(part);if(!h||!count||!partDef)return;
   if(activeServiceJob(id))return showToast("Service already scheduled",`${h.name} is already in the maintenance bay.`);
   const faulted=hardwareFaultBreakdown(h)[part]||0;if(!faulted)return showToast("Service not needed",`No ${partDef.name.toLowerCase()} faults are currently reported on ${h.name}.`);
-  const requirements={[part]:Math.max(1,Math.ceil(faulted/7))},plan=servicePlan(h,faulted),labor=Math.max(25,h.cost*.004*faulted)*(plan.contracted?1.35:1);
+  const requirements={[part]:Math.max(1,Math.ceil(faulted/7))},plan=servicePlan(h,faulted),labor=plan.contracted?0:Math.max(25,h.cost*.004*faulted);
   if(!plan.crew)return showToast(plan.contractorBusy?"You are already on a job":"Technician crew busy",plan.contractorBusy?"You can only work one repair at a time yourself. Finish it, or hire a field technician to run jobs in parallel.":`${plan.committed} technician${plan.committed===1?" is":"s are"} assigned to active repairs. Hire another field technician or wait for a service job to complete.`);
   if(!hasServiceParts(requirements))return showToast("Parts required",`Replacing ${partDef.name.toLowerCase()}s needs ${serviceRequirementText(requirements)}; order the missing components first.`);
   if(state.cash<labor)return showToast("Not enough cash",`Targeted service labour costs ${fmtUsd(labor)}.`);
@@ -449,12 +458,29 @@ function repairRemoveOldPart(id){
   showToast("Old part pulled",`${partDef?.name||job.part} removed from ${h?.name||id}. Fit the replacement to finish the job.`,"info","mine");
   save();renderMineContent();
 }
-function completeRepairWork(job,successNote){
+function selfRepairMistake(job,message){
+  const h=HARDWARE.find(x=>x.id===job.id);job.mistakes=(job.mistakes||0)+1;
+  if(!job.contracted||nextRand()>=selfDamageChance(h))return showToast("Out of sequence",message,"bad","mine");
+  const drop=3+nextRand()*5,units=Math.max(1,state.hardware[job.id]||1),breakdown=hardwareFaultBreakdown(h),outstanding=Object.values(breakdown).reduce((sum,c)=>sum+c,0);
+  state.maintenance.condition[job.id]=Math.max(0,maintenanceCondition(h)-drop);
+  let collateral=null;
+  if(outstanding<units&&nextRand()<.4){
+    const weights=partFaultWeights(h);let extra=pickWeightedPart(weights),tries=0;
+    while(extra===job.part&&tries<5){extra=pickWeightedPart(weights);tries++}
+    if(extra!==job.part){const byPart=state.maintenance.faultsByPart[job.id]||(state.maintenance.faultsByPart[job.id]={});byPart[extra]=(byPart[extra]||0)+1;collateral=sparePart(extra)?.name||extra}
+  }
+  log(`${h?.name||job.id} damaged during self-service`,`${collateral?`${collateral} broken · `:""}condition -${drop.toFixed(1)}%${hasSkill("benchskills")?"":" · bench repair skills would cut this risk"}`,"fleet");
+  showToast("You damaged it",`${message} ${collateral?`You broke a ${collateral.toLowerCase()} doing it — that is a new fault to fix.`:`Condition dropped ${drop.toFixed(1)}%.`}`,"bad","mine");
+  renderFullQueued=true;
+}
+function completeRepairWork(job,successNote,duringTick=false){
   const h=HARDWARE.find(x=>x.id===job.id),partDef=sparePart(job.part),label=job.part?(partDef?.name||job.part):null;
+  if(job.contracted){const store=state.maintenance.selfRepairs||(state.maintenance.selfRepairs={});store[job.id]=selfRepairExperience(job.id)+1}
   job.workDone=true;job.stage++;
   if(job.stage<REPAIR_STAGES.length)job.stageDue=state.time+REPAIR_STAGES[job.stage].weight*(job.totalDays||1)*DAY;
   log(`${h?.name||job.id} · ${label?"part seated":"recommissioning check passed"}`,successNote,"fleet");
   showToast(label?"Part seated":"Recommissioning check passed",label?`${label} is fitted correctly on ${h?.name||job.id}. Reconnecting.`:`${h?.name||job.id} passed its final recommissioning check. Reconnecting.`,"info","mine");
+  if(duringTick){renderFullQueued=true;return}
   save();renderMineContent();
 }
 function repairTapSlot(id,slot){
@@ -466,7 +492,7 @@ function repairTapSlot(id,slot){
     if(job.tapProgress.length>=job.tapOrder.length)return completeRepairWork(job,"Torqued down in the correct cross pattern");
   }else{
     job.tapProgress=[];
-    showToast("Out of sequence",`Wrong mounting point — the ${job.part?sparePart(job.part)?.name?.toLowerCase()||"part":"unit"} shifted. Reset and retry the pattern.`,"bad","mine");
+    selfRepairMistake(job,`Wrong mounting point — the ${job.part?sparePart(job.part)?.name?.toLowerCase()||"part":"unit"} shifted.`);
   }
   save();renderMineContent();
 }
@@ -480,14 +506,15 @@ function repairCableClick(id,slot){
     if(job.cableLocked.every(Boolean))return completeRepairWork(job,"Every cable pair reconnected to its matching terminal");
   }else{
     job.cableSelected=null;
-    showToast("Wrong terminal",`That pair doesn't match — the connectors don't seat. Try again.`,"bad","mine");
+    selfRepairMistake(job,"That pair doesn't match — the connectors don't seat.");
   }
   save();renderMineContent();
 }
 function repairNudgeDial(id,delta){
   const job=activeServiceJob(id);delta=Number(delta);if(!job||job.auto||!job.oldRemoved||job.workDone||job.puzzleType!==2||!Number.isFinite(job.dialValue))return;
-  job.dialValue+=delta;
-  if(job.dialValue===job.dialTarget)return completeRepairWork(job,"Torqued to exact spec");
+  const before=job.dialValue-job.dialTarget;job.dialValue+=delta;const after=job.dialValue-job.dialTarget;
+  if(after===0)return completeRepairWork(job,"Torqued to exact spec");
+  if(before!==0&&Math.sign(after)!==Math.sign(before))selfRepairMistake(job,"Over-torqued straight past spec.");
   save();renderMineContent();
 }
 function patchFirmware(){

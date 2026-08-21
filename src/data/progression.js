@@ -40,6 +40,10 @@ const SKILLS=[
   {id:"blocktemplate",branch:"Operations",name:"Block-template construction",desc:"With an online archival or relay node, construct candidate blocks locally, capture 8% more transaction fees and unlock OCEAN's miner-selected templates.",cost:4,req:"monitoring",date:"2012-01-01"},
   {id:"relocation",branch:"Operations",name:"Relocation playbook",desc:"Moving regions costs 20% less.",cost:4,req:"blocktemplate",date:"2013-01-01"},
   {id:"spares",branch:"Operations",name:"Critical spares inventory",desc:"Transit damage during facility moves destroys fewer miners.",cost:4,req:"relocation",date:"2015-01-01"},
+  {id:"benchskills",branch:"Operations",name:"Bench repair skills",desc:"You learn to work on your own machines properly. Botching a self-serviced repair becomes far less likely, and every unit type you service teaches you more about it.",cost:2,date:"2009-01-03"},
+  {id:"partssourcing",branch:"Operations",name:"Parts sourcing",desc:"You know who actually stocks this stuff. Every spare part costs 20% less.",cost:3,req:"benchskills",date:"2010-01-01"},
+  {id:"supplychain",branch:"Operations",name:"Supply-chain contacts",desc:"Standing arrangements with suppliers. Spare-part orders arrive 40% sooner, including through a supply shock.",cost:3,req:"partssourcing",date:"2011-01-01"},
+  {id:"practisedhands",branch:"Operations",name:"Practised hands",desc:"Work you have done many times before starts completing itself: a growing chance to finish a self-serviced repair with no puzzle at all, rising with every unit of that type you have fixed.",cost:4,req:"benchskills",date:"2011-06-01"},
   {id:"backups",branch:"Treasury",name:"Key backups",desc:"Self-custody security rises materially.",cost:1},
   {id:"counterparty",branch:"Treasury",name:"Counterparty radar",desc:"Custody warnings arrive earlier.",cost:2,req:"backups",date:"2010-07-17"},
   {id:"multisig",branch:"Treasury",name:"Multisig discipline",desc:"Cold-storage transfers cost 20% less.",cost:4,req:"counterparty",date:"2012-01-01"}
