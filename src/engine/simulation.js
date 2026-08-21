@@ -212,9 +212,14 @@ function log(text,amount="",category=""){
 }
 function toastMarkup(t){const linked=!!t.tab;return `<div class="toast ${t.kind==="bad"?"toast-bad":t.kind==="milestone"?"toast-milestone":t.kind==="warning"?"toast-warning":""} ${linked?"toast-clickable":""}" ${linked?`data-action="tab" data-value="${t.tab}"${t.anchor?` data-anchor="${t.anchor}"`:""}`:""}><div><b>${t.title}</b><span>${t.message}</span></div>${linked?'<i class="toast-go">→</i>':""}</div>`}
 function showToast(title,message,kind="info",tab=null,anchor=null){toast={title,message,kind,tab,anchor};const markup=toastMarkup(toast),existing=document.querySelector(".toast"),host=document.getElementById("app");if(existing)existing.outerHTML=markup;else if(host&&state.started)host.insertAdjacentHTML("beforeend",markup);clearTimeout(toastTimer);toastTimer=setTimeout(()=>{toast=null;document.querySelector(".toast")?.remove()},8500);if(kind==="bad"&&state.started)triggerImpactEffect()}
+let lastImpactAt=0;
 function triggerImpactEffect(){
+  const now=performance.now(),recent=now-lastImpactAt<4000;lastImpactAt=now;
   const flash=document.createElement("div");flash.className="impact-flash";document.body.appendChild(flash);
   flash.addEventListener("animationend",()=>flash.remove());
+  // The shake translates the whole app, so a run of faults reads as the page
+  // throwing itself around. Flash every time; shake at most once every 4s.
+  if(recent)return;
   const shell=document.querySelector(".app");
   if(shell){shell.classList.remove("impact-shake");void shell.offsetWidth;shell.classList.add("impact-shake");shell.addEventListener("animationend",()=>shell.classList.remove("impact-shake"),{once:true})}
 }
@@ -358,7 +363,18 @@ function serviceRequirements(h,count){
 }
 function serviceRequirementText(requirements){return Object.entries(requirements).map(([id,qty])=>`${qty} ${sparePart(id)?.name||id}${qty===1?"":"s"}`).join(" · ")}
 function hasServiceParts(requirements){return Object.entries(requirements).every(([id,qty])=>(state.maintenance.inventory[id]||0)>=qty)}
-function servicePlan(h,count){const technicians=fieldTechnicianCount(),committed=(state.maintenance.serviceJobs||[]).reduce((sum,job)=>sum+Number(job.crew||0),0),available=Math.max(0,technicians-committed),contractorBusy=technicians===0&&(state.maintenance.serviceJobs||[]).some(job=>job.contracted),crew=technicians===0?(contractorBusy?0:1):Math.min(3,available),complexity=h.era==="HYDRO ASIC"?2.2:h.era==="ASIC"?1.5:h.era==="GPU"?1.2:1,workDays=Math.max(1,Math.ceil(count*complexity/20)),days=crew?Math.max(1,Math.ceil(workDays/crew)):Infinity;return{technicians,committed,available,crew,workDays,days,contracted:technicians===0,contractorBusy}}
+function servicePlan(h,count){
+  const jobs=state.maintenance.serviceJobs||[],technicians=fieldTechnicianCount(),
+    committed=jobs.reduce((sum,job)=>sum+(job.contracted?0:Number(job.crew||0)),0),
+    available=Math.max(0,technicians-committed),
+    selfBusy=jobs.some(job=>job.contracted),
+    selfServiced=available<1,
+    crew=selfServiced?(selfBusy?0:1):Math.min(3,available),
+    complexity=h.era==="HYDRO ASIC"?2.2:h.era==="ASIC"?1.5:h.era==="GPU"?1.2:1,
+    workDays=Math.max(1,Math.ceil(count*complexity/20)),
+    days=crew?Math.max(1,Math.ceil(workDays/crew)):Infinity;
+  return{technicians,committed,available,crew,workDays,days,contracted:selfServiced,selfBusy,contractorBusy:selfBusy};
+}
 function repairPuzzleRequired(job){return !!job&&!job.auto&&!!job.contracted&&!job.workDone}
 function initRepairPuzzle(job){
   if(!job||job.puzzleType!==undefined)return false;
@@ -475,14 +491,14 @@ function advanceMaintenance(){
 function orderParts(type,qty=1){
   const part=sparePart(type);if(!part)return;qty=Math.max(1,Math.floor(Number(qty)||1));const unit=sparePartCost(part),cost=qty*unit,lead=partsLeadDays();
   if(state.cash<cost)return showToast("Not enough cash",`${qty} ${part.name}${qty===1?"":"s"} cost ${fmtUsd(cost)}.`);
-  state.cash-=cost;state.maintenance.orders.push({type:part.id,qty,due:state.time+lead*DAY});log("Spare parts ordered",`${qty} ${part.name}${qty===1?"":"s"} · -${fmtUsd(cost)} · ${lead} days`);save();render();
+  state.cash-=cost;state.maintenance.orders.push({type:part.id,qty,due:state.time+lead*DAY});log("Spare parts ordered",`${qty} ${part.name}${qty===1?"":"s"} · -${fmtUsd(cost)} · ${lead} days`);save();renderMineContent();
 }
 function serviceHardware(id,auto=false){
   const h=HARDWARE.find(x=>x.id===id),count=state.hardware[id]||0;if(!h||!count)return;
   if(activeServiceJob(id))return showToast("Service already scheduled",`${h.name} is already in the maintenance bay.`);
   const condition=maintenanceCondition(h),faults=hardwareFaultCount(h);if(condition>=95&&!faults)return showToast("Service not needed",`${h.name} is at ${condition.toFixed(0)}% condition with no failed units.`);
   const repairCount=condition<65?count:Math.max(faults,Math.ceil(count*.15)),requirements=serviceRequirements(h,repairCount),plan=servicePlan(h,repairCount),labor=plan.contracted?0:Math.max(40,h.cost*.008*repairCount);
-  if(!plan.crew)return showToast(plan.contractorBusy?"You are already on a job":"Technician crew busy",plan.contractorBusy?"You can only work one repair at a time yourself. Finish it, or hire a field technician to run jobs in parallel.":`${plan.committed} technician${plan.committed===1?" is":"s are"} assigned to active repairs. Hire another field technician or wait for a service job to complete.`);
+  if(!plan.crew)return showToast("You are already on a job",`You can only work one repair at a time yourself.${plan.technicians?` All ${plan.technicians} technician${plan.technicians===1?" is":"s are"} busy on other jobs.`:""} Finish the job on your bench, or hire another field technician to run repairs in parallel.`);
   if(!hasServiceParts(requirements))return showToast("Parts required",`Service needs ${serviceRequirementText(requirements)}; order the missing components first.`);
   if(state.cash<labor)return showToast("Not enough cash",`Service labour costs ${fmtUsd(labor)}.`);
   state.cash-=labor;Object.entries(requirements).forEach(([part,qty])=>state.maintenance.inventory[part]-=qty);state.maintenance.serviceJobs.push({id,count:repairCount,due:state.time+plan.days*DAY,crew:plan.crew,contracted:plan.contracted,labor,totalDays:plan.days,stage:0,stageDue:state.time+REPAIR_STAGES[0].weight*plan.days*DAY,auto});if(repairPuzzleRequired(state.maintenance.serviceJobs[state.maintenance.serviceJobs.length-1]))initRepairPuzzle(state.maintenance.serviceJobs[state.maintenance.serviceJobs.length-1]);log(`Service started: ${h.name}`,`${repairCount} units · ${plan.days} days · ${fmtUsd(labor)}`);showToast(auto?"Auto-repair started":"Service scheduled",`${repairCount} × ${h.name} is offline for ${plan.days} simulation day${plan.days===1?"":"s"}. ${plan.contracted?"You are doing this one yourself — the Work stage waits for you on the Mine floor.":auto?"Your technician crew is handling it automatically.":`${plan.crew} of ${plan.technicians} technicians assigned.`}`,"info","mine");save();renderMineContent();
@@ -492,7 +508,7 @@ function serviceHardwarePart(id,part,auto=false){
   if(activeServiceJob(id))return showToast("Service already scheduled",`${h.name} is already in the maintenance bay.`);
   const faulted=hardwareFaultBreakdown(h)[part]||0;if(!faulted)return showToast("Service not needed",`No ${partDef.name.toLowerCase()} faults are currently reported on ${h.name}.`);
   const requirements={[part]:Math.max(1,Math.ceil(faulted/7))},plan=servicePlan(h,faulted),labor=plan.contracted?0:Math.max(25,h.cost*.004*faulted);
-  if(!plan.crew)return showToast(plan.contractorBusy?"You are already on a job":"Technician crew busy",plan.contractorBusy?"You can only work one repair at a time yourself. Finish it, or hire a field technician to run jobs in parallel.":`${plan.committed} technician${plan.committed===1?" is":"s are"} assigned to active repairs. Hire another field technician or wait for a service job to complete.`);
+  if(!plan.crew)return showToast("You are already on a job",`You can only work one repair at a time yourself.${plan.technicians?` All ${plan.technicians} technician${plan.technicians===1?" is":"s are"} busy on other jobs.`:""} Finish the job on your bench, or hire another field technician to run repairs in parallel.`);
   if(!hasServiceParts(requirements))return showToast("Parts required",`Replacing ${partDef.name.toLowerCase()}s needs ${serviceRequirementText(requirements)}; order the missing components first.`);
   if(state.cash<labor)return showToast("Not enough cash",`Targeted service labour costs ${fmtUsd(labor)}.`);
   state.cash-=labor;Object.entries(requirements).forEach(([p,qty])=>state.maintenance.inventory[p]-=qty);
@@ -784,10 +800,17 @@ function queueRender(full=false){
   const now=performance.now();
   renderFullQueued=renderFullQueued||full;
   if(renderQueued)return;
-  const refreshInterval=state.speed>=8?300:state.speed>=4?450:250;
+  // Faster clocks repaint less often, not more: at 16x the simulation covers
+  // eight days a second, so a repaint every frame is unreadable jitter.
+  const refreshInterval=state.speed>=16?600:state.speed>=8?420:state.speed>=4?320:250;
   const delay=Math.max(0,refreshInterval-(now-lastRenderAt));
   renderQueued=true;
-  setTimeout(()=>{const needsFull=renderFullQueued;renderQueued=false;renderFullQueued=false;lastRenderAt=performance.now();if(!needsFull&&state.started&&!state.activeEvent&&!state.ended)refreshLive();else renderMineContent()},delay);
+  const paint=()=>{
+    const needsFull=renderFullQueued;renderQueued=false;renderFullQueued=false;lastRenderAt=performance.now();
+    if(!needsFull&&state.started&&!state.activeEvent&&!state.ended)refreshLive();else renderMineContent();
+  };
+  // Align the DOM write with the display refresh so it never lands mid-paint.
+  setTimeout(()=>requestAnimationFrame(paint),delay);
 }
 function refreshDashboard(){
   if(activeTab!=="dashboard")return;
