@@ -16,10 +16,10 @@ const initialState=()=>{const seed=Math.floor(Math.random()*4294967296);return{
   wallets:{hot:0,cold:0,mtgox:0,bitfinex:0,quadriga:0,frontier:0,exchange:0,etf:0,frozen:0},
   lightning:{locked:0,earned:0},
   hardware:{laptop:1},poweredDownHardware:{},facility:"home",region:"na",thermal:{temperature:22,equipment:{}},overdrive:false,settlementSaleMode:false,autoRepair:false,node:0,nodeStorage:50,nodePruned:false,nodeMode:"archival",nodeSync:{primaryLag:0,primaryPeak:0,backupLag:0,backupPeak:0},backupNode:{enabled:false,outageUntil:0},mode:"solo",pool:"f2pool",
-  skills:[],points:0,startingGrant:false,seen:[],activeEvent:null,storyPause:true,shoppingPause:false,speculations:[],powerRateShock:null,hardwareGlut:null,hardwareAlerts:{seen:[],queue:[],active:null,resumeSpeed:0},hardwareToastSeen:[],
+  skills:[],points:0,startingGrant:false,seen:[],activeEvent:null,storyPause:true,shoppingPause:false,speculations:[],powerRateShock:null,hardwareGlut:null,hardwareAlerts:{seen:[],queue:[],active:null,resumeSpeed:0},hardwareToastSeen:[],exposureWarned:[],
   treasuryPolicy:"cover",pendingSettlement:null,endReason:null,
   operator:{eras:{},periodMined:0,periodUptime:0,periodDays:0,lastRevenueUsd:0,totalMonths:0,solventMonths:0,profitableMonths:0,competitiveMonths:0,bridgeLoans:0,restructures:0},
-  knowledge:0,nextKnowledge:9,learning:null,completedLearning:[],maintenance:{condition:{},faults:{},faultsByPart:{},parts:0,inventory:{fan:0,hashboard:0,powerPcb:0,coolantPump:0,coolingManifold:0},inventoryMigrated:true,orders:[],serviceJobs:[]},procurementOrders:[],inactiveHardware:{},commissioningJobs:[],decommissionedHardware:{},relocationJob:null,facilityUpgradeJob:null,ops:{firmwarePatchedUntil:0,hijackUntil:0,outageUntil:0,powerOutageUntil:0,venueFreezes:{},riskMonth:""},strategy:{mstr:0,strk:0,strf:0,strd:0,strc:0,yieldEarned:0},sandbox:false,contract:"standard",staff:[],projectLoan:0,insured:false,milestones:[],milestoneLog:[],walletSetup:{done:false,step:0,rolls:[],keyHex:""},walletSoftware:0,donations:[],
+  knowledge:0,nextKnowledge:5,learning:null,completedLearning:[],maintenance:{condition:{},faults:{},faultsByPart:{},parts:0,inventory:{fan:0,hashboard:0,powerPcb:0,coolantPump:0,coolingManifold:0,laptopfan:0,asicfan:0,hashboardearly:0,hashboardmodern:0},inventoryMigrated:true,orders:[],serviceJobs:[]},procurementOrders:[],inactiveHardware:{},commissioningJobs:[],decommissionedHardware:{},relocationJob:null,facilityUpgradeJob:null,ops:{firmwarePatchedUntil:0,hijackUntil:0,outageUntil:0,powerOutageUntil:0,venueFreezes:{},riskMonth:""},strategy:{mstr:0,strk:0,strf:0,strd:0,strc:0,yieldEarned:0},sandbox:false,contract:"standard",staff:[],projectLoan:0,insured:false,milestones:[],milestoneLog:[],walletSetup:{done:false,step:0,rolls:[],keyHex:""},walletSoftware:0,donations:[],
   blocks:0,mined:0,nodeDays:0,uptimeDays:0,powerSpent:0,nextMilestone:1000,
   connectivity:"fixed",history:[],activity:[],activitySeq:0,log:[{time:START,text:"Client synced to the network tip",amount:"~block "+approxHeight(START)}]
 }};
@@ -65,14 +65,14 @@ state.wallets=Object.assign({hot:0,cold:0,mtgox:0,bitfinex:0,quadriga:0,frontier
 state.speculations=Array.isArray(state.speculations)?state.speculations:[];
 state.completedLearning=Array.isArray(state.completedLearning)?state.completedLearning:[];
 state.knowledge=Number.isFinite(Number(state.knowledge))?Number(state.knowledge):0;
-state.nextKnowledge=Number.isFinite(Number(state.nextKnowledge))?Number(state.nextKnowledge):9;
-state.maintenance=Object.assign({condition:{},faults:{},parts:0,inventory:{fan:0,hashboard:0,powerPcb:0,coolantPump:0,coolingManifold:0},inventoryMigrated:false,orders:[],serviceJobs:[]},state.maintenance||{});
+state.nextKnowledge=Number.isFinite(Number(state.nextKnowledge))?Number(state.nextKnowledge):5;
+state.maintenance=Object.assign({condition:{},faults:{},parts:0,inventory:{fan:0,hashboard:0,powerPcb:0,coolantPump:0,coolingManifold:0,laptopfan:0,asicfan:0,hashboardearly:0,hashboardmodern:0},inventoryMigrated:false,orders:[],serviceJobs:[]},state.maintenance||{});
 state.maintenance.condition=state.maintenance.condition&&typeof state.maintenance.condition==="object"?state.maintenance.condition:{};
 state.maintenance.faults=state.maintenance.faults&&typeof state.maintenance.faults==="object"?state.maintenance.faults:{};
 state.maintenance.orders=Array.isArray(state.maintenance.orders)?state.maintenance.orders:[];
 state.maintenance.serviceJobs=Array.isArray(state.maintenance.serviceJobs)?state.maintenance.serviceJobs.filter(job=>HARDWARE.some(h=>h.id===job.id)&&Number.isFinite(Number(job.due))):[];
 state.maintenance.parts=Math.max(0,Number(state.maintenance.parts)||0);
-state.maintenance.inventory=Object.assign({fan:0,hashboard:0,powerPcb:0,coolantPump:0,coolingManifold:0},state.maintenance.inventory&&typeof state.maintenance.inventory==="object"?state.maintenance.inventory:{});
+state.maintenance.inventory=Object.assign({fan:0,hashboard:0,powerPcb:0,coolantPump:0,coolingManifold:0,laptopfan:0,asicfan:0,hashboardearly:0,hashboardmodern:0},state.maintenance.inventory&&typeof state.maintenance.inventory==="object"?state.maintenance.inventory:{});
 SPARE_PARTS.forEach(part=>state.maintenance.inventory[part.id]=Math.max(0,Math.floor(Number(state.maintenance.inventory[part.id])||0)));
 if(!state.maintenance.inventoryMigrated){state.maintenance.inventory.fan+=Math.floor(state.maintenance.parts);state.maintenance.parts=0;state.maintenance.inventoryMigrated=true;}
 state.poweredDownHardware=state.poweredDownHardware&&typeof state.poweredDownHardware==="object"?state.poweredDownHardware:{};
@@ -100,6 +100,7 @@ state.donations=Array.isArray(state.donations)?state.donations:[];
 state.skills=Array.isArray(state.skills)?[...new Set(state.skills.filter(id=>SKILLS.some(s=>s.id===id)))]:[];
 state.seen=Array.isArray(state.seen)?state.seen:[];
 state.milestones=Array.isArray(state.milestones)?state.milestones:[];
+state.exposureWarned=Array.isArray(state.exposureWarned)?state.exposureWarned:[];
 state.startingGrant=!!state.startingGrant;
 state.autoRepair=!!state.autoRepair;
 state.treasuryPolicy=TREASURY_POLICIES.some(x=>x.id===state.treasuryPolicy)?state.treasuryPolicy:"cover";
@@ -205,7 +206,7 @@ function log(text,amount="",category=""){
   const entry={id:++state.activitySeq,time:state.time,text,amount,category:category||activityCategory(text),cash:Number(state.cash)||0,btc:controlled(),hash:fleet().hash,price:state.time>=MARKET?priceAt(state.time):null};
   state.activity.unshift(entry);state.log=state.activity.slice(0,8);
 }
-function toastMarkup(t){const linked=!!t.tab;return `<div class="toast ${t.kind==="bad"?"toast-bad":t.kind==="milestone"?"toast-milestone":""} ${linked?"toast-clickable":""}" ${linked?`data-action="tab" data-value="${t.tab}"${t.anchor?` data-anchor="${t.anchor}"`:""}`:""}><div><b>${t.title}</b><span>${t.message}</span></div>${linked?'<i class="toast-go">→</i>':""}</div>`}
+function toastMarkup(t){const linked=!!t.tab;return `<div class="toast ${t.kind==="bad"?"toast-bad":t.kind==="milestone"?"toast-milestone":t.kind==="warning"?"toast-warning":""} ${linked?"toast-clickable":""}" ${linked?`data-action="tab" data-value="${t.tab}"${t.anchor?` data-anchor="${t.anchor}"`:""}`:""}><div><b>${t.title}</b><span>${t.message}</span></div>${linked?'<i class="toast-go">→</i>':""}</div>`}
 function showToast(title,message,kind="info",tab=null,anchor=null){toast={title,message,kind,tab,anchor};const markup=toastMarkup(toast),existing=document.querySelector(".toast"),host=document.getElementById("app");if(existing)existing.outerHTML=markup;else if(host&&state.started)host.insertAdjacentHTML("beforeend",markup);clearTimeout(toastTimer);toastTimer=setTimeout(()=>{toast=null;document.querySelector(".toast")?.remove()},8500);if(kind==="bad"&&state.started)triggerImpactEffect()}
 function triggerImpactEffect(){
   const flash=document.createElement("div");flash.className="impact-flash";document.body.appendChild(flash);
@@ -256,13 +257,16 @@ function advanceLearning(){
 }
 function covidPartsMarket(){return state.time>=at("2020-03-12")&&state.time<at("2021-07-01")}
 function sparePart(id){return SPARE_PARTS.find(part=>part.id===id)}
-const PART_FAULT_LABELS={fan:"Fan bearing seizure",hashboard:"Hashboard chip failure",powerPcb:"PSU/power PCB failure",coolantPump:"Coolant pump failure",coolingManifold:"Cooling manifold leak"};
+const PART_FAULT_LABELS={laptopfan:"Laptop fan bearing wear",fan:"Fan bearing seizure",asicfan:"Blower fan bearing seizure",hashboardearly:"Hashboard chip failure",hashboard:"Hashboard chip failure",hashboardmodern:"Hashboard chip failure",powerPcb:"PSU/power PCB failure",coolantPump:"Coolant pump failure",coolingManifold:"Cooling manifold leak"};
+function fanTierFor(h){return h.era==="ASIC"||h.era==="HYDRO ASIC"?"asicfan":h.era==="CPU"?"laptopfan":"fan"}
+function hashboardTierFor(h){if(h.era==="HYDRO ASIC")return"hashboardmodern";if(h.era!=="ASIC")return null;if(at(h.date)<at("2016-01-01"))return"hashboardearly";if(at(h.date)<at("2020-01-01"))return"hashboard";return"hashboardmodern"}
 function partFaultWeights(h){
-  if(h.era==="HYDRO ASIC")return{hashboard:.30,powerPcb:.25,fan:.15,coolantPump:.15,coolingManifold:.15};
-  if(h.era==="ASIC")return{hashboard:.45,powerPcb:.35,fan:.20};
-  if(h.era==="FPGA")return{powerPcb:.55,fan:.45};
-  if(h.era==="GPU")return{fan:.55,powerPcb:.45};
-  return{fan:1};
+  const fanTier=fanTierFor(h),boardTier=hashboardTierFor(h);
+  if(h.era==="HYDRO ASIC")return{[boardTier]:.30,powerPcb:.25,[fanTier]:.15,coolantPump:.15,coolingManifold:.15};
+  if(h.era==="ASIC")return{[boardTier]:.45,powerPcb:.35,[fanTier]:.20};
+  if(h.era==="FPGA")return{powerPcb:.55,[fanTier]:.45};
+  if(h.era==="GPU")return{[fanTier]:.55,powerPcb:.45};
+  return{[fanTier]:1};
 }
 function pickWeightedPart(weights){
   const entries=Object.entries(weights),total=entries.reduce((sum,[,w])=>sum+w,0)||1;
@@ -289,16 +293,25 @@ const REPAIR_COMPLICATIONS={
   stabilitycheck:"It failed the burn-in and needs another pass"
 };
 function serviceRequirements(h,count){
-  const units=divisor=>Math.max(1,Math.ceil(count/divisor));
-  if(h.era==="HYDRO ASIC")return {hashboard:units(10),powerPcb:units(20),coolantPump:units(24),coolingManifold:units(16)};
-  if(h.era==="ASIC")return {fan:units(12),hashboard:units(10),powerPcb:units(20)};
-  if(h.era==="FPGA")return {fan:units(12),powerPcb:units(18)};
-  if(h.era==="GPU")return {fan:units(8),powerPcb:units(15)};
-  return {fan:units(10)};
+  const units=divisor=>Math.max(1,Math.ceil(count/divisor)),fanTier=fanTierFor(h),boardTier=hashboardTierFor(h);
+  if(h.era==="HYDRO ASIC")return {[boardTier]:units(10),powerPcb:units(20),coolantPump:units(24),coolingManifold:units(16)};
+  if(h.era==="ASIC")return {[fanTier]:units(12),[boardTier]:units(10),powerPcb:units(20)};
+  if(h.era==="FPGA")return {[fanTier]:units(12),powerPcb:units(18)};
+  if(h.era==="GPU")return {[fanTier]:units(8),powerPcb:units(15)};
+  return {[fanTier]:units(10)};
 }
 function serviceRequirementText(requirements){return Object.entries(requirements).map(([id,qty])=>`${qty} ${sparePart(id)?.name||id}${qty===1?"":"s"}`).join(" · ")}
 function hasServiceParts(requirements){return Object.entries(requirements).every(([id,qty])=>(state.maintenance.inventory[id]||0)>=qty)}
 function servicePlan(h,count){const technicians=fieldTechnicianCount(),committed=(state.maintenance.serviceJobs||[]).reduce((sum,job)=>sum+Number(job.crew||0),0),available=Math.max(0,technicians-committed),contractorBusy=technicians===0&&(state.maintenance.serviceJobs||[]).some(job=>job.contracted),crew=technicians===0?(contractorBusy?0:1):Math.min(3,available),complexity=h.era==="HYDRO ASIC"?2.2:h.era==="ASIC"?1.5:h.era==="GPU"?1.2:1,workDays=Math.max(1,Math.ceil(count*complexity/20)),days=crew?Math.max(1,Math.ceil(workDays/crew)):Infinity;return{technicians,committed,available,crew,workDays,days,contracted:technicians===0,contractorBusy}}
+function repairPuzzleRequired(job){return !!job&&!job.auto&&!!job.contracted&&!job.workDone}
+function initRepairPuzzle(job){
+  if(!job||job.puzzleType!==undefined)return false;
+  job.puzzleType=Math.floor(nextRand()*3);job.oldRemoved=!job.part;
+  if(job.puzzleType===0){job.tapOrder=shuffledSlots(4);job.tapProgress=[]}
+  else if(job.puzzleType===1){job.cableSlots=shuffledPairSlots(3);job.cableLocked=[false,false,false,false,false,false];job.cableSelected=null}
+  else{job.dialTarget=20+Math.floor(nextRand()*61);const offsets=[-16,-14,-12,-10,-8,-6,6,8,10,12,14,16];job.dialValue=job.dialTarget+offsets[Math.floor(nextRand()*offsets.length)]}
+  return true;
+}
 function advanceMaintenance(){
   state.maintenance.orders=state.maintenance.orders.filter(order=>{if(order.due>state.time)return true;const part=sparePart(order.type)||sparePart("fan");state.maintenance.inventory[part.id]=(state.maintenance.inventory[part.id]||0)+order.qty;log("Spare parts delivered",`+${order.qty} ${part.name}${order.qty===1?"":"s"}`);return false});
   state.maintenance.serviceJobs=state.maintenance.serviceJobs.filter(job=>{
@@ -308,14 +321,8 @@ function advanceMaintenance(){
     }else{
       while(job.stage<REPAIR_STAGES.length&&job.stageDue<=state.time){
         const stage=REPAIR_STAGES[job.stage];
-        if(stage.id==="work"&&!job.auto&&!job.workDone){
-          if(job.puzzleType===undefined){
-            job.puzzleType=Math.floor(nextRand()*3);job.oldRemoved=!job.part;
-            if(job.puzzleType===0){job.tapOrder=shuffledSlots(4);job.tapProgress=[]}
-            else if(job.puzzleType===1){job.cableSlots=shuffledPairSlots(3);job.cableLocked=[false,false,false,false,false,false];job.cableSelected=null}
-            else{job.dialTarget=20+Math.floor(nextRand()*61);const offsets=[-16,-14,-12,-10,-8,-6,6,8,10,12,14,16];job.dialValue=job.dialTarget+offsets[Math.floor(nextRand()*offsets.length)]}
-            renderFullQueued=true;
-          }
+        if(stage.id==="work"&&!job.auto&&job.contracted&&!job.workDone){
+          if(initRepairPuzzle(job))renderFullQueued=true;
           break;
         }
         const complicationChance=Math.min(.6,.10*(job.contracted?1.3:1)*(hasSkill("fieldservice")?.5:1));
@@ -346,8 +353,9 @@ function advanceMaintenance(){
     const repaired=Math.max(1,Number(job.count)||0);
     if(job.part){
       const byPart=state.maintenance.faultsByPart[job.id]||(state.maintenance.faultsByPart[job.id]={}),partName=sparePart(job.part)?.name||job.part;
-      byPart[job.part]=Math.max(0,(byPart[job.part]||0)-repaired);
-      state.maintenance.condition[job.id]=Math.min(100,maintenanceCondition(h)+Math.max(6,20*repaired/Math.max(1,state.hardware[job.id]||1)));
+      byPart[job.part]=0;
+      const boosted=Math.min(100,maintenanceCondition(h)+Math.max(6,20*repaired/Math.max(1,state.hardware[job.id]||1)));
+      state.maintenance.condition[job.id]=hardwareFaultCount(h)>0?boosted:Math.max(70,boosted);
       log(`Service completed: ${h?.name||job.id}`,`${repaired} ${partName}${repaired===1?"":"s"} replaced · ${job.crew}-technician crew`);
       showToast("Service completed",`${repaired} × ${h?.name||"miner"} ${partName.toLowerCase()} swap finished.`,"info","mine");
     }else{
@@ -415,23 +423,23 @@ function serviceHardware(id,auto=false){
   if(activeServiceJob(id))return showToast("Service already scheduled",`${h.name} is already in the maintenance bay.`);
   const condition=maintenanceCondition(h),faults=hardwareFaultCount(h);if(condition>=95&&!faults)return showToast("Service not needed",`${h.name} is at ${condition.toFixed(0)}% condition with no failed units.`);
   const repairCount=condition<65?count:Math.max(faults,Math.ceil(count*.15)),requirements=serviceRequirements(h,repairCount),plan=servicePlan(h,repairCount),labor=Math.max(40,h.cost*.008*repairCount)*(plan.contracted?1.35:1);
-  if(!plan.crew)return showToast(plan.contractorBusy?"No contractor available":"Technician crew busy",plan.contractorBusy?"An outside contractor is already covering another repair. Hire a field technician or wait for that job to finish.":`${plan.committed} technician${plan.committed===1?" is":"s are"} assigned to active repairs. Hire another field technician or wait for a service job to complete.`);
+  if(!plan.crew)return showToast(plan.contractorBusy?"You are already on a job":"Technician crew busy",plan.contractorBusy?"You can only work one repair at a time yourself. Finish it, or hire a field technician to run jobs in parallel.":`${plan.committed} technician${plan.committed===1?" is":"s are"} assigned to active repairs. Hire another field technician or wait for a service job to complete.`);
   if(!hasServiceParts(requirements))return showToast("Parts required",`Service needs ${serviceRequirementText(requirements)}; order the missing components first.`);
   if(state.cash<labor)return showToast("Not enough cash",`Service labour costs ${fmtUsd(labor)}.`);
-  state.cash-=labor;Object.entries(requirements).forEach(([part,qty])=>state.maintenance.inventory[part]-=qty);state.maintenance.serviceJobs.push({id,count:repairCount,due:state.time+plan.days*DAY,crew:plan.crew,contracted:plan.contracted,labor,totalDays:plan.days,stage:0,stageDue:state.time+REPAIR_STAGES[0].weight*plan.days*DAY,auto});log(`Service started: ${h.name}`,`${repairCount} units · ${plan.days} days · ${fmtUsd(labor)}`);showToast(auto?"Auto-repair started":"Service scheduled",`${repairCount} × ${h.name} is offline for ${plan.days} simulation day${plan.days===1?"":"s"}. ${plan.contracted?"An external technician is covering the job.":auto?"Your technician crew is handling it automatically.":`${plan.crew} of ${plan.technicians} technicians assigned.`}`,"info","mine");save();renderMineContent();
+  state.cash-=labor;Object.entries(requirements).forEach(([part,qty])=>state.maintenance.inventory[part]-=qty);state.maintenance.serviceJobs.push({id,count:repairCount,due:state.time+plan.days*DAY,crew:plan.crew,contracted:plan.contracted,labor,totalDays:plan.days,stage:0,stageDue:state.time+REPAIR_STAGES[0].weight*plan.days*DAY,auto});if(repairPuzzleRequired(state.maintenance.serviceJobs[state.maintenance.serviceJobs.length-1]))initRepairPuzzle(state.maintenance.serviceJobs[state.maintenance.serviceJobs.length-1]);log(`Service started: ${h.name}`,`${repairCount} units · ${plan.days} days · ${fmtUsd(labor)}`);showToast(auto?"Auto-repair started":"Service scheduled",`${repairCount} × ${h.name} is offline for ${plan.days} simulation day${plan.days===1?"":"s"}. ${plan.contracted?"You are doing this one yourself — the Work stage waits for you on the Mine floor.":auto?"Your technician crew is handling it automatically.":`${plan.crew} of ${plan.technicians} technicians assigned.`}`,"info","mine");save();renderMineContent();
 }
 function serviceHardwarePart(id,part,auto=false){
   const h=HARDWARE.find(x=>x.id===id),count=state.hardware[id]||0,partDef=sparePart(part);if(!h||!count||!partDef)return;
   if(activeServiceJob(id))return showToast("Service already scheduled",`${h.name} is already in the maintenance bay.`);
   const faulted=hardwareFaultBreakdown(h)[part]||0;if(!faulted)return showToast("Service not needed",`No ${partDef.name.toLowerCase()} faults are currently reported on ${h.name}.`);
   const requirements={[part]:Math.max(1,Math.ceil(faulted/7))},plan=servicePlan(h,faulted),labor=Math.max(25,h.cost*.004*faulted)*(plan.contracted?1.35:1);
-  if(!plan.crew)return showToast(plan.contractorBusy?"No contractor available":"Technician crew busy",plan.contractorBusy?"An outside contractor is already covering another repair. Hire a field technician or wait for that job to finish.":`${plan.committed} technician${plan.committed===1?" is":"s are"} assigned to active repairs. Hire another field technician or wait for a service job to complete.`);
+  if(!plan.crew)return showToast(plan.contractorBusy?"You are already on a job":"Technician crew busy",plan.contractorBusy?"You can only work one repair at a time yourself. Finish it, or hire a field technician to run jobs in parallel.":`${plan.committed} technician${plan.committed===1?" is":"s are"} assigned to active repairs. Hire another field technician or wait for a service job to complete.`);
   if(!hasServiceParts(requirements))return showToast("Parts required",`Replacing ${partDef.name.toLowerCase()}s needs ${serviceRequirementText(requirements)}; order the missing components first.`);
   if(state.cash<labor)return showToast("Not enough cash",`Targeted service labour costs ${fmtUsd(labor)}.`);
   state.cash-=labor;Object.entries(requirements).forEach(([p,qty])=>state.maintenance.inventory[p]-=qty);
-  state.maintenance.serviceJobs.push({id,count:faulted,part,due:state.time+plan.days*DAY,crew:plan.crew,contracted:plan.contracted,labor,totalDays:plan.days,stage:0,stageDue:state.time+REPAIR_STAGES[0].weight*plan.days*DAY,auto});
+  state.maintenance.serviceJobs.push({id,count:faulted,part,due:state.time+plan.days*DAY,crew:plan.crew,contracted:plan.contracted,labor,totalDays:plan.days,stage:0,stageDue:state.time+REPAIR_STAGES[0].weight*plan.days*DAY,auto});if(repairPuzzleRequired(state.maintenance.serviceJobs[state.maintenance.serviceJobs.length-1]))initRepairPuzzle(state.maintenance.serviceJobs[state.maintenance.serviceJobs.length-1]);
   log(`Service started: ${h.name}`,`${faulted} × ${partDef.name} · ${plan.days} day${plan.days===1?"":"s"} · ${fmtUsd(labor)}`);
-  showToast(auto?"Auto-repair started":"Service scheduled",`${faulted} × ${partDef.name} swap on ${h.name}, ${plan.days} simulation day${plan.days===1?"":"s"}. ${plan.contracted?"An external technician is covering the job.":auto?`Your technician crew is handling it automatically.`:`${plan.crew} of ${plan.technicians} technicians assigned.`}`,"info","mine");
+  showToast(auto?"Auto-repair started":"Service scheduled",`${faulted} × ${partDef.name} swap on ${h.name}, ${plan.days} simulation day${plan.days===1?"":"s"}. ${plan.contracted?"You are doing this one yourself — the Work stage waits for you on the Mine floor.":auto?`Your technician crew is handling it automatically.`:`${plan.crew} of ${plan.technicians} technicians assigned.`}`,"info","mine");
   save();renderMineContent();
 }
 function repairRemoveOldPart(id){
@@ -621,6 +629,15 @@ function queueAsicReleases(prev,next){
   const alerts=state.hardwareAlerts,releases=asicHardware().filter(h=>crossedDate(prev,next,h.date)&&!alerts.seen.includes(h.id));
   releases.forEach(h=>{alerts.seen.push(h.id);if(!alerts.queue.includes(h.id)&&alerts.active!==h.id)alerts.queue.push(h.id);log(`New hardware released: ${h.name}`,`${fmtHash(h.hash)} · ${h.w} W · ${fmtJth(hardwareEfficiency(h))} J/TH`,"fleet")});
 }
+function queueExposureWarnings(prev,next){
+  EXPOSURE_WARNINGS.filter(w=>crossedDate(prev,next,at(w.date))&&!state.exposureWarned.includes(w.id)).forEach(w=>{
+    const exposed=w.wallet?state.wallets[w.wallet]>0:state.region===w.region;
+    if(!exposed)return;
+    state.exposureWarned.push(w.id);
+    log(w.title,w.wallet?fmtBtc(state.wallets[w.wallet])+" exposed":"Regional exposure","custody");
+    showToast(w.title,w.body,"warning");
+  });
+}
 function queueMinorHardwareReleases(prev,next){
   const seen=state.hardwareToastSeen,releases=minorHardware().filter(h=>crossedDate(prev,next,h.date)&&!seen.includes(h.id));
   releases.forEach(h=>{seen.push(h.id);log(`New hardware available: ${h.name}`,`${fmtHash(h.hash)} · ${h.w} W`,"fleet");showToast("New generation available",`${h.name} (${h.maker}) just reached the catalog — ${fmtHash(h.hash)} at ${h.w} W.`,"info","mine")});
@@ -649,6 +666,7 @@ function tick(silent=false){
   const crossed=EVENTS.filter(e=>at(e.date)>prev&&at(e.date)<=next&&!state.seen.includes(e.id)).sort((a,b)=>at(a.date)-at(b.date));
   crossed.forEach(e=>{state.seen.push(e.id);applyEvent(e)});
   queueAsicReleases(prev,next);
+  queueExposureWarnings(prev,next);
   advanceOperationalRisks(next);
   advanceNodeSync(silent);
   if(!silent&&!faucet&&faucetActive(next)&&nextRand()<.05)triggerFaucet(next);
@@ -662,7 +680,7 @@ function tick(silent=false){
     if(state.mode==="pool"&&availablePool()&&poolEligible()){blocks=lambda;payout=lambda*blockRewardAt(next)*(1-poolFee())*(.97+nextRand()*.06)}
     else{blocks=poisson(lambda);payout=blocks*blockRewardAt(next)}
     if(firmwareHijacked())payout*=.65;
-    if(payout>0){state.wallets.hot+=payout;state.mined+=payout;state.operator.periodMined+=payout;state.blocks+=blocks;if(blocks>=1)log(state.mode==="pool"?"Pool payout":"Block reward",`+${fmtBtc(payout)}`)}
+    if(payout>0){state.wallets.hot+=payout;state.mined+=payout;state.operator.periodMined+=payout;state.blocks+=blocks;if(blocks>=1)log(state.mode==="pool"?"Pool payout":blocks>1?`Block reward ×${blocks} (today)`:"Block reward (today)",`+${fmtBtc(payout)}`)}
     state.uptimeDays++;state.operator.periodUptime++;
   }
   if(nodeOnline())state.nodeDays++;
@@ -758,5 +776,5 @@ function refreshLive(){
   const hash=document.getElementById("live-your-hash");if(hash)hash.classList.toggle("green",online);const lightningTick=document.getElementById("live-lightning-btc");if(lightningTick)lightningTick.classList.toggle("dim",!lightningAvailable());refreshDashboard();refreshMarket();refreshSettlementForecast();refreshLearning();
 }
 function setTimer(){clearInterval(timer);if(state.speed>0)timer=setInterval(tick,Math.max(70,2000/state.speed))}
-function startMempoolTimer(){clearInterval(mempoolTimer);mempoolTimer=setInterval(()=>{if(activeTab==="dashboard")refreshDashboardVisuals()},1200)}
+function startMempoolTimer(){clearInterval(mempoolTimer);mempoolTimer=setInterval(()=>{if(activeTab==="dashboard"&&state.speed>0)refreshDashboardVisuals()},1200)}
 function save(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(state))}catch(e){}}
