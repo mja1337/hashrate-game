@@ -56,6 +56,7 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(a==="settle-bridge")takeBridgeFinance();
   else if(a==="settle-receivership")enterReceivership();
   else if(a==="hire-staff")hireStaff(id);
+  else if(a==="dismiss-staff")dismissStaff(id);
   else if(a==="insurance")toggleInsurance();
   else if(a==="project-loan")takeProjectLoan();
   else if(a==="repay-loan")repayProjectLoan();
