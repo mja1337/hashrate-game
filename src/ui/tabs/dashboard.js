@@ -11,6 +11,7 @@ function renderHeader(){
     <div class="brand"><div class="coin">₿</div><div><div class="brand-name">HASHRATE</div><div class="brand-sub">Alpha 2.11 · Operator campaign</div></div></div>
     <div class="era-chip"><strong>${eraAt(state.time)}</strong><span>Historical replay · seed ${state.seed}</span></div>
     <div class="clock"><strong id="live-date">${dateFmt(state.time)}</strong><span id="live-block">BLOCK ~${fmtNum(approxHeight(state.time))}</span></div>
+    <div class="xp-meter" title="Operator level — earned from shares submitted, new best-share records, machines deployed and repairs completed"><div class="xp-meter-top"><b id="live-xp-level">LV ${xpProgress().level}</b><span id="live-xp-remaining">${fmtNum(Math.ceil(xpProgress().remaining))} XP to go</span></div><div class="xp-track"><i id="live-xp-fill" style="width:${xpProgress().percent.toFixed(1)}%"></i></div><span class="xp-best" id="live-xp-best">Best share ${state.xp.bestDifficulty?fmtDifficulty(state.xp.bestDifficulty):"—"}</span></div>
     <div class="speeds" aria-label="Simulation speed">${speedButtons}</div>
     <div class="save-state"><i class="save-dot"></i>LOCAL SAVE</div>
     <button class="mobile-pause-button ${state.speed?"running":"paused"}" data-action="speed" data-value="${state.speed?0:(state.returnSpeed||1)}" aria-label="${state.speed?"Pause simulation":"Resume simulation"}"><span aria-hidden="true">${state.speed?"Ⅱ":"▶"}</span>${state.speed?"Pause":"Run"}</button>

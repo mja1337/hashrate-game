@@ -1,4 +1,5 @@
 "use strict";
+const XP_LEVEL_STEP=60,SHARE_WORK=4294967296;
 
 /* SIMULATION LAYER — deterministic state and economics. */
 const SAVE_KEY="hashrate-genesis-save-v1";
@@ -19,6 +20,7 @@ const initialState=()=>{const seed=Math.floor(Math.random()*4294967296);return{
   skills:[],points:0,startingGrant:false,seen:[],activeEvent:null,storyPause:true,shoppingPause:false,speculations:[],powerRateShock:null,hardwareGlut:null,hardwareAlerts:{seen:[],queue:[],active:null,resumeSpeed:0},hardwareToastSeen:[],exposureWarned:[],
   treasuryPolicy:"cover",pendingSettlement:null,endReason:null,
   operator:{eras:{},periodMined:0,periodUptime:0,periodDays:0,lastRevenueUsd:0,totalMonths:0,solventMonths:0,profitableMonths:0,competitiveMonths:0,bridgeLoans:0,restructures:0},
+  xp:{total:0,level:1,peakLevel:1,bestDifficulty:0,shares:0,sources:{shares:0,record:0,deploy:0,repair:0}},
   knowledge:0,nextKnowledge:5,learning:null,completedLearning:[],maintenance:{condition:{},faults:{},faultsByPart:{},selfRepairs:{},parts:0,inventory:{fan:0,hashboard:0,powerPcb:0,coolantPump:0,coolingManifold:0,laptopfan:0,asicfan:0,hashboardearly:0,hashboardmodern:0},inventoryMigrated:true,orders:[],serviceJobs:[]},procurementOrders:[],inactiveHardware:{},commissioningJobs:[],decommissionedHardware:{},relocationJob:null,facilityUpgradeJob:null,ops:{firmwarePatchedUntil:0,hijackUntil:0,outageUntil:0,powerOutageUntil:0,venueFreezes:{},riskMonth:""},strategy:{mstr:0,strk:0,strf:0,strd:0,strc:0,yieldEarned:0},sandbox:false,contract:"standard",staff:[],projectLoan:0,insured:false,milestones:[],milestoneLog:[],walletSetup:{done:false,step:0,rolls:[],keyHex:""},walletSoftware:0,donations:[],
   blocks:0,mined:0,nodeDays:0,uptimeDays:0,powerSpent:0,nextMilestone:1000,
   connectivity:"fixed",history:[],activity:[],activitySeq:0,log:[{time:START,text:"Client synced to the network tip",amount:"~block "+approxHeight(START)}]
@@ -102,6 +104,7 @@ state.seen=Array.isArray(state.seen)?state.seen:[];
 state.milestones=Array.isArray(state.milestones)?state.milestones:[];
 state.exposureWarned=Array.isArray(state.exposureWarned)?state.exposureWarned:[];
 state.maintenance.selfRepairs=state.maintenance.selfRepairs&&typeof state.maintenance.selfRepairs==="object"?state.maintenance.selfRepairs:{};
+state.xp=normalizeXp(state.xp);
 state.startingGrant=!!state.startingGrant;
 state.autoRepair=!!state.autoRepair;
 state.treasuryPolicy=TREASURY_POLICIES.some(x=>x.id===state.treasuryPolicy)?state.treasuryPolicy:"cover";
@@ -179,9 +182,9 @@ function operatorEraAt(t=state.time){return OPERATOR_ERAS.find(era=>t>=era.start
 function operatorEraStats(era=operatorEraAt()){return state.operator.eras[era.id]}
 function operatorEraScore(stats){if(!stats||stats.months<=0)return 0;return Math.round(35*stats.solvent/stats.months+30*stats.profitable/stats.months+20*stats.uptime/stats.months+15*stats.competitive/stats.months)}
 function operatorScoreBreakdown(){
-  const eraPoints=OPERATOR_ERAS.reduce((sum,era)=>sum+operatorEraScore(operatorEraStats(era)),0),performance=eraPoints/(OPERATOR_ERAS.length*100)*800;
-  const milestones=Math.min(80,(state.milestones?.length||0)/MILESTONES.length*80),allBtc=totalBtc()+lightningLocked(),holdings=Math.min(40,Math.log2(1+allBtc)/Math.log2(11)*40),monthly=monthlyCost().total,runway=monthly>0?state.cash/monthly:6,balance=(state.debt||state.projectLoan>Math.max(state.cash,state.operator.lastRevenueUsd*6))?0:Math.min(40,runway/6*40),resilience=Math.max(0,40-state.operator.restructures*20-state.operator.bridgeLoans*5),total=Math.max(0,Math.min(1000,Math.round(performance+milestones+holdings+balance+resilience)));
-  return{total,performance:Math.round(performance),milestones:Math.round(milestones),holdings:Math.round(holdings),balance:Math.round(balance),resilience:Math.round(resilience),eraPoints};
+  const eraPoints=OPERATOR_ERAS.reduce((sum,era)=>sum+operatorEraScore(operatorEraStats(era)),0),performance=eraPoints/(OPERATOR_ERAS.length*100)*740,mastery=Math.min(60,Math.max(0,(state.xp?.peakLevel||1)-1)/49*60);
+  const milestones=Math.min(80,(state.milestones?.length||0)/MILESTONES.length*80),allBtc=totalBtc()+lightningLocked(),holdings=Math.min(40,Math.log2(1+allBtc)/Math.log2(11)*40),monthly=monthlyCost().total,runway=monthly>0?state.cash/monthly:6,balance=(state.debt||state.projectLoan>Math.max(state.cash,state.operator.lastRevenueUsd*6))?0:Math.min(40,runway/6*40),resilience=Math.max(0,40-state.operator.restructures*20-state.operator.bridgeLoans*5),total=Math.max(0,Math.min(1000,Math.round(performance+mastery+milestones+holdings+balance+resilience)));
+  return{total,performance:Math.round(performance),mastery:Math.round(mastery),milestones:Math.round(milestones),holdings:Math.round(holdings),balance:Math.round(balance),resilience:Math.round(resilience),eraPoints};
 }
 function operatorGrade(score=operatorScoreBreakdown().total){return score>=900?"Legendary":score>=750?"Elite":score>=600?"Durable":score>=450?"Solvent":score>=300?"Survivor":"At risk"}
 function lightningLocked(){return state.lightning?.locked||0}
@@ -261,6 +264,53 @@ function partsLeadDays(){return Math.max(3,Math.round((covidPartsMarket()?42:14)
 function selfRepairExperience(id){return Math.max(0,Math.floor(Number(state.maintenance.selfRepairs?.[id])||0))}
 function selfDamageChance(h){if(!h)return 0;return Math.max(.02,.4*Math.pow(.72,selfRepairExperience(h.id))*(hasSkill("benchskills")?.4:1))}
 function selfAutoCompleteChance(h){if(!h||!hasSkill("practisedhands"))return 0;return Math.min(.85,.2+.13*selfRepairExperience(h.id))}
+function normalizeXp(raw){
+  const xp=raw&&typeof raw==="object"?raw:{},src=xp.sources&&typeof xp.sources==="object"?xp.sources:{};
+  const num=(v,fallback=0)=>Number.isFinite(Number(v))?Math.max(0,Number(v)):fallback;
+  const out={total:num(xp.total),bestDifficulty:num(xp.bestDifficulty),shares:num(xp.shares),
+    sources:{shares:num(src.shares),record:num(src.record),deploy:num(src.deploy),repair:num(src.repair)}};
+  out.level=operatorLevel(out.total);out.peakLevel=Math.max(out.level,Math.max(1,Math.floor(num(xp.peakLevel,1))));
+  return out;
+}
+function operatorLevel(total){return 1+Math.floor(Math.sqrt(Math.max(0,total)/XP_LEVEL_STEP))}
+function xpForLevel(level){return XP_LEVEL_STEP*Math.pow(Math.max(0,level-1),2)}
+function levelAwardsPoint(level){return level<=6?level>1:level<=20?level%2===0:level%4===0}
+function xpProgress(){
+  const xp=state.xp,level=xp.level,floorXp=xpForLevel(level),ceilXp=xpForLevel(level+1);
+  const span=Math.max(1,ceilXp-floorXp),into=Math.max(0,xp.total-floorXp);
+  return{level,total:xp.total,floorXp,ceilXp,into,span,remaining:Math.max(0,ceilXp-xp.total),percent:Math.min(100,into/span*100)};
+}
+function awardXp(amount,source){
+  amount=Number(amount);if(!Number.isFinite(amount)||amount<=0)return 0;
+  const xp=state.xp;xp.total+=amount;
+  if(source&&xp.sources[source]!==undefined)xp.sources[source]+=amount;
+  const next=operatorLevel(xp.total);
+  if(next>xp.level){
+    let gained=0;
+    for(let level=xp.level+1;level<=next;level++)if(levelAwardsPoint(level)){state.points++;gained++}
+    xp.level=next;xp.peakLevel=Math.max(xp.peakLevel,next);
+    log(`Operator level ${next}`,gained?`+${gained} skill point${gained===1?"":"s"}`:"No skill point at this level","milestone");
+    showToast(`Operator level ${next}`,gained?`${gained} skill point${gained===1?"":"s"} available to spend in the Tech tree.`:"Keep going — the next skill point is a level or two away.","milestone","tech");
+    renderFullQueued=true;
+  }
+  return amount;
+}
+function dailyShareCount(hash){return hash>0?hash*86400/SHARE_WORK:0}
+function fmtDifficulty(value){value=Number(value)||0;return value>=1e12?(value/1e12).toFixed(2)+"T":value>=1e9?(value/1e9).toFixed(2)+"G":value>=1e6?(value/1e6).toFixed(2)+"M":value>=1e3?(value/1e3).toFixed(2)+"K":value.toFixed(0)}
+function advanceOperatorXp(){
+  const fs=fleet();if(!operating()||fs.hash<=0)return;
+  const shares=dailyShareCount(fs.hash);state.xp.shares+=shares;
+  awardXp(1.2*Math.log2(1+shares),"shares");
+  const roll=Math.max(1e-9,nextRand()),best=shares/roll;
+  if(best>state.xp.bestDifficulty){
+    const previous=Math.max(1,state.xp.bestDifficulty);state.xp.bestDifficulty=best;
+    awardXp(Math.min(400,40*Math.log2(best/previous)),"record");
+    if(best>=previous*4){
+      log("New best share difficulty",`${fmtDifficulty(best)} — your highest yet`,"fleet");
+      showToast("New best share",`Your fleet found a share at difficulty ${fmtDifficulty(best)} — a personal record.`,"milestone","dashboard");
+    }
+  }
+}
 function covidPartsMarket(){return state.time>=at("2020-03-12")&&state.time<at("2021-07-01")}
 function sparePart(id){return SPARE_PARTS.find(part=>part.id===id)}
 const PART_FAULT_LABELS={laptopfan:"Laptop fan bearing wear",fan:"Fan bearing seizure",asicfan:"Blower fan bearing seizure",hashboardearly:"Hashboard chip failure",hashboard:"Hashboard chip failure",hashboardmodern:"Hashboard chip failure",powerPcb:"PSU/power PCB failure",coolantPump:"Coolant pump failure",coolingManifold:"Cooling manifold leak"};
@@ -365,12 +415,12 @@ function advanceMaintenance(){
       byPart[job.part]=0;
       const boosted=Math.min(100,maintenanceCondition(h)+Math.max(6,20*repaired/Math.max(1,state.hardware[job.id]||1)));
       state.maintenance.condition[job.id]=hardwareFaultCount(h)>0?boosted:Math.max(70,boosted);
-      log(`Service completed: ${h?.name||job.id}`,`${repaired} ${partName}${repaired===1?"":"s"} replaced · ${job.crew}-technician crew`);
+      awardXp((12+6*Math.log2(1+repaired))*(job.contracted?1.5:1),"repair");log(`Service completed: ${h?.name||job.id}`,`${repaired} ${partName}${repaired===1?"":"s"} replaced · ${job.contracted?"serviced by you":`${job.crew}-technician crew`}`);
       showToast("Service completed",`${repaired} × ${h?.name||"miner"} ${partName.toLowerCase()} swap finished.`,"info","mine");
     }else{
       state.maintenance.faultsByPart[job.id]={};
       state.maintenance.condition[job.id]=Math.min(100,maintenanceCondition(h)+Math.max(18,60*repaired/Math.max(1,state.hardware[job.id]||1)));
-      log(`Service completed: ${h?.name||job.id}`,`${repaired} unit${repaired===1?"":"s"} repaired · ${job.crew}-technician crew`);
+      awardXp((12+6*Math.log2(1+repaired))*(job.contracted?1.5:1),"repair");log(`Service completed: ${h?.name||job.id}`,`${repaired} unit${repaired===1?"":"s"} repaired · ${job.contracted?"serviced by you":`${job.crew}-technician crew`}`);
       showToast("Service completed",`${repaired} × ${h?.name||"miner"} returned to service.`,"info","mine");
     }
     return false;
@@ -547,7 +597,7 @@ function monthlyCost(){
   const staff=staffMonthlyCost(),insurance=insuranceMonthlyCost(),internet=internetMonthlyCost(),nodeNetwork=totalNodeMonthlyOverhead();return{energy,rent:f.rent,staff,insurance,internet,nodeNetwork,total:energy+f.rent+staff+insurance+internet+nodeNetwork,rate};
 }
 function advanceFleetLifecycle(){
-  state.commissioningJobs=state.commissioningJobs.filter(job=>{if(job.due>state.time)return true;const h=HARDWARE.find(item=>item.id===job.id);state.hardware[job.id]=(state.hardware[job.id]||0)+job.qty;log(`Commissioned ${job.qty} × ${h?.name||job.id}`,"Racked, configured and hashing","fleet");showToast("Commissioning complete",`${job.qty} × ${h?.name||"miner"} is now connected to the fleet.`);renderFullQueued=true;return false});
+  state.commissioningJobs=state.commissioningJobs.filter(job=>{if(job.due>state.time)return true;const h=HARDWARE.find(item=>item.id===job.id);state.hardware[job.id]=(state.hardware[job.id]||0)+job.qty;awardXp((6+3*Math.log2(1+(h?.hash||0)/1e9))*Math.log2(1+job.qty),"deploy");log(`Commissioned ${job.qty} × ${h?.name||job.id}`,"Racked, configured and hashing","fleet");showToast("Commissioning complete",`${job.qty} × ${h?.name||"miner"} is now connected to the fleet.`);renderFullQueued=true;return false});
   const job=state.relocationJob;if(job&&job.due<=state.time){const destination=REGIONS.find(r=>r.id===job.id);state.region=job.id;state.relocationJob=null;state.policyLock=null;state.power=state.debt<=0;log(`Fleet arrived in ${destination?.name||job.id}`,"Site commissioning complete","operations");showToast("Relocation complete",`The fleet is live at ${destination?.name||job.id}.`);renderFullQueued=true}
   const upgradeJob=state.facilityUpgradeJob;if(upgradeJob&&upgradeJob.due<=state.time){
     const destination=FACILITIES.find(x=>x.id===upgradeJob.id);state.facility=upgradeJob.id;state.facilityUpgradeJob=null;state.power=state.debt<=0;
@@ -694,6 +744,7 @@ function tick(silent=false){
   crossed.forEach(e=>{state.seen.push(e.id);applyEvent(e)});
   queueAsicReleases(prev,next);
   queueExposureWarnings(prev,next);
+  advanceOperatorXp();
   advanceOperationalRisks(next);
   advanceNodeSync(silent);
   if(!silent&&!faucet&&faucetActive(next)&&nextRand()<.05)triggerFaucet(next);
@@ -799,7 +850,7 @@ function refreshMinePricing(){
 }
 function refreshLive(){
   const fs=fleet(),mc=monthlyCost(),online=operating(),p=priceAt(state.time),set=(id,value)=>{const el=document.getElementById(id);if(el)el.textContent=value};
-  const tickerBtc=value=>fmtBtc(value).replace(/ BTC$/,"");set("live-date",dateFmt(state.time));set("live-block",`BLOCK ~${fmtNum(approxHeight(state.time))}`);set("live-fiat",fmtUsd(state.cash));set("live-illiquid-fiat",fmtUsd(equityValue()));set("live-controlled-btc",tickerBtc(controlled()));set("live-custodial-btc",tickerBtc(claims()));set("live-lightning-btc",tickerBtc(lightningLocked()));set("live-price",state.time<MARKET?"NO MARKET":fmtUsd(p));set("live-network-hash",fmtHash(competitiveHashAt(state.time,fs.hash)));set("live-difficulty",fmtDiff(difficultyAt(state.time)));set("live-subsidy",`${subsidyAt(state.time)} BTC`);set("live-fees",fmtBtc(feeAt(state.time)));set("live-your-hash",fmtHash(fs.hash));set("live-your-status",online?"online":"offline");set("live-power",`${fs.kw.toFixed(2)} kW`);set("live-power-rate",`${fmtUsd(mc.rate)}/kWh`);set("live-transactions",fmtNum(txAt(state.time)));set("live-worth",fmtUsd(netWorth()));
+  const tickerBtc=value=>fmtBtc(value).replace(/ BTC$/,"");set("live-date",dateFmt(state.time));set("live-block",`BLOCK ~${fmtNum(approxHeight(state.time))}`);const xpNow=xpProgress();set("live-xp-level",`LV ${xpNow.level}`);set("live-xp-remaining",`${fmtNum(Math.ceil(xpNow.remaining))} XP to go`);set("live-xp-best",`Best share ${state.xp.bestDifficulty?fmtDifficulty(state.xp.bestDifficulty):"—"}`);const xpFill=document.getElementById("live-xp-fill");if(xpFill)xpFill.style.width=`${xpNow.percent.toFixed(1)}%`;set("live-fiat",fmtUsd(state.cash));set("live-illiquid-fiat",fmtUsd(equityValue()));set("live-controlled-btc",tickerBtc(controlled()));set("live-custodial-btc",tickerBtc(claims()));set("live-lightning-btc",tickerBtc(lightningLocked()));set("live-price",state.time<MARKET?"NO MARKET":fmtUsd(p));set("live-network-hash",fmtHash(competitiveHashAt(state.time,fs.hash)));set("live-difficulty",fmtDiff(difficultyAt(state.time)));set("live-subsidy",`${subsidyAt(state.time)} BTC`);set("live-fees",fmtBtc(feeAt(state.time)));set("live-your-hash",fmtHash(fs.hash));set("live-your-status",online?"online":"offline");set("live-power",`${fs.kw.toFixed(2)} kW`);set("live-power-rate",`${fmtUsd(mc.rate)}/kWh`);set("live-transactions",fmtNum(txAt(state.time)));set("live-worth",fmtUsd(netWorth()));
   const hash=document.getElementById("live-your-hash");if(hash)hash.classList.toggle("green",online);const lightningTick=document.getElementById("live-lightning-btc");if(lightningTick)lightningTick.classList.toggle("dim",!lightningAvailable());refreshDashboard();refreshMarket();refreshSettlementForecast();refreshLearning();
 }
 function setTimer(){clearInterval(timer);if(state.speed>0)timer=setInterval(tick,Math.max(70,2000/state.speed))}
