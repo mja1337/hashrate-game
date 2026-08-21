@@ -73,23 +73,56 @@ function endModal(){
 }
 function render(preserveScroll=true){
   const revision=++renderRevision;
-  const app=document.getElementById("app"),scrollX=window.scrollX,scrollY=window.scrollY,keepPosition=preserveScroll&&scrollY>0,previousHeight=app.offsetHeight;
+  const app=document.getElementById("app"),scrollX=window.scrollX,scrollY=window.scrollY||document.documentElement.scrollTop||0,keepPosition=preserveScroll&&scrollY>0,previousHeight=app.offsetHeight;
+  const anchor=keepPosition?captureScrollAnchor():null;
   if(keepPosition)app.style.minHeight=`${previousHeight}px`;
   const banner=state.debt>0||state.policyLock?`<div class="status-banner"><strong>${state.policyLock?"Policy shutdown":"Grid disconnected"}</strong><span>${state.policyLock||fmtUsd(state.debt)+" must be paid before mining resumes."}</span><div class="push actions">${state.debt>0?`<button class="action small primary" data-action="pay-debt" ${state.cash<state.debt?"disabled":""}>Pay ${fmtUsd(state.debt)}</button>`:""}<button class="action small" data-action="tab" data-value="${state.policyLock?"facilities":"market"}">${state.policyLock?"Relocate":"Raise cash"}</button></div></div>`:"",incident=activeSiteIncident(),incidentBanner=incident?`<div class="incident-banner"><strong>${incident.kind} · fleet offline</strong><span>${region().name} / ${facility().name} · estimated restoration ${dateFmt(incident.until)} · ${Math.max(0,Math.ceil((incident.until-state.time)/DAY))} simulation days remaining</span><button class="action small" data-action="tab" data-value="facilities">Open Operations</button></div>`:"",settlementBanner=state.pendingSettlement&&state.settlementSaleMode?`<div class="status-banner settlement-sale-banner"><strong>Settlement paused · ${fmtUsd(Math.max(0,state.pendingSettlement.due-state.cash))} short</strong><span>Deposit self-held BTC onto an exchange and sell it there — the bill clears automatically once cash covers it.</span><div class="push actions"><button class="action small primary" data-action="tab" data-value="market">Open Market</button><button class="action small" data-action="cancel-settlement-sale">Choose a different rescue</button></div></div>`:"",forecast=!state.pendingSettlement&&state.started?settlementForecast():null,forecastBanner=forecast&&forecast.cashAfter<0?`<div class="status-banner forecast-warning-banner"><strong>Cash shortfall ahead · ${fmtUsd(-forecast.cashAfter)} short</strong><span>At today's burn rate, the bill due ${dateFmt(forecast.dueAt,true)} (${fmtUsd(forecast.estimated)}) won't be covered by current cash. Raise fiat now, or the month-end settlement will force a rescue.</span><div class="push actions"><button class="action small primary" data-action="tab" data-value="market">Open Market</button></div></div>`:"",exposureBanners=EXPOSURE_WARNINGS.filter(w=>state.time>=at(w.date)&&state.time<at(EVENTS.find(e=>e.id===w.eventId)?.date||0)&&(w.wallet?state.wallets[w.wallet]>0:state.region===w.region)).map(w=>`<div class="status-banner exposure-warning-banner"><strong>${w.title}</strong><span>${w.wallet?`${fmtBtc(state.wallets[w.wallet])} exposed on ${walletName(w.wallet)}`:`${region().name} exposure`}</span><div class="push actions"><button class="action small primary" data-action="tab" data-value="${w.wallet?"market":"facilities"}">${w.wallet?"Open Market":"Open Facilities"}</button></div></div>`).join("");
   document.getElementById("app").innerHTML=`<div class="app">${renderHeader()}${banner}${incidentBanner}${settlementBanner}${forecastBanner}${exposureBanners}<div class="shell"><main class="main">${nav()}<div class="content">${content(revision)}</div></main>${sidebar()}</div><footer class="footer"><span>Historical simulation · recorded, derived and modelled data are labelled separately · not financial advice</span><span><button data-action="story-pause">Story pause: ${state.storyPause?"on":"off"}</button> · <button data-action="export">Export save</button> · <button data-action="import">Import save</button> · <button data-action="reset">New run</button><input id="importSave" type="file" accept="application/json,.json" hidden></span></footer></div>${!state.started?introModal():""}${state.started&&!state.walletSetup.done?walletSetupModal():""}${state.activeEvent?eventModal():""}${state.hardwareAlerts.active?hardwareReleaseModal():""}${state.pendingSettlement&&!state.settlementSaleMode?settlementModal():""}${state.ended&&!state.endDismissed?endModal():""}${toast?toastMarkup(toast):""}${faucet?faucetMarkup(faucet):""}`;
   if(pendingTransaction)document.getElementById("app").insertAdjacentHTML("beforeend",transactionConfirmationModal());
-  if(keepPosition){window.scrollTo({left:scrollX,top:scrollY,behavior:"instant"});requestAnimationFrame(()=>{window.scrollTo({left:scrollX,top:scrollY,behavior:"instant"});app.style.minHeight=""})}else app.style.minHeight="";
+  if(keepPosition){window.scrollTo({left:scrollX,top:scrollY,behavior:"instant"});restoreScrollAnchor(anchor);requestAnimationFrame(()=>{app.style.minHeight=""})}else app.style.minHeight="";
+}
+function scrollAnchorCards(){return [...document.querySelectorAll(".content .card, .content section")]}
+function scrollAnchorKey(card){
+  // Index is useless here: the whole point is that cards get inserted and
+  // removed above the reader. Key on the heading, which survives a rebuild.
+  const heading=card.querySelector("h1,h2,h3,h4");
+  const text=heading&&heading.textContent?heading.textContent.trim().slice(0,60):"";
+  return text||String(card.className||"").trim().slice(0,60);
+}
+function captureScrollAnchor(){
+  const cards=scrollAnchorCards(),top=window.scrollY||document.documentElement.scrollTop||0;
+  for(let i=0;i<cards.length;i++){
+    const rect=cards[i].getBoundingClientRect();
+    if(rect.bottom>4)return{key:scrollAnchorKey(cards[i]),index:i,offset:rect.top,scroll:top};
+  }
+  return{key:"",index:-1,offset:0,scroll:top};
+}
+function restoreScrollAnchor(anchor){
+  if(!anchor)return;
+  const apply=()=>{
+    const cards=scrollAnchorCards();
+    let card=anchor.key?cards.find(c=>scrollAnchorKey(c)===anchor.key):null;
+    if(!card&&anchor.index>=0)card=cards[anchor.index];
+    if(!card){window.scrollTo({left:0,top:anchor.scroll,behavior:"instant"});return}
+    const delta=card.getBoundingClientRect().top-anchor.offset;
+    if(Math.abs(delta)>1)window.scrollBy({left:0,top:delta,behavior:"instant"});
+  };
+  apply();
+  requestAnimationFrame(apply);
 }
 function renderMineContent(){
   if(activeTab!=="mine")return render();
   const host=document.querySelector(".content");if(!host)return render();
-  const scrollX=window.scrollX,scrollY=window.scrollY,keepPosition=scrollY>0,previousHeight=host.offsetHeight;
+  const scrollY=window.scrollY||document.documentElement.scrollTop||0,keepPosition=scrollY>0,previousHeight=host.offsetHeight;
+  const anchor=keepPosition?captureScrollAnchor():null;
   if(keepPosition)host.style.minHeight=`${previousHeight}px`;
-  const revision=++renderRevision;host.innerHTML=mine();
-  setTimeout(()=>{
-    if(revision!==renderRevision||activeTab!=="mine"){host.style.minHeight="";return}
-    enhanceMine();refreshMinePricing();
-    if(keepPosition){window.scrollTo({left:scrollX,top:scrollY,behavior:"instant"});requestAnimationFrame(()=>{window.scrollTo({left:scrollX,top:scrollY,behavior:"instant"});host.style.minHeight=""})}else host.style.minHeight="";
-  },0);
+  ++renderRevision;
+  // Build, enhance and restore position in one synchronous task. Deferring the
+  // enhancement let the browser paint the short un-enhanced tab first, which
+  // is what made a fault notification visibly kick the page down.
+  host.innerHTML=mine();
+  enhanceMine();refreshMinePricing();
+  if(keepPosition){restoreScrollAnchor(anchor);requestAnimationFrame(()=>{host.style.minHeight=""})}
+  else host.style.minHeight="";
   refreshLive();
 }
