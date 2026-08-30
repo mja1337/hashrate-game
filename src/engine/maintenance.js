@@ -105,7 +105,7 @@ function advanceMaintenance(){
           const surcharge=Math.round((job.labor||0)*.15);
           if(surcharge>0&&state.cash>=surcharge){state.cash-=surcharge;note+=` · +${fmtUsd(surcharge)} callback fee`}
           log(`${h?.name||job.id} · ${stage.name} complication`,note,"fleet");
-          showToast("Repair complication",`${h?.name||job.id}: ${note}. +${(delay/DAY).toFixed(1)} day${delay/DAY>=1.05?"s":""}.`,"bad","mine");
+          showToast("Repair delayed",`${h?.name||job.id}: ${note}. Completion moves back ${(delay/DAY).toFixed(1)} day${delay/DAY>=1.05?"s":""}; review the job and any newly discovered fault.`,"bad","mine");
           renderFullQueued=true;
           break;
         }
@@ -121,12 +121,12 @@ function advanceMaintenance(){
       const boosted=Math.min(100,maintenanceCondition(h)+Math.max(6,20*repaired/Math.max(1,state.hardware[job.id]||1)));
       state.maintenance.condition[job.id]=hardwareFaultCount(h)>0?boosted:Math.max(70,boosted);
       awardXp((12+6*Math.log2(1+repaired))*(job.contracted?1.5:1),"repair");log(`Service completed: ${h?.name||job.id}`,`${repaired} ${partName}${repaired===1?"":"s"} replaced · ${job.contracted?"serviced by you":`${job.crew}-technician crew`}`);
-      showToast("Service completed",`${repaired} × ${h?.name||"miner"} ${partName.toLowerCase()} swap finished.`,"info","mine");
+      const remaining=hardwareFaultCount(h);showToast("Part replacement complete",`${repaired} × ${h?.name||"miner"} ${partName.toLowerCase()} swap finished.${remaining?` ${remaining} other fault${remaining===1?" remains":"s remain"} to repair.`:" The serviced units can return to mining."}`,"info","mine");
     }else{
       state.maintenance.faultsByPart[job.id]={};
       state.maintenance.condition[job.id]=Math.min(100,maintenanceCondition(h)+Math.max(18,60*repaired/Math.max(1,state.hardware[job.id]||1)));
       awardXp((12+6*Math.log2(1+repaired))*(job.contracted?1.5:1),"repair");log(`Service completed: ${h?.name||job.id}`,`${repaired} unit${repaired===1?"":"s"} repaired · ${job.contracted?"serviced by you":`${job.crew}-technician crew`}`);
-      showToast("Service completed",`${repaired} × ${h?.name||"miner"} returned to service.`,"info","mine");
+      showToast("Fleet service complete",`${repaired} × ${h?.name||"miner"} returned to service with restored condition. Check temperature and load before pushing the fleet again.`,"info","mine");
     }
     return false;
   });
@@ -143,7 +143,7 @@ function advanceMaintenance(){
       for(let i=0;i<failures;i++){const part=pickWeightedPart(weights);byPart[part]=(byPart[part]||0)+1;gained[part]=(gained[part]||0)+1}
       const detail=Object.entries(gained).map(([part,count])=>`${count}× ${PART_FAULT_LABELS[part]||sparePart(part)?.name||part}`).join(" · ");
       log(`${h.name} fault detected`,`${detail} · ${roomTemperatureC().toFixed(0)}°C room`,`fleet`);
-      showToast("Fleet fault",`${detail} on ${h.name} at ${roomTemperatureC().toFixed(0)}°C. Cool the room or replace the part on the Mine floor.`,"bad","mine");
+      showToast("Mining capacity lost to a fault",`${detail} failed on ${h.name} at ${roomTemperatureC().toFixed(0)}°C. Affected units stopped hashing; cool the room and schedule the named part replacement in Mine.`,"bad","mine");
       renderFullQueued=true;
     }
   });
@@ -156,7 +156,7 @@ function advanceMaintenance(){
       const byPart=state.maintenance.faultsByPart[h.id]||(state.maintenance.faultsByPart[h.id]={});
       byPart[extra]=(byPart[extra]||0)+1;
       log(`${h.name} fault spreading`,`Ignored damage reaches ${PART_FAULT_LABELS[extra]||sparePart(extra)?.name||extra}`,"fleet");
-      showToast("Fault spreading",`An unrepaired fault on ${h.name} has spread to ${sparePart(extra)?.name||extra}. Service it before it compounds further.`,"bad","mine");
+      showToast("An unrepaired fault spread",`${h.name} now also needs ${sparePart(extra)?.name||extra}. More capacity is offline and the new part must be added to the repair plan.`,"bad","mine");
       renderFullQueued=true;
     }
   });
@@ -225,7 +225,7 @@ function selfRepairMistake(job,message){
     if(extra!==job.part){const byPart=state.maintenance.faultsByPart[job.id]||(state.maintenance.faultsByPart[job.id]={});byPart[extra]=(byPart[extra]||0)+1;collateral=sparePart(extra)?.name||extra}
   }
   log(`${h?.name||job.id} damaged during self-service`,`${collateral?`${collateral} broken · `:""}condition -${drop.toFixed(1)}%${hasSkill("benchskills")?"":" · bench repair skills would cut this risk"}`,"fleet");
-  showToast("You damaged it",`${message} ${collateral?`You broke a ${collateral.toLowerCase()} doing it — that is a new fault to fix.`:`Condition dropped ${drop.toFixed(1)}%.`}`,"bad","mine");
+  showToast("The self-repair caused damage",`${message} ${collateral?`A ${collateral.toLowerCase()} also broke and is now a separate fault.`:`Machine condition fell ${drop.toFixed(1)}%.`} The current repair remains on your bench.`,"bad","mine");
   renderFullQueued=true;
 }
 function completeRepairWork(job,successNote,duringTick=false){

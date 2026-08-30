@@ -1,13 +1,7 @@
 "use strict";
 
-/* SIMULATION LAYER — deterministic state and economics. */
+/* SIMULATION LAYER — state and economics. */
 const SAVE_KEY="hashrate-genesis-save-v1";
-const STARTING_MODES=[
-  {id:"easy",label:"Easy",start:GENESIS,desc:"Start at the Genesis Block itself, 03 January 2009 — the earliest possible day, with the longest runway to compound."},
-  {id:"medium",label:"Standard",start:START,desc:"Begin on the original campaign opening: 03 February 2009, a month after Genesis."},
-  {id:"hard",label:"Hard",start:1359417600000,desc:"Join as the first ASICs ship, 29 January 2013. CPUs, GPUs and FPGAs are already obsolete for competitive mining."},
-  {id:"impossible",label:"Impossible",start:1735689600000,desc:"Start 01 January 2025 near peak difficulty, with under 20 months before the historical record ends. Good luck."}
-];
 const STARTING_LIQUIDITY_MIN=1500,STARTING_LIQUIDITY_MAX=1500000,STARTING_LIQUIDITY_STEP=500;
 function clampStartingLiquidity(value){const numeric=Number(value);return Math.min(STARTING_LIQUIDITY_MAX,Math.max(STARTING_LIQUIDITY_MIN,Number.isFinite(numeric)?Math.round(numeric):STARTING_LIQUIDITY_MIN))}
 function startingMode(id){return STARTING_MODES.find(mode=>mode.id===id)||STARTING_MODES[0]}
@@ -22,7 +16,7 @@ const initialState=()=>{const seed=Math.floor(Math.random()*4294967296);return{
   treasuryPolicy:"cover",pendingSettlement:null,endReason:null,
   operator:{eras:{},periodMined:0,periodUptime:0,periodDays:0,lastRevenueUsd:0,totalMonths:0,solventMonths:0,profitableMonths:0,competitiveMonths:0,bridgeLoans:0,restructures:0},
   xp:{total:0,level:1,peakLevel:1,bestDifficulty:0,shares:0,sources:{shares:0,record:0,deploy:0,repair:0}},
-  knowledge:0,nextKnowledge:5,learning:null,completedLearning:[],maintenance:{condition:{},faults:{},faultsByPart:{},selfRepairs:{},parts:0,inventory:{fan:0,hashboard:0,powerPcb:0,coolantPump:0,coolingManifold:0,laptopfan:0,asicfan:0,hashboardearly:0,hashboardmodern:0},inventoryMigrated:true,orders:[],serviceJobs:[]},procurementOrders:[],inactiveHardware:{},commissioningJobs:[],decommissionedHardware:{},relocationJob:null,facilityUpgradeJob:null,ops:{firmwarePatchedUntil:0,hijackUntil:0,outageUntil:0,powerOutageUntil:0,venueFreezes:{},riskMonth:""},strategy:{mstr:0,strk:0,strf:0,strd:0,strc:0,yieldEarned:0},sandbox:false,contract:"standard",staff:[],projectLoan:0,insured:false,milestones:[],milestoneLog:[],walletSetup:{done:false,step:0,rolls:[],keyHex:""},walletSoftware:0,donations:[],
+  knowledge:0,nextKnowledge:5,learning:null,completedLearning:[],maintenance:{condition:{},faults:{},faultsByPart:{},selfRepairs:{},parts:0,inventory:{fan:0,hashboard:0,powerPcb:0,coolantPump:0,coolingManifold:0,laptopfan:0,asicfan:0,hashboardearly:0,hashboardmodern:0},inventoryMigrated:true,orders:[],serviceJobs:[]},procurementOrders:[],inactiveHardware:{},commissioningJobs:[],decommissionedHardware:{},relocationJob:null,facilityUpgradeJob:null,ops:{firmwarePatchedUntil:0,hijackUntil:0,outageUntil:0,powerOutageUntil:0,venueFreezes:{},riskMonth:""},strategy:{mstr:0,strk:0,strf:0,strd:0,strc:0,yieldEarned:0},sandbox:false,contract:"standard",staff:[],projectLoan:0,insured:false,milestones:[],milestoneLog:[],walletSetup:{done:false,step:0,rolls:[],keyHex:""},guidance:{dismissed:[]},walletSoftware:0,donations:[],
   blocks:0,mined:0,nodeDays:0,uptimeDays:0,powerSpent:0,nextMilestone:1000,
   connectivity:"fixed",history:[],activity:[],activitySeq:0,log:[{time:START,text:"Client synced to the network tip",amount:"~block "+approxHeight(START)}]
 }};
@@ -100,6 +94,7 @@ state.nodeStorage=Math.max(50,Number(state.nodeStorage)||50);state.nodePruned=!!
 state.staff=Array.isArray(state.staff)?state.staff:[];state.contract=POWER_CONTRACTS.some(x=>x.id===state.contract)?state.contract:"standard";state.connectivity=CONNECTIVITY_PLANS.some(x=>x.id===state.connectivity)?state.connectivity:"fixed";state.projectLoan=Math.max(0,Number(state.projectLoan)||0);state.milestones=Array.isArray(state.milestones)?state.milestones:[];
 state.billLedger=Object.assign({energy:0,rent:0,internet:0,staff:0,insurance:0,nodeNetwork:0,other:0},state.billLedger||{});Object.keys(state.billLedger).forEach(k=>state.billLedger[k]=Math.max(0,Number(state.billLedger[k])||0));const migratedLedgerTotal=Object.values(state.billLedger).reduce((sum,value)=>sum+value,0);if(state.bill>migratedLedgerTotal+1e-8)state.billLedger.other+=state.bill-migratedLedgerTotal;
 state.donations=Array.isArray(state.donations)?state.donations:[];
+state.guidance=Object.assign({dismissed:[]},state.guidance||{});state.guidance.dismissed=Array.isArray(state.guidance.dismissed)?[...new Set(state.guidance.dismissed.map(String))]:[];
 state.skills=Array.isArray(state.skills)?[...new Set(state.skills.filter(id=>SKILLS.some(s=>s.id===id)))]:[];
 state.seen=Array.isArray(state.seen)?state.seen:[];
 state.milestones=Array.isArray(state.milestones)?state.milestones:[];
@@ -317,8 +312,8 @@ function treasurySaleForSettlement(due){
   btc=Math.min(state.wallets.hot,btc);if(btc<=0)return 0;state.wallets.hot-=btc;const proceeds=btc*price*(1-fee);state.cash+=proceeds;log(`Treasury policy: ${policy.name}`,`${fmtBtc(btc)} sold · +${fmtUsd(proceeds)}`);return proceeds;
 }
 function finishMonthlySettlement(kind="cash",automatic=false){
-  const pending=state.pendingSettlement;if(!pending||state.cash+1e-8<pending.due)return false;state.cash-=pending.due;const interest=pending.loanInterest||0;log("Operating bill settled",fmtUsd(pending.due));if(interest>0)log("Project finance interest",fmtUsd(interest));recordOperatorMonth(pending.snapshot,kind==="cash"||kind==="policy");state.bill=0;state.billLedger=blankBillLedger();state.lastMonth=pending.month;state.pendingSettlement=null;state.debt=0;state.power=!state.policyLock;clearTimeout(toastTimer);toast=null;
-  let hardwareOpened=false;if(!state.ended){state.speed=pending.resumeSpeed||state.returnSpeed||0;hardwareOpened=activateNextHardwareAlert();setTimer()}save();if(automatic&&!hardwareOpened){refreshLive();requestAnimationFrame(()=>{refreshDashboardVisuals();refreshMinePricing()})}else render();return true;
+  const pending=state.pendingSettlement;if(!pending||state.cash+1e-8<pending.due)return false;const rescueFeedback=settlementRescueFeedback(kind,pending.due,state.cash-pending.due);state.cash-=pending.due;const interest=pending.loanInterest||0;log("Operating bill settled",fmtUsd(pending.due));if(interest>0)log("Project finance interest",fmtUsd(interest));recordOperatorMonth(pending.snapshot,kind==="cash"||kind==="policy");state.bill=0;state.billLedger=blankBillLedger();state.lastMonth=pending.month;state.pendingSettlement=null;state.debt=0;state.power=!state.policyLock;clearTimeout(toastTimer);toast=null;
+  let hardwareOpened=false;if(!state.ended){state.speed=pending.resumeSpeed||state.returnSpeed||0;hardwareOpened=activateNextHardwareAlert();setTimer()}save();if(automatic&&!hardwareOpened){refreshLive();requestAnimationFrame(()=>{refreshDashboardVisuals();refreshMinePricing()})}else render();if(!automatic&&rescueFeedback)setTimeout(()=>showToast(rescueFeedback[0],rescueFeedback[1],"warning","finance"),0);return true;
 }
 function queueMonthlySettlement(due,month,loanInterest){
   const snapshot=settlementSnapshot(due,month),resumeSpeed=state.speed||state.returnSpeed||0;treasurySaleForSettlement(due);state.pendingSettlement={due,month,loanInterest,snapshot,resumeSpeed};
@@ -347,7 +342,7 @@ function takeBridgeFinance(){
 }
 function enterReceivership(){
   const p=state.pendingSettlement;if(!p)return;state.operator.restructures++;const haircut=Math.min(.25,.1+(state.operator.restructures-1)*.05),btcSeized=controlled()*haircut;sellControlledBtc(btcSeized);let machines=0;HARDWARE.filter(h=>!h.permanent).forEach(h=>{const qty=Math.ceil((state.hardware[h.id]||0)*.25);state.hardware[h.id]=Math.max(0,(state.hardware[h.id]||0)-qty);machines+=qty});recordOperatorMonth(p.snapshot,false);state.bill=0;state.billLedger=blankBillLedger();state.debt=0;state.cash=0;state.lastMonth=p.month;state.pendingSettlement=null;state.power=false;clearTimeout(toastTimer);toast=null;log("Receivership",`${Math.round(haircut*100)}% of self-held BTC and ${machines} miners seized`);
-  if(state.operator.restructures>=3){state.ended=true;state.endReason="receivership";state.speed=0;log("Scored campaign ended","third receivership");recordCareerRun()}else state.speed=p.resumeSpeed||state.returnSpeed||0;setTimer();save();render();
+  if(state.operator.restructures>=3){state.ended=true;state.endReason="receivership";state.speed=0;log("Scored campaign ended","third receivership");recordCareerRun()}else state.speed=p.resumeSpeed||state.returnSpeed||0;setTimer();save();render();if(state.operator.restructures<3)setTimeout(()=>showToast("Receivership kept the run alive",`${fmtBtc(btcSeized)} and ${machines} miner${machines===1?" was":"s were"} seized. Mining remains off; this is strike ${state.operator.restructures} of 3.`,"warning","finance"),0);
 }
 function strategySecurity(id){return STRATEGY_SECURITIES.find(x=>x.id===id)}
 function strategyPrice(id,t=state.time){const s=strategySecurity(id);if(!s||t<at(s.date))return 0;const ratio=priceAt(t)/priceAt(at(s.date));return Math.max(1,s.base*(1+s.btcBeta*(ratio-1)))}

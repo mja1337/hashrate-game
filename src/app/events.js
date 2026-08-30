@@ -4,6 +4,7 @@ let recentTouchTab=null;
 document.getElementById("app").addEventListener("click",e=>{
   const b=e.target.closest("[data-action]");if(!b||b.disabled)return;const a=b.dataset.action,v=b.dataset.value,id=b.dataset.id,part=b.dataset.part;
   if(a==="tab"&&recentTouchTab&&recentTouchTab.value===v&&Date.now()-recentTouchTab.at<800){recentTouchTab=null;return}
+  if(a==="blocked-help"){showToast("Why this is unavailable",b.dataset.help||"This action is not available in the current state.");return}
   if(a==="percent-snap"){updateTradePercentage(id,Number(v));return}
   if(a==="close-hardware-alert"){closeHardwareAlert(false);return}
   if(a==="inspect-hardware-release"){closeHardwareAlert(true);return}
@@ -14,6 +15,7 @@ document.getElementById("app").addEventListener("click",e=>{
   if(a==="activity-filter"){activityFilter=ACTIVITY_CATEGORIES.includes(v)?v:"all";activityLimit=100;render();return}
   if(a==="activity-more"){activityLimit+=100;render();return}
   if(a==="starting-mode"){if(STARTING_MODES.some(mode=>mode.id===v)){introDifficulty=v;render()}return}
+  if(a==="dismiss-guidance"){if(id&&!state.guidance.dismissed.includes(id)){state.guidance.dismissed.push(id);save()}render();return}
   if(a==="mobile-menu"){mobileMenuOpen=!mobileMenuOpen;render(false);return}
   if(a==="mobile-menu-section"){mobileMenuSection=v;mobileMenuOpen=true;render(false);return}
   if(a==="begin"){const mode=startingMode(introDifficulty),liquidity=clampStartingLiquidity(introStartingCash);state.cash=liquidity;state.startingCash=liquidity;state.time=mode.start;state.campaignStart=mode.start;state.lastMonth=new Date(mode.start).toISOString().slice(0,7);state.difficulty=mode.id;state.started=true;state.seen=["genesis"];log("Campaign start selected",`${mode.label} · ${dateFmt(mode.start)} · ${fmtUsd(liquidity)} starting liquidity`,"operations");awardLearning(LEARNING.find(x=>x.id==="cryptomailinglist"));if(!state.startingGrant){state.points+=1;state.startingGrant=true;log("Genesis operator grant","+1 skill point")}save();setTimer();render()}

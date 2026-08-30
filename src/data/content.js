@@ -1,5 +1,11 @@
 "use strict";
 
+const STARTING_MODES=[
+  {id:"easy",label:"Easy",start:GENESIS,desc:"Begin with Bitcoin's first block on 03 January 2009. You get the longest campaign and learn each mining era as it arrives."},
+  {id:"medium",label:"Standard",start:START,desc:"Begin on 03 February 2009 with the original campaign timeline: early enough to grow from one laptop, without starting at block zero."},
+  {id:"hard",label:"Hard",start:1359417600000,desc:"Begin on 29 January 2013 as specialised ASIC miners arrive. Your laptop is already outclassed, so upgrading quickly matters."},
+  {id:"impossible",label:"Impossible",start:1735689600000,desc:"Begin on 01 January 2025 against an industrial network. You have less than 20 months of recorded history to build a viable operation."}
+];
 const BALANCE_SCENARIOS=[
   {name:"Genesis hobbyist",date:"2009-02-03",hardware:{laptop:1},facility:"home",region:"na",cash:1500,maxShare:.02},
   {name:"GPU garage",date:"2011-06-30",hardware:{gpurig:2},facility:"garage",region:"na",cash:10000,maxShare:.01},

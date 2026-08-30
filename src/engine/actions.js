@@ -20,7 +20,7 @@ function hardwarePurchaseStatusHtml(h){
 function plannedFleetFits(id,qty){const projection=plannedFleetProjection(id,qty);return projection.potentialKw<=projection.cap&&projection.space<=facility().space}
 function facilityLimitMessage(id){const h=HARDWARE.find(x=>x.id===id),projection=plannedFleetProjection(id,1),f=facility(),powerOver=Math.max(0,projection.kw-projection.cap),spaceOver=Math.max(0,projection.space-f.space),limits=[];if(powerOver>0)limits.push(`${powerOver.toFixed(2)} kW over electrical capacity`);if(spaceOver>0)limits.push(`${spaceOver.toFixed(0)} floor units over capacity`);const reserved=state.procurementOrders.reduce((sum,o)=>sum+Number(o.qty||0),0);return `Cannot reserve 1 × ${h?.name||"miner"}: ${limits.join(" and ")||"facility capacity reached"}. ${reserved?`${reserved} ordered miner${reserved===1?" is":"s are"} already reserving capacity. `:""}Upgrade the facility in Facilities or sell/cancel capacity before ordering.`}
 function placeHardwareOrder(id,qty,btcCost=0){const h=HARDWARE.find(x=>x.id===id),terms=procurementTerms(h);if(!plannedFleetFits(id,qty))return showToast("Facility limit","Your installed fleet plus outstanding orders would exceed capacity.");state.procurementOrders.push({id,qty,due:state.time+terms.days*DAY,risk:terms.risk,partialRisk:terms.partialRisk,vendor:terms.vendor,slips:0,label:terms.label});const paid=btcCost>0?fmtBtc(btcCost):fmtUsd(hardwareUnitCost(h)*qty);log(`Ordered ${qty} × ${h.name}`,`-${paid} · ${terms.vendor} · ${terms.days}-day lead time`,"fleet");showToast("Miner order placed",`${qty} × ${h.name} via ${terms.vendor}: ETA ${dateFmt(state.time+terms.days*DAY)} · ${Math.round(terms.risk*100)}% delay risk.`,"info","mine");save();renderMineContent()}
-function advanceProcurement(){state.procurementOrders=state.procurementOrders.filter(o=>{if(o.due>state.time)return true;const h=HARDWARE.find(x=>x.id===o.id);if(!h)return false;if((o.slips||0)<2&&nextRand()<(o.risk||0)){const delay=14+Math.floor(nextRand()*42);o.due=state.time+delay*DAY;o.slips=(o.slips||0)+1;log(`${h.name} delivery slipped`,`${o.vendor||"supplier"} · ${delay} additional days`);showToast("Delivery delayed",`${h.name} shipment slipped by ${delay} days (${o.label}).`,"info","mine");return true}let delivered=Number(o.qty);if(delivered>1&&nextRand()<(o.partialRisk||0)){delivered=Math.max(1,Math.floor(delivered*(.45+nextRand()*.3)));const remaining=Number(o.qty)-delivered;state.procurementOrders.push({...o,qty:remaining,due:state.time+(14+Math.floor(nextRand()*28))*DAY,slips:2,label:`${o.label} · balance shipment`});log(`${h.name} partially delivered`,`${delivered} received · ${remaining} remain with ${o.vendor||"supplier"}`)}state.inactiveHardware[o.id]=(state.inactiveHardware[o.id]||0)+delivered;log(`Miner delivery received`,`${delivered} × ${h.name} awaiting activation`);showToast("Miners have arrived",`${delivered} × ${h.name} is staged.${delivered<Number(o.qty)?" The remaining allocation is still in transit.":""}`,"info","mine");renderFullQueued=true;return false})}
+function advanceProcurement(){state.procurementOrders=state.procurementOrders.filter(o=>{if(o.due>state.time)return true;const h=HARDWARE.find(x=>x.id===o.id);if(!h)return false;if((o.slips||0)<2&&nextRand()<(o.risk||0)){const delay=14+Math.floor(nextRand()*42);o.due=state.time+delay*DAY;o.slips=(o.slips||0)+1;log(`${h.name} delivery slipped`,`${o.vendor||"supplier"} · ${delay} additional days`);showToast("Delivery delayed",`${h.name} shipment slipped by ${delay} days (${o.label}).`,"warning","mine");return true}let delivered=Number(o.qty);if(delivered>1&&nextRand()<(o.partialRisk||0)){delivered=Math.max(1,Math.floor(delivered*(.45+nextRand()*.3)));const remaining=Number(o.qty)-delivered;state.procurementOrders.push({...o,qty:remaining,due:state.time+(14+Math.floor(nextRand()*28))*DAY,slips:2,label:`${o.label} · balance shipment`});log(`${h.name} partially delivered`,`${delivered} received · ${remaining} remain with ${o.vendor||"supplier"}`)}state.inactiveHardware[o.id]=(state.inactiveHardware[o.id]||0)+delivered;log(`Miner delivery received`,`${delivered} × ${h.name} awaiting activation`);showToast("Miners have arrived",`${delivered} × ${h.name} is staged.${delivered<Number(o.qty)?" The remaining allocation is still in transit.":""}`,"info","mine");renderFullQueued=true;return false})}
 function activateHardware(id){const h=HARDWARE.find(x=>x.id===id),qty=Math.max(0,Math.floor(state.inactiveHardware?.[id]||0));if(!h||qty<1)return;const trial=JSON.parse(JSON.stringify(state));trial.hardware[id]=(trial.hardware[id]||0)+qty;if(!fleet(trial).within)return showToast("Commissioning blocked",`${qty} × ${h.name} no longer fits the active facility. Free capacity or upgrade the site.`);const days=Math.max(1,Math.ceil(qty/(hasStaff("fieldtech")?40:20)));state.inactiveHardware[id]=0;state.commissioningJobs.push({id,qty,due:state.time+days*DAY});log(`Commissioning started: ${h.name}`,`${qty} units · ${days} days` ,"fleet");showToast("Machines being commissioned",`${qty} × ${h.name} is being racked, configured and tested over ${days} simulation day${days===1?"":"s"}.`,"info","mine");save();renderMineContent()}
 function decommissionHardware(id,requested=1){const h=HARDWARE.find(x=>x.id===id),owned=state.hardware[id]||0;if(!h||h.permanent||owned<1)return;const qty=Math.min(owned,Math.max(1,Math.floor(Number(requested)||1)));state.hardware[id]-=qty;state.poweredDownHardware[id]=Math.min(state.poweredDownHardware[id]||0,state.hardware[id]);state.decommissionedHardware[id]=(state.decommissionedHardware[id]||0)+qty;log(`Retired ${qty} × ${h.name}`,"Isolated from power and ready for resale","fleet");showToast("Machines retired",`${qty} × ${h.name} is in storage and ready to sell.`,"info","mine");save();renderMineContent()}
 function setHardwarePower(id,powerOn,requested=1){
@@ -58,13 +58,13 @@ function sellHardware(id,requested=1){
   const h=HARDWARE.find(x=>x.id===id),owned=state.decommissionedHardware?.[id]||0;if(!h||owned<1||h.permanent)return showToast("Power down required",`Power down ${h?.name||"this hardware"} before selling it.`);
   let qty=Math.max(1,Math.floor(Number(requested)||1));qty=Math.min(qty,owned);
   const value=resaleHardwareValue(h)*qty;state.decommissionedHardware[id]-=qty;state.cash+=value;
-  log(`Sold ${qty} × ${h.name}`,`+${fmtUsd(value)}`,"fleet");save();renderMineContent();
+  log(`Sold ${qty} × ${h.name}`,`+${fmtUsd(value)}`,"fleet");showToast("Miner sale complete",`${qty} × ${h.name} left the operation and ${fmtUsd(value)} is now spendable cash.`,"info","mine");save();renderMineContent();
 }
 function sellHardwareBtc(id,requested=1){
   const h=HARDWARE.find(x=>x.id===id),owned=state.decommissionedHardware?.[id]||0;if(!h||owned<1||h.permanent)return showToast("Power down required",`Power down ${h?.name||"this hardware"} before selling it.`);
   if(state.time<MARKET)return showToast("BTC resale unavailable","A quoted BTC/USD market is required to settle hardware resale in bitcoin.");
   const qty=Math.min(Math.max(1,Math.floor(Number(requested)||1)),owned),value=resaleHardwareValue(h)*qty,btc=value/priceAt(state.time);
-  state.decommissionedHardware[id]-=qty;state.wallets.hot+=btc;log(`Sold ${qty} × ${h.name}`,`+${fmtBtc(btc)} · ${fmtUsd(value)} resale value`,"fleet");save();renderMineContent();
+  state.decommissionedHardware[id]-=qty;state.wallets.hot+=btc;log(`Sold ${qty} × ${h.name}`,`+${fmtBtc(btc)} · ${fmtUsd(value)} resale value`,"fleet");showToast("Miner sale complete",`${qty} × ${h.name} left the operation and ${fmtBtc(btc)} is now in the hot wallet.`,"info","mine");save();renderMineContent();
 }
 function resaleHardwareValue(h){
   const age=Math.max(0,(state.time-at(h.date))/DAY/365),halfLife=h.era==="HYDRO ASIC"?4:h.era==="ASIC"?3:h.era==="FPGA"?2:1.5;
@@ -99,7 +99,7 @@ function takeSpeculation(id,fraction){
   const stake=state.wallets.hot*fraction;if(stake<=0)return showToast("No spendable BTC","Speculative launches can only use BTC in your hot wallet.");
   state.wallets.hot-=stake;state.speculations.push(id);
   if(nextRand()<s.chance){const returnBtc=stake*s.payout;state.wallets.hot+=returnBtc;log(`${s.name} paid off`,`+${fmtBtc(returnBtc-stake)}`);showToast("Speculation paid off",`${s.name} returned ${s.payout.toFixed(1)}× your BTC stake.`)}
-  else{log(`${s.name} went to zero`,`-${fmtBtc(stake)}`);showToast("Speculation lost",`${s.name} wiped out the BTC you allocated.`)}
+  else{log(`${s.name} went to zero`,`-${fmtBtc(stake)}`);showToast("Speculation lost",`${s.name} wiped out the BTC you allocated. The stake cannot be recovered.`,"bad")}
   save();render();
 }
 function donateBtc(id,fraction){
@@ -227,7 +227,7 @@ function venueTradeFee(bucket){return bucket==="mtgox"?.008:bucket==="frontier"?
 function buyBtc(bucket,fraction){
   if(state.time<MARKET)return;fraction=clamp(Number(fraction)||0,0.01,1);const usd=state.cash*fraction;if(usd<1)return showToast("Order too small","Increase the selected percentage so the buy order is at least $1.");
   const fee=venueTradeFee(bucket);
-  const btc=usd*(1-fee)/priceAt(state.time);state.cash-=usd;state.wallets[bucket]+=btc;log(bucket==="etf"?"Bought ETF exposure":"Bought bitcoin",`+${fmtBtc(btc)} · -${fmtUsd(usd)} at ${fmtUsd(priceAt(state.time))}`,"trade");save();render();
+  const btc=usd*(1-fee)/priceAt(state.time);state.cash-=usd;state.wallets[bucket]+=btc;log(bucket==="etf"?"Bought ETF exposure":"Bought bitcoin",`+${fmtBtc(btc)} · -${fmtUsd(usd)} at ${fmtUsd(priceAt(state.time))}`,"trade");showToast(bucket==="etf"?"ETF purchase complete":"Bitcoin purchase complete",`${fmtUsd(usd)} became ${fmtBtc(btc)} in ${walletName(bucket)}. ${fmtUsd(state.cash)} cash remains.`,"info","market");save();render();
 }
 function sellBtc(bucket,fraction){
   if(venueFrozen(bucket))return showToast("Withdrawals frozen",`${walletName(bucket)} has paused withdrawals until ${dateFmt(state.ops.venueFreezes[bucket])}.`);
@@ -235,13 +235,13 @@ function sellBtc(bucket,fraction){
   const fee=venueTradeFee(bucket);
   const usd=btc*priceAt(state.time)*(1-fee);state.wallets[bucket]-=btc;state.cash+=usd;log(bucket==="etf"?"Sold ETF exposure":"Sold bitcoin",`-${fmtBtc(btc)} · +${fmtUsd(usd)} at ${fmtUsd(priceAt(state.time))}`,"trade");
   if(state.settlementSaleMode&&state.pendingSettlement&&state.cash+1e-8>=state.pendingSettlement.due){state.settlementSaleMode=false;finishMonthlySettlement("btc-rescue");return}
-  save();render();
+  showToast(bucket==="etf"?"ETF sale complete":"Bitcoin sale complete",`${fmtBtc(btc)} became ${fmtUsd(usd)} after fees. ${fmtUsd(state.cash)} cash is now available.`,"info","market");save();render();
 }
 function transfer(from,to,fraction){
   if(venueFrozen(from))return showToast("Withdrawals frozen",`${walletName(from)} has paused withdrawals until ${dateFmt(state.ops.venueFreezes[from])}.`);
   fraction=clamp(Number(fraction)||0,0.01,1);const gross=state.wallets[from]*fraction;if(gross<=0)return;
   const baseFee=nodeOnline()&&state.nodeMode==="relay"?0.000035:nodeOnline()&&state.nodeMode!=="pruned"?0.00005:0.0002,fee=baseFee*(hasSkill("multisig")?.8:1);if(gross<=fee)return showToast("Transfer too small",`The selected ${formatPercent(fraction*100)}% is not enough to cover the ${fmtBtc(fee)} network fee.`);const btc=gross-fee;
-  state.wallets[from]-=gross;state.wallets[to]+=btc;log(`Moved BTC: ${walletName(from)} → ${walletName(to)}`,`${fmtBtc(gross)} sent · -${fmtBtc(fee)} fee`);save();render();
+  state.wallets[from]-=gross;state.wallets[to]+=btc;log(`Moved BTC: ${walletName(from)} → ${walletName(to)}`,`${fmtBtc(gross)} sent · -${fmtBtc(fee)} fee`);showToast("BTC transfer complete",`${fmtBtc(btc)} reached ${walletName(to)} after a ${fmtBtc(fee)} network fee.`,"info","custody");save();render();
 }
 const CONFIRMABLE_ACTIONS=new Set(["buy-btc","sell-btc","buy-hw","buy-hw-btc","sell-hw","sell-hw-btc","buy-strategy","sell-strategy","buy-node","buy-backup-node"]);
 function transactionPreview(button){
@@ -298,7 +298,7 @@ function startLearning(id){
 }
 function answerLearningCheck(answer){
   const item=learningItem();if(!item||!state.learning.waiting||!item.check)return;
-  const correct=Number(answer)===item.check.answer;awardLearning(item,correct?1:.6);if(!correct)showToast("Knowledge check missed",`You completed ${item.title}, but received 60% of the knowledge.`);save();render();
+  const correct=Number(answer)===item.check.answer;awardLearning(item,correct?1:.6);if(!correct)showToast("Knowledge check missed",`You completed ${item.title}, but received 60% of the available knowledge. Review the explanation before the next lesson.`,"warning","learn");save();render();
 }
 function venueAvailable(id){
   if(id==="mtgox")return state.time>=MARKET&&state.time<at("2014-02-24");
