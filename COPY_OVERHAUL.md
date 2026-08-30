@@ -383,7 +383,7 @@ This is the implementation map for the rewrite. It identifies ownership rather t
 - [x] Explain projected halvings as protocol-driven operational events, including their effect on subsidy and expected mining income, without presenting their modelled calendar dates as recorded history.
 - [x] Correct projected subsidy calculations to use whole satoshis and add boundary checks for the first post-record halving and the 100-year endpoint.
 - [x] Normalize terms, abbreviations, units, capitalization and recurring-cost notation across every primary, contextual and reference surface.
-- [ ] Add automated copy contracts for legacy terms, required help patterns, procedural/recorded labels and sandbox-halving explanations.
+- [x] Add automated copy contracts for legacy terms, required help patterns, procedural/recorded labels and sandbox-halving explanations.
 - [ ] Complete desktop and mobile editorial walkthroughs covering onboarding, the operating loop, transactions, faults, historical events, settlement, the 2026 ending, sandbox continuation and the final recap.
 
 ## Phase 2 implementation record
@@ -579,11 +579,20 @@ Verification was at DOM level rather than by eye: the Browser pane was hidden fo
 
 The settlement leg found a real bug, and not an edge case. `queueMonthlySettlement` compared cash to the bill with `>=`, while `finishMonthlySettlement` allowed a 1e-8 float tolerance for the same comparison. Under the "Cover the bill" treasury policy the game sells exactly enough BTC to meet the bill, so cash lands on the due amount to within floating-point error — and about 8% of the time it lands a hair under. Those runs paused, demanded a rescue, and rendered the shortfall as "<$0.00000001 is needed before the operation can continue." Roughly one exactly-covered settlement in twelve. Both comparisons now use the same tolerance, with a contract to keep them in step.
 
+### Layering the dense sections
+
+The chapter structure separated guidance from reference at chapter level. Inside the sections, several were still a single paragraph that opened on a formula. Nine of those now put their exact calculation behind a collapsed **Exact calculation** disclosure — or a more specific label where the hidden material is not a formula: the year-by-year damping ladder, the invention dates of each payout scheme, the fit-out and relocation costs, and the note on what the mining-floor artwork does and does not represent.
+
+What stays visible is the sentence a player actually needs. Mining now opens with "How often you win comes down to one number: your share of all the work being done" rather than with the share formula; Energy opens with the fact that you pay for every hour a machine runs, not for every reward it earns; Facilities opens with the two separate limits a site imposes.
+
+Two things were deliberately left visible rather than collapsed. The early-years damping disclosure keeps its headline and the live factor for the current run in the open, because it is a modelling admission and hiding it would defeat the point; only the numeric ladder moved. And the payout-scheme trade-off — that a 3% PPS pool lands about 9.8% behind, not 3% — stays visible, because it is the decision, not the arithmetic behind it.
+
+Disclosures remember their state through a repaint, like the chapters around them, and their summaries meet the 34 px desktop and 40 px mobile touch targets.
+
 ### Still outstanding
 
 - Copy contracts for required help patterns beyond the page-help map already covered.
 - Two legs of the walkthrough matrix: the fault to self-repair-failure to successful-repair sequence, and receivership. Both were exercised from injected state rather than driven end to end, so their copy is contract-covered but not walked.
-- Paragraph-level layering of guidance versus exact calculation inside the denser Method sections.
 
 ## Editorial review checklist
 

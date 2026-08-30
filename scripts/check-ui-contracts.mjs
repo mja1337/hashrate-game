@@ -315,7 +315,17 @@ assert(methodChapterIds.length === 8, `Method should open as eight named chapter
 assert(methodChapterIds[0] === "method-start" && methodChapterIds[7] === "method-sandbox", "Method must open on Start here and close on the procedural sandbox");
 assert(inline.includes("function methodTocHtml(chapters)") && inline.includes('data-action="method-chapter"') && inline.includes('else if(a==="method-chapter")revealMethodAnchor(id)'), "The Method table of contents is missing, or its links do not open the chapter they name");
 assert(inline.includes('<details class="method-chapter" id="${chapter.id}"') && inline.includes("method-chapter-lead"), "Method chapters are no longer collapsible, or have lost their plain-language lead");
-assert(inline.includes("const methodOpenChapters=new Set([\"method-start\"])") && inline.includes('${methodOpenChapters.has(chapter.id)?"open":""}') && inline.includes('if(e.target.classList?.contains("method-chapter"))rememberMethodChapter(e.target)'), "A chapter the reader opened must survive the next simulation tick; render() rebuilds the tab from a template and would otherwise snap it shut");
+// Exact formulas belong behind a disclosure, not in the first thing a newcomer reads.
+const methodDetails = (methodSource.match(/<details class="method-detail">/g) || []).length;
+assert(methodDetails >= 8, `Method should keep its exact calculations behind a disclosure; only ${methodDetails} sections do`);
+assert(css.includes(".method-detail{") && css.includes(".method-detail>summary{cursor:pointer") && css.includes(".method-detail>summary{min-height:40px}"), "Method detail disclosures are missing their styling or their mobile touch target");
+assert(inline.includes("function methodDetailIds(body,chapterId)") && inline.includes('e.target.classList?.contains("method-detail")'), "An opened Exact calculation must survive a repaint like the chapter around it");
+for (const heading of ["method-mining", "method-energy", "method-facilities", "method-connectivity", "method-firmware"]) {
+  const start = methodSource.indexOf(`id="${heading}"`);
+  const end = methodSource.indexOf("<h3", start + 1);
+  assert(methodSource.slice(start, end < 0 ? undefined : end).includes('<details class="method-detail">'), `The ${heading} section still puts its exact calculation in the first thing a newcomer reads`);
+}
+assert(inline.includes("const methodOpenChapters=new Set([\"method-start\"])") && inline.includes('${methodOpenChapters.has(chapter.id)?"open":""}') && inline.includes('e.target.classList?.contains("method-chapter")||e.target.classList?.contains("method-detail")'), "A chapter the reader opened must survive the next simulation tick; render() rebuilds the tab from a template and would otherwise snap it shut");
 assert(inline.includes('data-help-tab="${tab}" ${openContextHelp.has(tab)?"open":""}') && inline.includes('e.target.classList?.contains("context-help")'), "An opened Terms and help disclosure must survive a repaint for the same reason a Method chapter does");
 assert(["method-mining","method-hardware","method-maintenance","method-firmware","method-energy","method-facilities","method-connectivity","method-market","method-custody","method-xp","method-progression","method-finance","method-risk","method-events","method-reference","method-ledger"].every(id => methodSource.includes(`id="${id}"`)), "A mechanic lost its precise Method section target");
 assert(inline.includes("function recordedMetricSnapshot()") && !inline.includes("alpha25EnhanceMethod") && !inline.includes("alpha24EnhanceMethod"), "Dataset provenance belongs in the Method sources chapter, not in a stack of bootstrap innerHTML patches");
