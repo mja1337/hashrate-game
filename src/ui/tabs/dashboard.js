@@ -102,7 +102,7 @@ function dashboard(){
     ${dashboardCommandCentre()}
     ${buildQueueCard()}
     ${operatorScoreVisual()}
-    <section class="card span-8"><div class="card-head"><h2>BTC / USD vs network hash rate</h2><div class="meta">daily price · 14-day hash mean · indexed at game start</div></div><div class="chart-wrap"><div id="dashboard-market-chart">${chart(sampled(priceAt),"#f7931a",true,{points:sampled(hashAt),color:"#86c79a",label:"Network hash rate",mainLabel:"BTC/USD"})}</div><div class="chart-labels"><span>Game start</span><span id="dashboard-chart-date">${dateFmt(state.time,true)}</span></div></div></section>
+    <section class="card span-8"><div class="card-head"><h2>BTC / USD vs network hash rate</h2><div class="meta">daily price · 14-day hash mean · indexed at game start</div></div><div class="chart-wrap"><div id="dashboard-market-chart">${chart(sampled(priceAt),"#f7931a",true,{points:sampled(hashAt),color:"#86c79a",label:"Network hash rate",mainLabel:"BTC/USD"})}</div><div class="chart-labels end"><span id="dashboard-chart-date">${dateFmt(state.time,true)}</span></div></div></section>
     ${networkShareCard()}
     <section class="card span-6"><div class="card-head"><h2>Treasury map</h2><div class="meta">calculated</div></div><div id="dashboard-treasury" class="balance-list">${btcBreakdown()}</div></section>
     <section class="card span-6"><div class="card-head"><h2>Self-held BTC history</h2><div class="meta">simulation</div></div><div class="chart-wrap"><div id="dashboard-history-chart">${chart(historyBtc,"#86c79a",true)}</div><div class="chart-labels"><span>run start</span><span id="dashboard-history-value">${fmtBtc(controlled())}</span></div></div></section>

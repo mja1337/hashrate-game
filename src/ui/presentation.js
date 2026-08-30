@@ -74,7 +74,7 @@ function chart(points,color="var(--orange)",log=true,overlay=null){
   const makePath=(arr)=>arr.map((v,i)=>{const vv=log?Math.log(v):v;return `${i?"L":"M"}${(p+i*(w-2*p)/denom).toFixed(1)},${(h-p-(vv-min)/range*(h-2*p)).toFixed(1)}`}).join(" ");
   const path=makePath(mainVals), overlayPath=overlayVals?makePath(overlayVals):null;
   const area=path+` L${w-p},${h-p} L${p},${h-p} Z`;
-  const legend=overlay?`<div class="chart-legend"><span class="legend" style="--legend:${color}">${overlay.mainLabel||"BTC/USD"}</span><span class="legend" style="--legend:${overlay.color||"#86c79a"}">${overlay.label||"Network hash rate"}</span><span class="chart-note">indexed to 100 at game start</span></div>`:"";
+  const legend=overlay?`<div class="chart-legend"><span class="legend" style="--legend:${color}">${overlay.mainLabel||"BTC/USD"}</span><span class="legend" style="--legend:${overlay.color||"#86c79a"}">${overlay.label||"Network hash rate"}</span></div>`:"";
   return `<svg class="chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="Historical line chart comparing BTC price and network hash rate"><line class="gridline" x1="0" y1="47" x2="700" y2="47"/><line class="gridline" x1="0" y1="95" x2="700" y2="95"/><line class="gridline" x1="0" y1="143" x2="700" y2="143"/><path class="area" d="${area}" fill="${color}"/><path class="line" d="${path}" stroke="${color}"/>${overlayPath?`<path class="line" d="${overlayPath}" stroke="${overlay.color||"#86c79a"}" stroke-dasharray="5 4"/>`:""}</svg>${legend}`
 }
 function sampled(fn,count=null){
