@@ -310,7 +310,7 @@ function nextSettlementDate(offset=0){const date=new Date(state.time);return Dat
 function settlementForecast(){
   const fs=fleet(),r=region(),f=facility(),nodeW=nodePowerWatts();
   const rate=powerRate(r,state.time);
-  const minerWatts=state.power&&state.debt<=0&&!state.policyLock?fs.w*contractLoadFactor():0,nodeWatts=nodeHostPowered()?nodeW:0,energyDaily=dailyEnergyCostForWatts(minerWatts+nodeWatts,state.time,r),daily={energy:energyDaily,rent:f.rent/30.4375,internet:internetMonthlyCost()/30.4375,staff:staffMonthlyCost()/30.4375,insurance:insuranceMonthlyCost()/30.4375,nodeNetwork:totalNodeMonthlyOverhead()/30.4375,other:0};
+  const minerWatts=state.power&&!gridCutOff()&&!state.policyLock?fs.w*contractLoadFactor():0,nodeWatts=nodeHostPowered()?nodeW:0,energyDaily=dailyEnergyCostForWatts(minerWatts+nodeWatts,state.time,r),daily={energy:energyDaily,rent:f.rent/30.4375,internet:internetMonthlyCost()/30.4375,staff:staffMonthlyCost()/30.4375,insurance:insuranceMonthlyCost()/30.4375,nodeNetwork:totalNodeMonthlyOverhead()/30.4375,other:0};
   let cursor=new Date(state.time),days=0,month=cursor.getUTCMonth();do{cursor=new Date(cursor.getTime()+DAY);days++}while(cursor.getUTCMonth()===month);
   const accrued=accruedBillBreakdown(),breakdown={};Object.keys(accrued).forEach(key=>breakdown[key]=accrued[key]+(daily[key]||0)*days);breakdown.finance=state.projectLoan*(hasStaff("treasurer")?.009:.012);const estimated=Object.values(breakdown).reduce((sum,value)=>sum+value,0),cashAfter=state.cash-estimated,coverage=estimated?Math.max(0,Math.min(100,state.cash/estimated*100)):100;
   return{days,dueAt:nextSettlementDate(),daily,accrued,breakdown,estimated,cashAfter,coverage,remaining:Math.max(0,estimated-state.bill)};
@@ -326,19 +326,28 @@ function recordOperatorMonth(snapshot,solvent){
 function sellControlledBtc(amount){
   let remaining=Math.max(0,amount),sold=0;for(const bucket of ["hot","cold"]){const take=Math.min(state.wallets[bucket],remaining);state.wallets[bucket]-=take;remaining-=take;sold+=take}return sold;
 }
-function treasurySaleForSettlement(due){
+function treasurySaleForSettlement(due,silent=false){
   if(state.time<MARKET)return 0;const policy=treasuryPolicy(),fee=.006,price=priceAt(state.time);let btc=0;
   if(policy.id!=="cover")return 0;btc=Math.max(0,due-state.cash)/(price*(1-fee));
-  btc=Math.min(state.wallets.hot,btc);if(btc<=0)return 0;state.wallets.hot-=btc;const proceeds=btc*price*(1-fee);state.cash+=proceeds;log(`Settlement conversion: ${policy.name}`,`${fmtBtc(btc)} sold · +${fmtUsd(proceeds)}`,"trade");return proceeds;
+  btc=Math.min(state.wallets.hot,btc);if(btc<=0)return 0;state.wallets.hot-=btc;const proceeds=btc*price*(1-fee);state.cash+=proceeds;
+  log(`Settlement conversion: ${policy.name}`,`${fmtBtc(btc)} sold · +${fmtUsd(proceeds)}`,"trade");
+  const left=controlled(),drained=btc/Math.max(btc+left,1e-12);
+  if(!silent){
+    const heavy=left<=0||drained>=.5;
+    showToast(heavy?"Treasury nearly emptied to pay the bill":"Bill covered by selling BTC",
+      `${fmtBtc(btc)} was sold at ${fmtUsd(price)} to raise ${fmtUsd(proceeds)} for the operating bill, because liquid cash did not cover it. Your standing instruction is Cover the bill, so it sold the shortfall and nothing more. ${left>0?`${fmtBtc(left)} is still self-held.`:"You now hold no BTC, so the next bill has to come from cash."}`,
+      heavy?"bad":"success","finance");
+  }
+  return proceeds;
 }
 function finishMonthlySettlement(kind="cash",automatic=false){
   const pending=state.pendingSettlement;if(!pending||state.cash+1e-8<pending.due)return false;const rescueFeedback=settlementRescueFeedback(kind,pending.due,state.cash-pending.due);state.cash-=pending.due;const interest=pending.loanInterest||0;log("Operating bill settled",fmtUsd(pending.due));if(interest>0)log("Project finance interest",fmtUsd(interest));recordOperatorMonth(pending.snapshot,kind==="cash"||kind==="policy");state.bill=0;state.billLedger=blankBillLedger();state.lastMonth=pending.month;state.pendingSettlement=null;state.debt=0;state.power=!state.policyLock;clearTimeout(toastTimer);toast=null;
   let hardwareOpened=false;if(!state.ended){state.speed=pending.resumeSpeed||state.returnSpeed||0;hardwareOpened=activateNextHardwareAlert();setTimer()}save();if(automatic&&!hardwareOpened){refreshLive();requestAnimationFrame(()=>{refreshDashboardVisuals();refreshMinePricing()})}else render();if(!automatic&&rescueFeedback)setTimeout(()=>showToast(rescueFeedback[0],rescueFeedback[1],"warning","finance"),0);return true;
 }
-function queueMonthlySettlement(due,month,loanInterest){
-  const snapshot=settlementSnapshot(due,month),resumeSpeed=state.speed||state.returnSpeed||0;treasurySaleForSettlement(due);state.pendingSettlement={due,month,loanInterest,snapshot,resumeSpeed};
+function queueMonthlySettlement(due,month,loanInterest,silent=false){
+  const snapshot=settlementSnapshot(due,month),resumeSpeed=state.speed||state.returnSpeed||0;treasurySaleForSettlement(due,silent);state.pendingSettlement={due,month,loanInterest,snapshot,resumeSpeed};
   if(state.cash+1e-8>=due){finishMonthlySettlement(treasuryPolicy().id==="cover"?"policy":"cash",true);return}
-  state.speed=0;renderFullQueued=true;log("Settlement decision required",`${fmtUsd(due-state.cash)} short`);showToast("Settlement paused","Choose how to cover the shortfall. Time will not move until the decision is resolved.","bad","finance");setTimer();
+  state.speed=0;renderFullQueued=true;log("Settlement decision required",`${fmtUsd(due-state.cash)} short`);if(!silent)showToast("Settlement paused","Choose how to cover the shortfall. Time will not move until the decision is resolved.","bad","finance");setTimer();
 }
 function liquidationCandidates(onlyId=null){
   return HARDWARE.filter(h=>!h.permanent&&(!onlyId||h.id===onlyId)&&(state.decommissionedHardware?.[h.id]||0)>0).map(h=>{const profitability=hardwareProfitability(h);return{h,owned:state.decommissionedHardware[h.id]||0,unit:Math.max(1,resaleHardwareValue(h)),margin:profitability.netPerUnit,efficiency:h.hash/Math.max(1,h.w)}}).sort((a,b)=>{const marginA=Number.isFinite(a.margin)?a.margin:Infinity,marginB=Number.isFinite(b.margin)?b.margin:Infinity;return marginA-marginB||a.efficiency-b.efficiency});
@@ -464,7 +473,7 @@ function tick(silent=false){
   const d=new Date(next),month=d.toISOString().slice(0,7);
   if(month!==state.lastMonth){
     if(state.debt>0&&state.time>=(state.arrearsDue||Infinity)&&!state.gridCutAnnounced){state.gridCutAnnounced=true;log("Grid disconnected",`${fmtUsd(state.debt)} still unpaid`,"finance");if(!silent)showToast("Power and internet cut off",`${fmtUsd(state.debt)} of arrears went unpaid past its second bill date. Mining and node service stop while rent, payroll and finance keep accruing. Clear the arrears from Finance to be reconnected.`,"bad","finance")}
-    const loanInterest=state.projectLoan*(hasStaff("treasurer")?.009:.012),due=state.bill+loanInterest;queueMonthlySettlement(due,month,loanInterest);
+    const loanInterest=state.projectLoan*(hasStaff("treasurer")?.009:.012),due=state.bill+loanInterest;queueMonthlySettlement(due,month,loanInterest,silent);
     if(strategyYield>0)log("Strategy preferred income",`+${fmtUsd(strategyYield*30.4375)}`);
     state.history.push({t:next,p:priceAt(next),btc:controlled(),worth:netWorth(),hash:fs.hash});state.history=state.history.slice(-240);
   }
