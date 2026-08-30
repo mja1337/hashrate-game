@@ -1,6 +1,6 @@
 # Hashrate copy and help overhaul
 
-Status: Phases 1–5 complete. Phase 6 is in progress: Method, the glossary, the procedural sandbox and terminology normalization are done; the remaining copy contracts and the full editorial walkthrough matrix are outstanding.
+Status: Phases 1–5 complete. Phase 6 is complete except for two legs of the final walkthrough matrix — the tail of the fault-and-repair sequence, and receivership.
 
 This document is the source of truth for rewriting the game's introduction, interface copy, contextual help, feedback, historical storytelling and technical reference material. Update it when copy conventions, scope or decisions change.
 
@@ -592,7 +592,7 @@ Disclosures remember their state through a repaint, like the chapters around the
 ### Still outstanding
 
 - Copy contracts for required help patterns beyond the page-help map already covered.
-- Two legs of the walkthrough matrix: the fault to self-repair-failure to successful-repair sequence, and receivership. Both were exercised from injected state rather than driven end to end, so their copy is contract-covered but not walked.
+- Two legs of the walkthrough matrix. The fault leg is half walked: a real engine-raised fault on a 20-machine S7 fleet shows its capacity-lost copy and the servicing bench, with no overflow at either width, but the self-repair-failure and successful-repair messages need the right spare part in inventory and were not driven to completion. Receivership was not reached. Both sets of strings are contract-covered.
 
 ## Editorial review checklist
 
