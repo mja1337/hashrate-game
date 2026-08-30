@@ -142,8 +142,8 @@ function advanceMaintenance(){
       const weights=partFaultWeights(h),byPart=state.maintenance.faultsByPart[h.id]||(state.maintenance.faultsByPart[h.id]={}),gained={};
       for(let i=0;i<failures;i++){const part=pickWeightedPart(weights);byPart[part]=(byPart[part]||0)+1;gained[part]=(gained[part]||0)+1}
       const detail=Object.entries(gained).map(([part,count])=>`${count}× ${PART_FAULT_LABELS[part]||sparePart(part)?.name||part}`).join(" · ");
-      log(`${h.name} fault detected`,`${detail} · ${roomTemperatureC().toFixed(0)}°C room`,`fleet`);
-      showToast("Mining capacity lost to a fault",`${detail} failed on ${h.name} at ${roomTemperatureC().toFixed(0)}°C. Affected units stopped hashing; cool the room and schedule the named part replacement in Mine.`,"bad","mine");
+      log(`${h.name} fault detected`,`${detail} · ${roomTemperatureC().toFixed(0)} °C room`,`fleet`);
+      showToast("Mining capacity lost to a fault",`${detail} failed on ${h.name} at ${roomTemperatureC().toFixed(0)} °C. Affected units stopped hashing; cool the room and schedule the named part replacement in Mine.`,"bad","mine");
       renderFullQueued=true;
     }
   });

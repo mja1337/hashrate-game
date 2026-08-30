@@ -86,7 +86,7 @@ function upgradeFacility(id){
   if(state.relocationJob)return showToast("Relocation underway","The fleet must arrive before a facility upgrade can begin.");
   const reserve=facilityReserve(f),required=f.cost+reserve;
   if(state.cash<f.cost)return showToast("Capital required",`Fit-out costs ${fmtUsd(f.cost)}.`);
-  if(state.cash<required)return showToast("Liquidity reserve required",`Keep ${fmtUsd(reserve)} liquid for two months of expected power, rent, connectivity, staff and node costs after the move.`);
+  if(state.cash<required)return showToast("Cash reserve required",`Keep ${fmtUsd(reserve)} in liquid cash for two months of expected power, rent, connectivity, staff and node costs after the move.`);
   const risk=facilityMoveRisk(id)*(hasStaff("logistics")?.8:1);
   const days=Math.max(3,Math.ceil(4+fleet().count/70+(target-current-1)*2))*(hasStaff("logistics")?.8:1);
   state.cash-=f.cost;state.facilityUpgradeJob={id,due:state.time+Math.ceil(days)*DAY,cost:f.cost,risk};state.power=false;

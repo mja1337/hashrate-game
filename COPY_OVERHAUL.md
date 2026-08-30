@@ -589,6 +589,18 @@ Two things were deliberately left visible rather than collapsed. The early-years
 
 Disclosures remember their state through a repaint, like the chapters around them, and their summaries meet the 34 px desktop and 40 px mobile touch targets.
 
+### The rest of the language audit
+
+Two of the six sweeps the walkthrough section calls for had not actually been run when the normalization box was first ticked. Both had findings.
+
+**Units.** The style rule is `22 °C`. Ten temperature readouts across servicing, the thermal console and Method rendered `31.3°C` with no space, against exactly one that got it right — so a single screen could show both spellings. All ten now match.
+
+**Ambiguous "liquidity."** The word is correct for market depth and for Lightning channels, and wrong where the thing meant is spendable cash. Five player-facing uses meant cash: the Dashboard card labelled *Liquidity* whose value is a cash runway, the *Liquidity reserve required* notice, *default liquidity* in the opening facts, and two in Method — the `Energy, cooling and liquidity` heading and the `Liquidity / Operator Score` column. They now read *Cash runway*, *Cash reserve required*, *default Starting Liquidity*, *Energy, cooling and the operating bill* and *Can it pay a bill? / Operator Score*.
+
+A sixth candidate did not survive checking: the bridge-finance line still said "the missing liquidity" in source, but Phase 5 rewrites that string before it renders, so no player ever saw it. Both halves of that replacement pair were reworded together, leaving the visible copy unchanged.
+
+The audit contract bans the shapes that were actually wrong — the word standing in for cash in a label, heading or notice — rather than the word itself, because a blanket ban would need an allowlist for every legitimate use and would rot. Each rule was mutation-tested by putting the original mistake back.
+
 ### Still outstanding
 
 - Copy contracts for required help patterns beyond the page-help map already covered.

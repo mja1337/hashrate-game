@@ -67,7 +67,7 @@ function dashboardCommandCentre(){
   const fs=fleet(),monthly=monthlyCost(),runway=monthly.total?state.cash/monthly.total:Infinity,load=fs.cap?fs.kw/fs.cap*100:0,margin=state.time>=MARKET?expectedDailyBtcForHash(fs.hash)*priceAt(state.time)-dailyEnergyCostForWatts(fs.w*contractLoadFactor()):null;
   const custodyTotal=controlled()+claims(),selfShare=custodyTotal?controlled()/custodyTotal*100:100,nodeState=nodeOnline()?"At chain tip":state.node?"Offline or syncing":"Laptop node only";
   const cards=[
-    {label:"Liquidity",value:Number.isFinite(runway)?`${runway.toFixed(1)} months`:"No fixed burn",detail:`${fmtUsd(state.cash)} cash · ${fmtUsd(monthly.total)}/month`,tone:runway<2?"critical":runway<6?"attention":"",tab:"finance",action:"Review finance"},
+    {label:"Cash runway",value:Number.isFinite(runway)?`${runway.toFixed(1)} months`:"No fixed burn",detail:`${fmtUsd(state.cash)} cash · ${fmtUsd(monthly.total)}/month`,tone:runway<2?"critical":runway<6?"attention":"",tab:"finance",action:"Review finance"},
     {label:"Mining margin",value:margin===null?"BTC unpriced":fmtUsd(margin)+" / day",detail:`${fmtBtc(expectedDailyBtcForHash(fs.hash))} expected · energy only`,tone:margin!==null&&margin<0?"critical":"",tab:"mine",action:"Review fleet"},
     {label:"Facility capacity",value:`${load.toFixed(1)}% power`,detail:`${fs.space} / ${facility().space} floor units · ${facility().name}`,tone:load>90?"critical":load>75?"attention":"",tab:"facilities",action:"Review site"},
     {label:"Custody posture",value:`${selfShare.toFixed(0)}% self-held`,detail:`${fmtBtc(claims())} exposed to custodians`,tone:claims()>controlled()?"attention":"",tab:"custody",action:"Review custody"},

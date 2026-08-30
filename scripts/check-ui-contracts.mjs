@@ -362,9 +362,10 @@ assert(inline.includes("function filterGlossary(query)") && inline.includes('e.t
 assert(inline.includes('else if(a==="glossary-method")') && inline.includes("data-action=\"glossary-method\""), "A glossary entry can no longer hand off to its Method chapter");
 assert(css.includes(".glossary-entry .action-link{display:inline-flex;align-items:center;min-height:34px}") && css.includes(".glossary-entry .action-link{min-height:40px}"), "The Method link inside a glossary entry is an 11px text link without these rules — unusable on touch");
 
-// Legacy-term audit. "Hashrate" is the product name; "hash rate" is the measurement,
-// and "/mo" is an unexplained abbreviation on a recurring cost. Both are easy to
-// reintroduce by copying a nearby line, so they are checked rather than trusted.
+// Language audit. "Hashrate" is the product name and "hash rate" is the measurement;
+// "/mo" is an unexplained abbreviation on a recurring cost; a temperature takes a space
+// before its unit; and "liquidity" is the market-depth word, not the cash word. Each is
+// easy to reintroduce by copying a nearby line, so they are checked rather than trusted.
 const copyFiles = [];
 async function collectCopyFiles(dir) {
   for (const entry of await readdir(new URL(dir, root), { withFileTypes: true })) {
@@ -395,6 +396,22 @@ for (const file of copyFiles) {
   for (const match of source.matchAll(/\/mo(?![a-z])/g)) {
     if (!covered(match.index)) legacyHits.push(`${file}: "/mo" should be "/month" (…${source.slice(Math.max(0, match.index - 30), match.index + 8).replace(/\s+/g, " ")}…)`);
   }
+  for (const match of source.matchAll(/[^\s]°C/g)) {
+    if (!covered(match.index)) legacyHits.push(`${file}: a temperature is glued to its unit; the rule is "22 °C" (…${source.slice(Math.max(0, match.index - 30), match.index + 6).replace(/\s+/g, " ")}…)`);
+  }
+  const CASH_MEANT = [
+    [/label:"Liquidity"/, 'a card labelled "Liquidity" whose value is a cash runway — use "Cash runway"'],
+    [/<th>Liquidity/, 'a table column headed "Liquidity" — say what it asks, e.g. "Can it pay a bill?"'],
+    [/"Liquidity reserve/, '"Liquidity reserve" — the thing required is cash, so say "Cash reserve"'],
+    [/default liquidity/, '"default liquidity" — the named control is Starting Liquidity'],
+    [/(?:cooling|energy) and liquidity/i, 'a heading ending "and liquidity" where the subject is the operating bill'],
+    [/missing liquidity/, '"the missing liquidity" — the thing received is cash'],
+  ];
+  for (const [pattern, explanation] of CASH_MEANT) {
+    const match = pattern.exec(source);
+    if (match && !covered(match.index)) legacyHits.push(`${file}: ${explanation}`);
+  }
+
 }
 assert(legacyHits.length === 0, `Legacy terminology is back in player-facing copy:\n  ${legacyHits.slice(0, 8).join("\n  ")}`);
 
