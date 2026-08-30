@@ -558,4 +558,30 @@ assert(inline.includes('if(!silent)showToast("Settlement paused"'), "The settlem
 // The forecast drives the whole cash-runway story, and miners keep running through arrears.
 assert(inline.includes("const minerWatts=state.power&&!gridCutOff()&&!state.policyLock?fs.w*contractLoadFactor():0"), "The settlement forecast assumes miners are off the moment arrears exist, understating the bill for the entire grace month");
 
+// The old thermal model compared heat to a capacity number and added a flat penalty per
+// unit of overload. Nothing in it conserved energy, so it had no gradient below capacity
+// and ran away above it: a single 1.32 kW machine in a spare room reached 61 °C while a
+// fully loaded campus barely moved. A room sheds heat in proportion to how much hotter it
+// is than outside, and settles where heat in equals heat out.
+const thermalSource = await readFile(new URL("src/engine/thermal.js", root), "utf8");
+assert(thermalSource.includes("function thermalLossKwPerC(s=state)") && thermalSource.includes("coolingCapacityKw(s)/THERMAL_REFERENCE_DELTA"), "Cooling must express itself as heat shed per degree, not as a capacity to be exceeded");
+assert(thermalSource.includes("ambientTemperatureC(s.time,s)+heatKw/thermalLossKwPerC(s)"), "The room temperature is no longer a heat balance");
+assert(!/overload\*18|utilisation\*3\.2/.test(thermalSource), "The old overload cliff is back");
+assert(thermalSource.includes("function siteBaselineC(s=state)") && thermalSource.includes("f.indoorBaseC??-Infinity"), "Enclosed sites need a temperature floor, or realistic winter ambients put a home office below freezing");
+const opsSource = await readFile(new URL("src/data/operations.js", root), "utf8");
+assert(/id:"home",[^}]*indoorBaseC:18/.test(opsSource), "A spare room sits inside a heated house");
+assert(!/id:"container",[^}]*indoorBaseC/.test(opsSource), "A container yard is outdoors and should track the weather");
+// Seasons peak about a month after the solstice.
+assert(thermalSource.includes("Math.sin((day-111)/365*Math.PI*2)"), "The seasonal curve peaks on the solstice rather than a month after it");
+const climates = [...opsSource.matchAll(/id:"(\w+)",name:"([^"]+)"[^}]*ambientC:(-?[\d.]+),seasonalC:(-?[\d.]+)/g)];
+assert(climates.length === 8, `Expected eight regional climates, found ${climates.length}`);
+for (const [, id, name, mean, swing] of climates) {
+  const july = Number(mean) + Number(swing) * Math.sin((196 - 111) / 365 * 2 * Math.PI);
+  const january = Number(mean) + Number(swing) * Math.sin((15 - 111) / 365 * 2 * Math.PI);
+  assert(july < 34 && july > 8, `${name} has an implausible July mean of ${july.toFixed(1)} °C`);
+  assert(january > -20 && january < 20, `${name} has an implausible January mean of ${january.toFixed(1)} °C`);
+  assert(july > january, `${name} is warmer in January than July`);
+}
+assert(inline.includes("sheds ${fmtNum(thermalLossKwPerC())} kW per °C"), "The heat-rejection tile does not say what its capacity figure means");
+
 console.log("UI contracts passed: Mine purchases, difficulty and mobile speed controls, transaction precision, enhancement guards, mempool containment, fleet servicing, repair labour, overdrive, Method coverage, speed-resume safety, the exchange trade-ticket flow, network-hash display parity, bad-event impact effects, timed facility-upgrade risk, mining-floor connectivity/power status, the 100-year procedural sandbox continuation, pool fee display, pool shutdown fail-over, the custody transfer slider, Lightning gating, live market pricing, mempool realism, disabled-control tooltips, the single-venue market redesign, Mine-tab scroll stability, full-refurbishment puzzle consistency, the proactive settlement warning, connectivity ping, the unified incoming-fleet pipeline, proportional fleet-health severity colors, rival operators, milestone moments, the end-of-run recap, cross-run career persistence, the dice-entropy wallet-setup ceremony, the era-accurate wallet-software upgrade path, the resetGame() operator-era crash fix, the real mailing-list learning items, the Dashboard build-queue card, hands-on self-servicing before technicians are hired, the fault-clearing/offline-threshold repair fix, the non-blocking faucet popup, tiered spare parts, the historically-grounded custody/region exposure warnings, free self-serviced labour with real self-damage risk, the four hardware self-help skills, staff dismissal the operator XP/level system, dated pool payout schemes, one drawing per machine, and scroll-anchored, frame-aligned repaints");

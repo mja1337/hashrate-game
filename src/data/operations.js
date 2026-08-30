@@ -1,14 +1,14 @@
 "use strict";
 
 const FACILITIES=[
-  {id:"home",name:"Home office",date:"2009-01-03",kw:1.5,space:5,rent:0,cost:0,passiveCoolingKw:.55,desc:"One circuit, no rent, little tolerance for heat."},
-  {id:"garage",name:"Rented garage",date:"2010-01-01",kw:12,space:35,rent:320,cost:4800,passiveCoolingKw:4,desc:"A real panel, some airflow and concerned neighbours."},
-  {id:"workshop",name:"Light industrial unit",date:"2012-01-01",kw:100,space:260,rent:3900,cost:28000,passiveCoolingKw:32,desc:"Three-phase power and room for rows of machines."},
-  {id:"warehouse",name:"Mining warehouse",date:"2015-01-01",kw:1000,space:2600,rent:29000,cost:320000,passiveCoolingKw:300,desc:"Professional distribution, ventilation and security."},
-  {id:"campus",name:"Grid-scale campus",date:"2018-01-01",kw:10000,space:24000,rent:185000,cost:4500000,passiveCoolingKw:2800,desc:"You are now an energy company with hashing attached."},
+  {id:"home",name:"Home office",date:"2009-01-03",kw:1.5,space:5,rent:0,cost:0,indoorBaseC:18,passiveCoolingKw:1,desc:"One circuit, no rent, little tolerance for heat."},
+  {id:"garage",name:"Rented garage",date:"2010-01-01",kw:12,space:35,rent:320,cost:4800,indoorBaseC:10,passiveCoolingKw:4,desc:"A real panel, some airflow and concerned neighbours."},
+  {id:"workshop",name:"Light industrial unit",date:"2012-01-01",kw:100,space:260,rent:3900,cost:28000,indoorBaseC:8,passiveCoolingKw:32,desc:"Three-phase power and room for rows of machines."},
+  {id:"warehouse",name:"Mining warehouse",date:"2015-01-01",kw:1000,space:2600,rent:29000,cost:320000,indoorBaseC:8,passiveCoolingKw:300,desc:"Professional distribution, ventilation and security."},
+  {id:"campus",name:"Grid-scale campus",date:"2018-01-01",kw:10000,space:24000,rent:185000,cost:4500000,indoorBaseC:5,passiveCoolingKw:2800,desc:"You are now an energy company with hashing attached."},
   {id:"container",name:"Modular container yard",date:"2020-01-01",kw:30000,space:68000,rent:410000,cost:12500000,passiveCoolingKw:8500,desc:"Thirty megawatts of containerised mining. Fast to deploy, exposed to logistics and grid constraints."},
-  {id:"hydroplant",name:"Hydro colocation plant",date:"2023-01-01",kw:75000,space:155000,rent:760000,cost:34000000,passiveCoolingKw:24000,desc:"Purpose-built high-density infrastructure beside generation. Huge upside, huge contractual exposure."},
-  {id:"megacampus",name:"Sovereign megacampus",date:"2025-01-01",kw:180000,space:360000,rent:1500000,cost:90000000,passiveCoolingKw:60000,desc:"Utility-scale mining campus designed for national-scale power agreements and geopolitical risk."}
+  {id:"hydroplant",name:"Hydro colocation plant",date:"2023-01-01",kw:75000,space:155000,rent:760000,cost:34000000,indoorBaseC:8,passiveCoolingKw:24000,desc:"Purpose-built high-density infrastructure beside generation. Huge upside, huge contractual exposure."},
+  {id:"megacampus",name:"Sovereign megacampus",date:"2025-01-01",kw:180000,space:360000,rent:1500000,cost:90000000,indoorBaseC:5,passiveCoolingKw:60000,desc:"Utility-scale mining campus designed for national-scale power agreements and geopolitical risk."}
 ];
 const COOLING_EQUIPMENT=[
   {id:"boxfan",name:"Workshop box fan",date:"2009-01-03",minTier:1,maxTier:3,cost:95,install:3,coolingKw:1.6,watts:85,desc:"Moves room air cheaply; useful at home and in a small garage."},
@@ -20,14 +20,14 @@ const COOLING_EQUIPMENT=[
   {id:"coolingtower",name:"Industrial cooling tower",date:"2023-01-01",minTier:7,maxTier:8,cost:7200000,install:120,coolingKw:72000,watts:2400000,desc:"Campus-scale heat rejection for dense liquid-cooled fleets."}
 ];
 const REGIONS=[
-  {id:"na",name:"North America",date:"2009-01-03",kwh:.12,rely:.995,netRisk:.008,internet:25,move:0,ambientC:18,seasonalC:11,policy:"Stable, expensive",desc:"Reliable grid access and deep capital markets; middling power prices."},
-  {id:"iceland",name:"Iceland",date:"2013-01-01",kwh:.075,rely:.998,netRisk:.006,internet:130,move:18000,ambientC:7,seasonalC:6,policy:"Cool & dependable",desc:"Cooling and renewable generation help; logistics and space cost more."},
-  {id:"sichuan",name:"Sichuan",date:"2014-01-01",kwh:.045,rely:.96,netRisk:.035,internet:95,move:22000,ambientC:20,seasonalC:9,policy:"Cheap, exposed",desc:"Seasonal hydropower is cheap until political permission disappears."},
-  {id:"kazakhstan",name:"Kazakhstan",date:"2018-01-01",kwh:.055,rely:.91,netRisk:.055,internet:80,move:30000,ambientC:12,seasonalC:16,policy:"Cheap, constrained",desc:"Low rates attract miners; grid curtailment and unrest are material."},
-  {id:"texas",name:"Texas",date:"2019-01-01",kwh:.07,rely:.94,netRisk:.02,internet:85,move:26000,ambientC:23,seasonalC:10,policy:"Flexible, volatile",desc:"Deep power markets reward flexibility; heat and price spikes punish it."},
-  {id:"iran",name:"Iran",date:"2019-07-01",kwh:.032,rely:.78,netRisk:.075,internet:180,move:52000,ambientC:22,seasonalC:12,policy:"Cheap, politically exposed",desc:"State-priced power can be exceptionally cheap, but licensing, seasonal curtailment and seizure risk are acute."},
-  {id:"kenya",name:"Kenya",date:"2021-01-01",kwh:.048,rely:.88,netRisk:.05,internet:240,move:48000,ambientC:21,seasonalC:3,policy:"Geothermal frontier",desc:"Geothermal potential offers a low-carbon power thesis; interconnection, currency and execution risk remain high."},
-  {id:"bhutan",name:"Bhutan",date:"2023-01-01",kwh:.038,rely:.86,netRisk:.045,internet:210,move:65000,ambientC:14,seasonalC:7,policy:"Hydro, sovereign partner",desc:"Abundant hydropower can support scale, but access depends on partnership, seasonality and sovereign decisions."}
+  {id:"na",name:"North America",date:"2009-01-03",kwh:.12,rely:.995,netRisk:.008,internet:25,move:0,ambientC:11,seasonalC:12,policy:"Stable, expensive",desc:"Reliable grid access and deep capital markets; middling power prices."},
+  {id:"iceland",name:"Iceland",date:"2013-01-01",kwh:.075,rely:.998,netRisk:.006,internet:130,move:18000,ambientC:5,seasonalC:5.5,policy:"Cool & dependable",desc:"Cooling and renewable generation help; logistics and space cost more."},
+  {id:"sichuan",name:"Sichuan",date:"2014-01-01",kwh:.045,rely:.96,netRisk:.035,internet:95,move:22000,ambientC:16.5,seasonalC:10,policy:"Cheap, exposed",desc:"Seasonal hydropower is cheap until political permission disappears."},
+  {id:"kazakhstan",name:"Kazakhstan",date:"2018-01-01",kwh:.055,rely:.91,netRisk:.055,internet:80,move:30000,ambientC:3.5,seasonalC:18,policy:"Cheap, constrained",desc:"Low rates attract miners; grid curtailment and unrest are material."},
+  {id:"texas",name:"Texas",date:"2019-01-01",kwh:.07,rely:.94,netRisk:.02,internet:85,move:26000,ambientC:20,seasonalC:10.5,policy:"Flexible, volatile",desc:"Deep power markets reward flexibility; heat and price spikes punish it."},
+  {id:"iran",name:"Iran",date:"2019-07-01",kwh:.032,rely:.78,netRisk:.075,internet:180,move:52000,ambientC:17,seasonalC:13,policy:"Cheap, politically exposed",desc:"State-priced power can be exceptionally cheap, but licensing, seasonal curtailment and seizure risk are acute."},
+  {id:"kenya",name:"Kenya",date:"2021-01-01",kwh:.048,rely:.88,netRisk:.05,internet:240,move:48000,ambientC:18,seasonalC:2,policy:"Geothermal frontier",desc:"Geothermal potential offers a low-carbon power thesis; interconnection, currency and execution risk remain high."},
+  {id:"bhutan",name:"Bhutan",date:"2023-01-01",kwh:.038,rely:.86,netRisk:.045,internet:210,move:65000,ambientC:12.5,seasonalC:8.5,policy:"Hydro, sovereign partner",desc:"Abundant hydropower can support scale, but access depends on partnership, seasonality and sovereign decisions."}
 ];
 const POWER_CONTRACTS=[
   {id:"standard",name:"Standard tariff",mult:1,desc:"Balanced baseline tariff with normal exposure to energy shocks."},

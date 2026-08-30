@@ -704,6 +704,31 @@ Owing money and being cut off are now different states, and only the second stop
 
 Verified through the full cycle at a fixed date: bill date with nothing to pay it pauses; missing it carries the arrears and resumes with mining still running; two weeks later the site is still mining and the next bill is accruing on top; the next bill date cuts power, internet and both nodes; paying the arrears restores service and clears the deadline. Old saves load with a coherent arrears state.
 
+## Mechanic change: the room now conserves energy
+
+Raised as "if I have a home office with a window open, how am I getting to 35+ degrees with fewer than five miners?" The answer was that nothing in the thermal model conserved energy.
+
+The room temperature was a ratio: heat divided by a fixed "cooling capacity", plus a flat 18 °C penalty for every unit of relative overload. That has no gradient below capacity and runs away above it. Going from 1 kW to 10 kW of heat against a 10 kW capacity moved the room 3.2 °C; going from 10 kW to 30 kW moved it 37 °C. A single 1.32 kW machine in a spare room read **61 °C**, while a warehouse holding a hundred S9s sat at 18 °C and a purchased cooling unit moved it by 0.4 °C.
+
+So the mechanic was invisible at every realistic fleet size and absurd at small ones, and the seven-item cooling catalogue collapsed into "buy the one unit that clears your load, then stop."
+
+A room actually sheds heat in proportion to how much hotter it is than the air outside, and settles where heat in equals heat out. Cooling ratings are now read as what a site can reject at a ten-degree difference, so a rating divided by ten is the kilowatts it loses per degree, and the room settles at `outside + heat ÷ that rate`. Bounded, smooth, and physical.
+
+| Warehouse, July | before | after |
+| --- | --- | --- |
+| 10 × S9 | 18.1 °C | 23.4 °C |
+| 100 × S9 | 18.2 °C | 27.4 °C |
+| 250 × S9 | 19.0 °C | 34.0 °C |
+| 755 × S9 (packed) | 63.5 °C | 56.2 °C |
+
+Every machine now moves the number, wear starts biting around a third of the site's capacity, and each cooling purchase does something instead of being a switch.
+
+Two supporting changes fell out of it. **Regional climates are now real**: annual means with a seasonal swing for a representative mining location in each region — central Washington, Reykjavik, Chengdu, Ekibastuz, west Texas, the Iranian plateau, the Nairobi highlands, Thimphu — peaking about a month after the solstice rather than on it. North America was previously an 18 °C annual mean with a July figure of 28 °C, which is an afternoon peak rather than a daily average.
+
+And **enclosed sites have a temperature floor**, because realistic winter ambients otherwise put a home office at −14 °C in a Kazakh January. A spare room sits inside a heated house at 18 °C; a container yard has no floor and tracks the weather.
+
+The result is a seasonal decision that did not exist before: an ASIC in a spare room is fine at 18 °C through a Washington winter and hits 36 °C with a wear multiplier of ×1.33 in July, which a $95 box fan brings back to 28 °C. The room drifts to its new equilibrium over about two days rather than the previous five.
+
 ## Editorial review checklist
 
 Use this checklist for every rewritten surface:
