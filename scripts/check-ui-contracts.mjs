@@ -8,6 +8,7 @@ const appScripts = [...html.matchAll(/<script src="(src\/[^"]+\.js)"><\/script>/
 const inline = (await Promise.all(appScripts.map(file => readFile(new URL(file, root), "utf8")))).join("\n");
 const simulationSource = await readFile(new URL("src/engine/simulation.js", root), "utf8");
 const renderSource = await readFile(new URL("src/ui/render.js", root), "utf8");
+const operatorSource = await readFile(new URL("src/engine/operator.js", root), "utf8");
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -186,7 +187,9 @@ assert(inline.includes("function sparePartCost(part)") && inline.includes('hasSk
 assert(inline.includes("function dismissStaff(id)") && inline.includes('a==="dismiss-staff"') && inline.includes("state.billLedger.staff=(state.billLedger.staff||0)+role.salary") && inline.includes("if(!techs&&state.autoRepair)state.autoRepair=false"), "Staff cannot be dismissed, dismissal is free of notice cost, or losing the last technician leaves auto-repair stuck on");
 assert(inline.includes("function selfServiceBench(owned)") && inline.includes("${selfServiceRelevant()?selfServiceBench(owned):\"\"}") && inline.includes("function selfServiceRelevant()") && css.includes(".self-service-bench{"), "The Mine floor is missing the self-service bench panel, its styling, or the check that shows it whenever no technician is free");
 assert(inline.includes("function operatorLevel(total)") && inline.includes("function xpForLevel(level)") && inline.includes("function levelAwardsPoint(level)") && inline.includes("function awardXp(amount,source)"), "The operator XP model is missing");
-assert(/^"use strict";\nconst XP_LEVEL_STEP=60,SHARE_WORK=4294967296;/m.test(simulationSource), "XP constants must be declared above the startup migration block that calls normalizeXp(), or simulation.js aborts on load with a temporal-dead-zone error");
+const operatorIdx = appScripts.indexOf("src/engine/operator.js"), simulationIdx = appScripts.indexOf("src/engine/simulation.js");
+assert(operatorIdx >= 0 && simulationIdx >= 0 && operatorIdx < simulationIdx, "src/engine/operator.js must load BEFORE src/engine/simulation.js: the migration block calls normalizeXp() at the top level, and reversing them aborts the whole engine on load");
+assert(/const XP_LEVEL_STEP=60,SHARE_WORK=4294967296;/.test(operatorSource) && !/const XP_LEVEL_STEP/.test(simulationSource), "The XP constants belong in operator.js alongside the functions that use them");
 assert(inline.includes('awardXp(1.2*Math.log2(1+shares),"shares")') && inline.includes('"record")') && inline.includes('"deploy")') && inline.includes('"repair")'), "XP is no longer earned from all four sources (shares, best-share records, deployment, repairs)");
 assert(inline.includes("Math.log2") && inline.includes("function dailyShareCount(hash)"), "Share XP must stay logarithmic in hashrate, or an eleven-order-of-magnitude fleet range breaks the curve");
 assert(inline.includes("if(levelAwardsPoint(level)){state.points++"), "Levelling up no longer grants skill points");
