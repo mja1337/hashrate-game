@@ -129,7 +129,7 @@ assert(sandboxContext.SANDBOX_END===4941907200000, "SANDBOX_END drifted from the
 assert(sandboxContext.OPERATOR_ERAS.length===7 && sandboxContext.OPERATOR_ERAS[6].id==="frontier2", "Procedural-frontier operator era is missing or out of place");
 assert(/performance=eraPoints\/\(OPERATOR_ERAS\.length\*100\)\*\d+/.test(inline), "Operator performance subscore still divides by a hardcoded era count");
 assert(inline.includes("next>=SANDBOX_END&&state.sandbox&&!state.pendingSettlement") && inline.includes('state.endReason="sandbox-complete"'), "Sandbox continuation has no second, finite auto-end trigger");
-assert(inline.includes('body.querySelector(\'[data-action="continue-run"]\')||state.endReason==="sandbox-complete")return'), "Continue-sandbox button is not suppressed once the procedural horizon is reached");
+assert(inline.includes('body.querySelector(\'[data-action="continue-run"]\')||state.endReason||state.time<END)return'), "The sandbox continuation must only be offered to a run that actually reached the recorded cutoff: a receivership in 2017 was being told the historical feed had ended");
 assert(inline.includes("function futurePriceAt(") && inline.includes("function futureHashAt(") && inline.includes("function futureHeightAt(") && inline.includes("function futureChainSizeAt("), "Procedural continuation model for price/hash/height/chain-size is missing");
 assert(!inline.includes("nextRand()") || !inline.slice(inline.indexOf("function futurePriceAt("), inline.indexOf("function futurePriceAt(")+2000).includes("nextRand()"), "Procedural price model must stay a pure function of time, not the live gameplay PRNG");
 // Bitcoin issues whole satoshis. The 100-year continuation projects roughly
@@ -583,5 +583,56 @@ for (const [, id, name, mean, swing] of climates) {
   assert(july > january, `${name} is warmer in January than July`);
 }
 assert(inline.includes("sheds ${fmtNum(thermalLossKwPerC())} kW per °C"), "The heat-rejection tile does not say what its capacity figure means");
+
+// Required help patterns. The map's existence was already checked; what was not checked is
+// whether the help it holds is usable — three terms per page, each actually defined, each
+// pointing somewhere real, and no abbreviation left for the player to guess at.
+const helpStart = renderSource.indexOf("const PAGE_HELP={");
+const helpBlock = renderSource.slice(helpStart, renderSource.indexOf("\n};", helpStart));
+assert(helpStart >= 0 && helpBlock.length > 0, "PAGE_HELP could not be extracted");
+const helpEntries = [...helpBlock.matchAll(/(\w+):\{anchor:"([^"]+)",label:"([^"]+)",terms:\[(.*?)\]\}/g)].map(match => ({
+  tab: match[1], anchor: match[2], label: match[3],
+  terms: [...match[4].matchAll(/\["([^"]+)","([^"]+)"\]/g)].map(term => ({ name: term[1], definition: term[2] })),
+}));
+assert(helpEntries.length === orientationTabs.length, `Every non-Dashboard tab needs contextual help; found ${helpEntries.length} of ${orientationTabs.length}`);
+for (const entry of helpEntries) {
+  assert(entry.terms.length === 3, `${entry.tab} help defines ${entry.terms.length} terms; the disclosure is built for three`);
+  assert(methodTargets.has(entry.anchor), `${entry.tab} help points at a Method target that does not exist: ${entry.anchor}`);
+  assert(entry.label && entry.label === entry.label.toLowerCase(), `${entry.tab}'s help label reads mid-sentence as "How ${entry.label} works", so it should not be capitalised`);
+  for (const term of entry.terms) {
+    assert(term.definition.length >= 30, `${entry.tab} → "${term.name}" is defined in ${term.definition.length} characters; a definition explains a consequence, not a synonym`);
+    assert(/[.!?]$/.test(term.definition), `${entry.tab} → "${term.name}" is not a finished sentence`);
+    assert(!new RegExp(`^${term.name}\\b`, "i").test(term.definition), `${entry.tab} → "${term.name}" is defined by restating itself`);
+    // An abbreviation on a card the player is reading has to be findable in the glossary.
+    for (const abbreviation of term.name.match(/\b[A-Z]{2,}(?:\/[A-Z]+)?\b|\b[A-Z]\/[A-Z]{2}\b/g) || []) {
+      assert(glossaryApi.glossaryEntries(abbreviation).length > 0, `"${abbreviation}" appears in ${entry.tab}'s help but cannot be found in the glossary`);
+    }
+  }
+}
+// The glossary is the fallback when a term is not on the page you are looking at, so the
+// concepts help leans on should be searchable too.
+for (const concept of ["hash rate", "power draw", "J/TH", "all-in rate", "reward variance", "knowledge", "bid", "cash runway", "liquid cash"]) {
+  assert(glossaryApi.glossaryEntries(concept).length > 0, `The glossary cannot find "${concept}", which contextual help relies on`);
+}
+
+// The sandbox used to project a smooth trend with a ±15% sine and a flat monthly wobble.
+// Its cycle and its volatility are now measured from the recorded history the run has just
+// replayed: the shape is the detrended log residual of the three complete halving epochs,
+// averaged by phase, and the volatility continues the decay from 139% annualised in
+// 2011-13 to 46% in 2023-26.
+const historyModel = await readFile(new URL("src/engine/history.js", root), "utf8");
+assert(historyModel.includes("const HALVING_CYCLE_SHAPE=["), "The empirical halving-cycle shape is gone");
+const shape = historyModel.match(/const HALVING_CYCLE_SHAPE=\[([^\]]+)\]/)[1].split(",").map(Number);
+assert(shape.every(Number.isFinite), "The cycle template contains a value that is not a number");
+assert(shape.length === 12, `The cycle template should carry twelve phase bins, not ${shape.length}`);
+const trough = shape.indexOf(Math.min(...shape)), peak = shape.indexOf(Math.max(...shape));
+assert(trough === 0, "The recorded cycle troughs immediately after a halving; the template no longer does");
+assert(peak >= 3 && peak <= 5, `The recorded cycle peaks about a third of the way through an epoch; this template peaks at bin ${peak}`);
+assert(Math.max(...shape) - Math.min(...shape) > 1.5, "The cycle template has been flattened back toward the sine it replaced");
+assert(/CYCLE_AMP0=\.\d+,CYCLE_HALFLIFE=\d+/.test(historyModel), "The cycle amplitude no longer decays as the asset matures");
+assert(/VOL_ANNUAL_0=\.\d+,VOL_ANNUAL_INF=\.\d+,VOL_HALFLIFE=\d+/.test(historyModel), "Projected volatility is no longer calibrated to the recorded series");
+assert(!/cycleAmp=\.15\*Math\.exp|Math\.sin\(\(phase-\.2\)/.test(historyModel), "The old ±15% sine is back");
+assert(historyModel.includes("function futureWobble(t,years,seed)") && !/futureWobble[^}]*nextRand/.test(historyModel), "The projected wobble must stay a pure function of the date, never the gameplay PRNG");
+assert(historyModel.includes("cycleShapeAt(halvingPhase(t)-lag)"), "Hash rate should follow the price cycle with a lag rather than lead it: capacity is ordered after a rally and lands months later");
 
 console.log("UI contracts passed: Mine purchases, difficulty and mobile speed controls, transaction precision, enhancement guards, mempool containment, fleet servicing, repair labour, overdrive, Method coverage, speed-resume safety, the exchange trade-ticket flow, network-hash display parity, bad-event impact effects, timed facility-upgrade risk, mining-floor connectivity/power status, the 100-year procedural sandbox continuation, pool fee display, pool shutdown fail-over, the custody transfer slider, Lightning gating, live market pricing, mempool realism, disabled-control tooltips, the single-venue market redesign, Mine-tab scroll stability, full-refurbishment puzzle consistency, the proactive settlement warning, connectivity ping, the unified incoming-fleet pipeline, proportional fleet-health severity colors, rival operators, milestone moments, the end-of-run recap, cross-run career persistence, the dice-entropy wallet-setup ceremony, the era-accurate wallet-software upgrade path, the resetGame() operator-era crash fix, the real mailing-list learning items, the Dashboard build-queue card, hands-on self-servicing before technicians are hired, the fault-clearing/offline-threshold repair fix, the non-blocking faucet popup, tiered spare parts, the historically-grounded custody/region exposure warnings, free self-serviced labour with real self-damage risk, the four hardware self-help skills, staff dismissal the operator XP/level system, dated pool payout schemes, one drawing per machine, and scroll-anchored, frame-aligned repaints");

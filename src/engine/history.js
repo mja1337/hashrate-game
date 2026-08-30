@@ -47,18 +47,43 @@ function decayedTrend(v0,g0,gInf,halfLifeYears,years){const k=Math.LN2/halfLifeY
 function instRate(g0,gInf,halfLifeYears,years){const k=Math.LN2/halfLifeYears;return gInf+(g0-gInf)*Math.exp(-k*years)}
 function halvingPhase(t){const epoch=FUTURE_HALVING_INTERVAL,anchor=at("2024-04-19");return(((t-anchor)%epoch)+epoch)%epoch/epoch}
 const PRICE_G0=.22,PRICE_GINF=.03,PRICE_HALFLIFE=15,HASH_G0=.15,HASH_GINF=.02,HASH_HALFLIFE=12;
+/* The cycle and the volatility below are measured from the recorded history the run has
+   just replayed, not invented. Detrending each of the three complete halving epochs and
+   averaging the log residual by phase gives this shape: a trough just after the halving,
+   a peak about a third of the way through the epoch, a long drawdown, then a recovery
+   into the next one. Its peak-to-trough span is 7.4x, where the sine it replaces was
+   ±15%. Amplitude starts below the historical figure because the most recent epoch was
+   already far flatter than the first, and decays as the asset matures. */
+const HALVING_CYCLE_SHAPE=[-1.028,-0.372,.091,.702,.969,.702,.153,-.336,-.377,-.171,-.217,-.116];
+const CYCLE_AMP0=.55,CYCLE_HALFLIFE=25;
+/* Realised daily volatility fell from about 139% annualised across 2011-13 to 46% across
+   2023-26. The projection continues that decay rather than holding a flat wobble. */
+const VOL_ANNUAL_0=.46,VOL_ANNUAL_INF=.18,VOL_HALFLIFE=20;
+function cycleShapeAt(phase){
+  const n=HALVING_CYCLE_SHAPE.length,x=(((phase%1)+1)%1)*n,i=Math.floor(x),f=x-i;
+  const a=HALVING_CYCLE_SHAPE[i%n],b=HALVING_CYCLE_SHAPE[(i+1)%n];
+  return a+(b-a)*f;
+}
+/* Deterministic by construction: a pure function of the date, never of state.rng, so a
+   repeated render or a reloaded save always produces the same projection. */
+function futureWobble(t,years,seed){
+  const monthly=VOL_ANNUAL_0*Math.exp(-years*Math.LN2/VOL_HALFLIFE)+VOL_ANNUAL_INF*(1-Math.exp(-years*Math.LN2/VOL_HALFLIFE));
+  const sd=monthly/Math.sqrt(12),index=Math.floor((t-END)/(DAY*30));
+  const draw=(hashFrac(index*seed)+hashFrac(index*seed*1.7+11)+hashFrac(index*seed*2.9+23)-1.5)/1.5;
+  return Math.exp(draw*sd*Math.sqrt(3));
+}
 function futurePriceAt(t){
   const years=futureYears(t),v0=interp(PRICE,END),trend=decayedTrend(v0,PRICE_G0,PRICE_GINF,PRICE_HALFLIFE,years);
-  const phase=halvingPhase(t),cycleAmp=.15*Math.exp(-years/40),cycle=1+cycleAmp*Math.sin((phase-.2)*2*Math.PI);
-  const noiseIdx=Math.floor((t-END)/(DAY*30)),noise=1+.08*(hashFrac(noiseIdx*2.7)*2-1);
-  return Math.max(v0*.05,trend*cycle*noise);
+  const amplitude=CYCLE_AMP0*Math.exp(-years*Math.LN2/CYCLE_HALFLIFE);
+  const cycle=Math.exp(cycleShapeAt(halvingPhase(t))*amplitude);
+  return Math.max(v0*.05,trend*cycle*futureWobble(t,years,2.7));
 }
 function futureHashAt(t){
   const years=futureYears(t),v0=interp(HASH,END),trend=decayedTrend(v0,HASH_G0,HASH_GINF,HASH_HALFLIFE,years);
   const heat=Math.min(1,Math.max(0,(instRate(PRICE_G0,PRICE_GINF,PRICE_HALFLIFE,years)-PRICE_GINF)/(PRICE_G0-PRICE_GINF))),coupling=1+.12*heat;
-  const phase=halvingPhase(t),dip=phase<.08?1-.12*(1-phase/.08):1;
-  const noiseIdx=Math.floor((t-END)/(DAY*30)),noise=1+.05*(hashFrac(noiseIdx*4.1)*2-1);
-  return Math.max(v0*.1,trend*coupling*dip*noise);
+  const lag=.14,amplitude=CYCLE_AMP0*Math.exp(-years*Math.LN2/CYCLE_HALFLIFE)*.35;
+  const cycle=Math.exp(cycleShapeAt(halvingPhase(t)-lag)*amplitude);
+  return Math.max(v0*.1,trend*coupling*cycle*futureWobble(t,years,4.1)**.4);
 }
 function futureFeeAt(t){const years=futureYears(t),v0=Math.max(.01,interp(FEES,END,false));return decayedTrend(v0,.05,.005,10,years)}
 function futureTxAt(t){const years=futureYears(t),v0=interp(TX,END);return decayedTrend(v0,.03,.005,10,years)}

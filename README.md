@@ -208,6 +208,4 @@ Use this checklist for every rewritten surface:
 
 ## Outstanding
 
-- Two legs of the editorial walkthrough matrix. The fault sequence is half walked — an engine-raised fault shows its capacity-lost copy and the servicing bench cleanly at both widths, but driving through to a completed repair needs the matching spare-part tier, and receivership was never reached. Both sets of strings are contract-covered but not walked.
-- Copy contracts for required help patterns beyond the page-help map already covered.
-- The procedural sandbox projects from a smooth decayed trend. It could instead derive its volatility and cycle shape from the recorded history it has just finished replaying.
+Nothing tracked. The editorial walkthrough matrix is complete, the help-pattern contracts are in place, and the sandbox derives its cycle and volatility from the recorded series.
