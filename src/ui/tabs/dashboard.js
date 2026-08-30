@@ -25,7 +25,7 @@ function renderHeader(){
     <div class="tick"><div class="label">Lightning locked</div><div id="live-lightning-btc" class="value ${lightningAvailable()?"":"dim"}">${tickerBtc(lightningLocked())}</div><div class="subvalue">${lightningAvailable()?"Routing liquidity · BTC":"Unlocks 15 Mar 2018"}</div></div>
     <div class="tick"><div class="label">BTC / USD</div><div id="live-price" class="value orange">${state.time<MARKET?"NO MARKET":fmtUsd(p)}</div><div class="subvalue">recorded daily composite</div></div>
     <div class="tick"><div class="label">Network hash</div><div id="live-network-hash" class="value">${fmtHash(competitiveHashAt(state.time,fs.hash))}</div><div class="subvalue">recorded + unseen-miner floor</div></div>
-    <div class="tick"><div class="label">Difficulty</div><div id="live-difficulty" class="value">${fmtDiff(difficultyAt(state.time))}</div><div class="subvalue">reconstructed daily mean</div></div>
+    <div class="tick"><div class="label">Difficulty</div><div id="live-difficulty" class="value">${fmtDiff(difficultyAt(state.time))}</div><div class="subvalue">recorded · holds until the next retarget</div></div>
     <div class="tick"><div class="label">Subsidy</div><div id="live-subsidy" class="value">${fmtSubsidy(subsidyAt(state.time))}</div><div class="subvalue">per block</div></div>
     <div class="tick"><div class="label">Fees / block</div><div id="live-fees" class="value">${fmtBtc(feeAt(state.time))}</div><div class="subvalue">7-day network mean</div></div>
     <div class="tick"><div class="label">Your hash</div><div id="live-your-hash" class="value ${online?"green":""}">${fmtHash(fs.hash)}</div><div id="live-your-status" class="subvalue">${online?"online":"offline"}</div></div>

@@ -4,7 +4,7 @@
 
 ## Ownership
 
-- `historical-data.js` — generated, immutable runtime history. Rebuild it with `scripts/build-historical-data.mjs`; do not hand-edit it.
+- `historical-data.js` — generated, immutable runtime history. Rebuild it with `scripts/build-historical-data.mjs`; do not hand-edit it. Price, hash, fees, transactions and height come from Coin Metrics; difficulty comes from mempool.space as one exact value per 2016-block retarget. Pass `--difficulty-only` to rewrite that series alone.
 - `src/config/timeline.js` — protocol dates, opening constants, treasury policies and scoring eras.
 - `src/data/network.js` — fallback price/hash/transaction series, pools and the recorded-data bindings.
 - `src/data/hardware.js` — miner specifications, spare parts, and which part each machine takes (`fanTierFor`, `hashboardTierFor`). Those two live here rather than in `maintenance.js` because `simulation.js` calls them in a top-level save migration, and `maintenance.js` is parsed after it.

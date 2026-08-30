@@ -7,6 +7,7 @@ const css = await readFile(new URL("src/styles/app.css", root), "utf8");
 const appScripts = [...html.matchAll(/<script src="(src\/[^"]+\.js)"><\/script>/g)].map(match => match[1]);
 const inline = (await Promise.all(appScripts.map(file => readFile(new URL(file, root), "utf8")))).join("\n");
 const simulationSource = await readFile(new URL("src/engine/simulation.js", root), "utf8");
+const buildSource = await readFile(new URL("scripts/build-historical-data.mjs", root), "utf8");
 const renderSource = await readFile(new URL("src/ui/render.js", root), "utf8");
 const operatorSource = await readFile(new URL("src/engine/operator.js", root), "utf8");
 
@@ -484,5 +485,20 @@ assert(inline.includes('if(h&&job.part==="laptopfan"&&fanTierFor(h)!=="laptopfan
 
 assert(!inline.includes("indexed to 100 at game start") && !inline.includes("<span>Game start</span>"), "The market chart said it was indexed at game start three times over; the card meta says it once");
 assert(inline.includes('<div class="chart-labels end"><span id="dashboard-chart-date">') && css.includes(".chart-labels.end{justify-content:flex-end}"), "With one label left, the chart date must stay anchored to the right edge it marks");
+
+// Bitcoin changes difficulty once every 2016 blocks and nowhere else. Storing one exact
+// value per retarget is smaller than resampling it weekly and is the actual truth: the
+// previous series held 920 points, of which 919 were values that never existed.
+const bundle = await readFile(new URL("historical-data.js", root), "utf8");
+const recorded = JSON.parse(bundle.slice(bundle.indexOf("{"), bundle.lastIndexOf("}") + 1));
+assert(recorded.DIFFICULTY.length >= 400 && recorded.DIFFICULTY.length <= 700, `Difficulty should be one point per retarget, not ${recorded.DIFFICULTY.length}`);
+assert(recorded.DIFFICULTY.length < recorded.HASH.length, "The difficulty series should be sparser than the hash series: it is a step function, not a sample");
+assert(recorded.DIFFICULTY[0][1] === 1, "Difficulty must start at 1, the genesis epoch");
+assert(recorded.DIFFICULTY.every((entry, i) => i === 0 || entry[1] !== recorded.DIFFICULTY[i - 1][1]), "A resampled difficulty series would repeat values between retargets");
+assert(/mempool\.space/.test(recorded.meta.source) && recorded.meta.difficultySourceUrl, "The difficulty source is not attributed in the bundle metadata");
+assert(!inline.includes("reconstructed daily mean") && !inline.includes("Difficulty is reconstructed from recorded hash rate"), "Difficulty is recorded now, not reconstructed; the copy must not still claim otherwise");
+assert(inline.includes("holds until the next retarget"), "The difficulty readout should say the value holds until the next retarget rather than drifting daily");
+assert(buildSource.includes("mempool.space/api/v1/mining/difficulty-adjustments") && buildSource.includes("--difficulty-only"), "The build script must fetch exact retargets, and must keep a mode that rewrites difficulty alone so an accuracy fix cannot pull unrelated revisions into every other series");
+assert(/value \/ previous > 4\.000001/.test(buildSource), "The build must reject any difficulty step outside the protocol's 4x clamp rather than trusting the feed");
 
 console.log("UI contracts passed: Mine purchases, difficulty and mobile speed controls, transaction precision, enhancement guards, mempool containment, fleet servicing, repair labour, overdrive, Method coverage, speed-resume safety, the exchange trade-ticket flow, network-hash display parity, bad-event impact effects, timed facility-upgrade risk, mining-floor connectivity/power status, the 100-year procedural sandbox continuation, pool fee display, pool shutdown fail-over, the custody transfer slider, Lightning gating, live market pricing, mempool realism, disabled-control tooltips, the single-venue market redesign, Mine-tab scroll stability, full-refurbishment puzzle consistency, the proactive settlement warning, connectivity ping, the unified incoming-fleet pipeline, proportional fleet-health severity colors, rival operators, milestone moments, the end-of-run recap, cross-run career persistence, the dice-entropy wallet-setup ceremony, the era-accurate wallet-software upgrade path, the resetGame() operator-era crash fix, the real mailing-list learning items, the Dashboard build-queue card, hands-on self-servicing before technicians are hired, the fault-clearing/offline-threshold repair fix, the non-blocking faucet popup, tiered spare parts, the historically-grounded custody/region exposure warnings, free self-serviced labour with real self-damage risk, the four hardware self-help skills, staff dismissal the operator XP/level system, dated pool payout schemes, one drawing per machine, and scroll-anchored, frame-aligned repaints");

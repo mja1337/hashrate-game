@@ -20,7 +20,7 @@ if (!data) throw new Error("HISTORICAL_DATA was not defined");
 const requirements = {
   PRICE: 5_000,
   HASH: 800,
-  DIFFICULTY: 800,
+  DIFFICULTY: 400,
   FEES: 900,
   TX: 800,
   HEIGHT: 800,
@@ -41,7 +41,17 @@ for (const [name, minimum] of Object.entries(requirements)) {
 
 if (data.HEIGHT.some((entry, index) => index && entry[1] < data.HEIGHT[index - 1][1])) throw new Error("HEIGHT must be monotonic");
 if (Math.max(...data.FEES.map(entry => entry[1])) <= 1) throw new Error("FEES did not retain high-fee periods");
-if (new Set(data.DIFFICULTY.map(entry => entry[1])).size < 400) throw new Error("DIFFICULTY is unexpectedly coarse");
+if (data.DIFFICULTY[0][1] !== 1) throw new Error("DIFFICULTY must start at 1, the difficulty of the genesis epoch");
+for (let i = 1; i < data.DIFFICULTY.length; i += 1) {
+  const [date, value] = data.DIFFICULTY[i];
+  const previous = data.DIFFICULTY[i - 1][1];
+  if (value === previous) throw new Error(`DIFFICULTY repeats ${value} at ${date}; it should hold one value per retarget, not resample it`);
+  const ratio = value / previous;
+  if (ratio > 4.000001 || ratio < 0.2499) throw new Error(`DIFFICULTY at ${date} moves outside the protocol's 4x retarget clamp`);
+}
+const retargetGaps = data.DIFFICULTY.slice(1).map((entry, i) => Math.round((Date.parse(entry[0]) - Date.parse(data.DIFFICULTY[i][0])) / 86400000));
+const typicalGap = retargetGaps.slice().sort((a, b) => a - b)[Math.floor(retargetGaps.length / 2)];
+if (typicalGap < 10 || typicalGap > 18) throw new Error(`A 2016-block epoch runs about a fortnight; the median gap is ${typicalGap} days`);
 const dailyPriceStart = data.PRICE.findIndex(([date]) => date === "2010-07-17");
 for (let index = dailyPriceStart + 1; index < data.PRICE.length; index++) {
   const previous = Date.parse(`${data.PRICE[index - 1][0]}T00:00:00Z`);

@@ -636,6 +636,20 @@ So the mechanic was one binary decision wearing five hats: sell automatically at
 
 Saves holding a removed policy fall back to covering the bill. Ledger entries were renamed to match the panel and now pass their category explicitly, since the new wording no longer matches the keyword test that classified them.
 
+## Data change: difficulty is recorded now, not reconstructed
+
+Coin Metrics gates its difficulty metrics behind paid credentials, which is why the build script reconstructed difficulty from recorded hash rate and block count. That reconstruction stored 920 weekly points — of which **919 were values that never existed**, because a daily mean of a step function is not the step.
+
+Most days it landed within rounding of the truth. The damage was concentrated exactly where difficulty matters: 132 days were wrong by more than 5%, every one of them within a day of a real retarget, the worst by 50.7%. The retarget is the moment a miner's economics change, and it was the moment the series was least trustworthy. Difficulty also drifted every single week, where the protocol holds it flat for a fortnight.
+
+Bitcoin retargets once every 2016 blocks and nowhere else, so the honest representation is one value per retarget. mempool.space publishes every adjustment openly at `/api/v1/mining/difficulty-adjustments/all`: 463 exact steps from the genesis epoch to the cutoff, validated on ingest for monotonic heights and the protocol's 4× clamp. The series is now **463 points and 12.8 KB, down from 920 points and 25.7 KB** — more accurate and half the size, because the previous version was mostly storing the same fortnight over and over.
+
+Difficulty now holds flat for a median of 14 days, which is what a 2016-block epoch is.
+
+The build script gained a `--difficulty-only` mode that rewrites that one array in the existing bundle, so a targeted accuracy fix cannot quietly pull unrelated revisions into every other series. Price, hash, fees, transactions and height are byte-identical to before the change.
+
+Gameplay effect, measured for one Antminer S9 across 2013–2026: 361 of 4,968 days move at all, 85 move by more than 5%, and cumulative expected yield over the whole span shifts by **-0.43%**. The copy that called difficulty "reconstructed" was corrected in the header readout and the Method provenance chapter.
+
 ## Editorial review checklist
 
 Use this checklist for every rewritten surface:
