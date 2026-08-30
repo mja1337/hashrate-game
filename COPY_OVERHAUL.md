@@ -565,6 +565,7 @@ Two audits found nothing to change. Every use of "the Bitcoin" is correct Englis
 Verifying the new surfaces in the browser at 1440 px and 390 px turned up three defects that the contracts alone would not have:
 
 - **Chapters snapped shut under the reader.** `render()` rebuilds a tab from a template string, so every chapter a reader opened closed again on the next simulation tick — and on Method the clock is usually running. Which chapters are open is now transient view state that survives a repaint, with a contract to keep it that way.
+- **"Terms and help" closed itself too.** The same repaint problem reached back into the Phase 4 disclosure on every operating tab: open it, wait one tick, and it shut. It now remembers per tab, so opening it on Mine does not open it on Pools.
 - **A halving was labelled "Advance warning."** That label belongs to a risk that has not landed yet; a halving that has already cut the subsidy is a rules change, and the tense of the message contradicted the label. Added a `notice` feedback kind reading **Rules change**, which shares the amber warning treatment.
 - **An 11 px touch target.** The "How this works in Method" link inside each glossary entry inherited a bare text-link style, against the Phase 4 rule of 34 px desktop and 40 px mobile. Both are now enforced by contract.
 

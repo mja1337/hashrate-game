@@ -42,7 +42,9 @@ function filterGlossary(query){
   const count=document.querySelector("[data-glossary-count]");if(count)count.textContent=`${shown} of ${GLOSSARY.length} terms`;
   const empty=document.querySelector("[data-glossary-empty]");if(empty)empty.hidden=shown>0;
 }
-function contextualHelp(tab){const help=PAGE_HELP[tab];if(!help)return"";return `<details class="context-help"><summary>Terms and help <span>What do these numbers mean?</span></summary><div class="context-help-body"><dl>${help.terms.map(([term,definition])=>`<div><dt>${term}</dt><dd>${definition}</dd></div>`).join("")}</dl><button class="action small context-method-link" data-action="tab" data-value="method" data-anchor="${help.anchor}">How ${help.label} works in this simulation →</button><button class="action small context-glossary-link" data-action="glossary">Open the glossary</button></div></details>`}
+const openContextHelp=new Set();
+function rememberContextHelp(node){const tab=node?.dataset?.helpTab;if(!tab)return;if(node.open)openContextHelp.add(tab);else openContextHelp.delete(tab)}
+function contextualHelp(tab){const help=PAGE_HELP[tab];if(!help)return"";return `<details class="context-help" data-help-tab="${tab}" ${openContextHelp.has(tab)?"open":""}><summary>Terms and help <span>What do these numbers mean?</span></summary><div class="context-help-body"><dl>${help.terms.map(([term,definition])=>`<div><dt>${term}</dt><dd>${definition}</dd></div>`).join("")}</dl><button class="action small context-method-link" data-action="tab" data-value="method" data-anchor="${help.anchor}">How ${help.label} works in this simulation →</button><button class="action small context-glossary-link" data-action="glossary">Open the glossary</button></div></details>`}
 /* Method chapter ids and section ids are now written into the markup, so nothing has to
    be matched by heading text at runtime. What is still needed is opening the chapter a
    deep link points inside: a collapsed <details> cannot be scrolled to. */

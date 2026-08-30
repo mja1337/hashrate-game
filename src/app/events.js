@@ -99,5 +99,5 @@ document.getElementById("app").addEventListener("change",e=>{
   }
   if(e.target.id==="importSave"&&e.target.files&&e.target.files[0])importSave(e.target.files[0])
 });
-document.getElementById("app").addEventListener("toggle",e=>{if(e.target.classList?.contains("method-chapter"))rememberMethodChapter(e.target)},true);
+document.getElementById("app").addEventListener("toggle",e=>{if(e.target.classList?.contains("method-chapter"))rememberMethodChapter(e.target);else if(e.target.classList?.contains("context-help"))rememberContextHelp(e.target)},true);
 document.getElementById("app").addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.matches(".story-item"))e.target.click()});
