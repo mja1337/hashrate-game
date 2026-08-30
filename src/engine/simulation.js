@@ -317,7 +317,7 @@ function finishMonthlySettlement(kind="cash",automatic=false){
 }
 function queueMonthlySettlement(due,month,loanInterest){
   const snapshot=settlementSnapshot(due,month),resumeSpeed=state.speed||state.returnSpeed||0;treasurySaleForSettlement(due);state.pendingSettlement={due,month,loanInterest,snapshot,resumeSpeed};
-  if(state.cash>=due){finishMonthlySettlement(treasuryPolicy().id==="cover"?"policy":"cash",true);return}
+  if(state.cash+1e-8>=due){finishMonthlySettlement(treasuryPolicy().id==="cover"?"policy":"cash",true);return}
   state.speed=0;renderFullQueued=true;log("Settlement decision required",`${fmtUsd(due-state.cash)} short`);showToast("Settlement paused","Choose how to cover the shortfall. Time will not move until the decision is resolved.","bad","finance");setTimer();
 }
 function liquidationCandidates(onlyId=null){

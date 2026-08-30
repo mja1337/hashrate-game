@@ -571,10 +571,18 @@ Verifying the new surfaces in the browser at 1440 px and 390 px turned up three 
 
 One copy error came from the formatter rather than the writing: a sentence arguing that satoshis are indivisible rendered 312,500,000 as "312.5M", because the shared number formatter compacts above a million. It now prints in full.
 
+### Walkthrough, second pass
+
+The remaining journeys were walked at 1440 px and 390 px: the transaction review, a blocked action and its touch helper, a historical event with a direct effect and one with context only, the monthly settlement with all three rescue routes, and the end-of-run recap. Every one renders its full copy structure, fits its viewport and introduces no horizontal overflow at either width. The event without a mechanic says so in as many words rather than falling through to a generic line.
+
+Verification was at DOM level rather than by eye: the Browser pane was hidden for this session, so screenshots came back blank. Geometry, overflow and copy structure were measured directly instead.
+
+The settlement leg found a real bug, and not an edge case. `queueMonthlySettlement` compared cash to the bill with `>=`, while `finishMonthlySettlement` allowed a 1e-8 float tolerance for the same comparison. Under the "Cover the bill" treasury policy the game sells exactly enough BTC to meet the bill, so cash lands on the due amount to within floating-point error — and about 8% of the time it lands a hair under. Those runs paused, demanded a rescue, and rendered the shortfall as "<$0.00000001 is needed before the operation can continue." Roughly one exactly-covered settlement in twelve. Both comparisons now use the same tolerance, with a contract to keep them in step.
+
 ### Still outstanding
 
 - Copy contracts for required help patterns beyond the page-help map already covered.
-- The full editorial walkthrough matrix. The new Method, glossary and sandbox surfaces are verified at both widths; the transaction, fault, settlement, rescue and recap journeys in the matrix are not yet re-walked.
+- Two legs of the walkthrough matrix: the fault to self-repair-failure to successful-repair sequence, and receivership. Both were exercised from injected state rather than driven end to end, so their copy is contract-covered but not walked.
 - Paragraph-level layering of guidance versus exact calculation inside the denser Method sections.
 
 ## Editorial review checklist
