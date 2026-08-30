@@ -37,8 +37,9 @@ assert(helperContext.fmtUsd(0.0004) === "$0.0004", "Tiny USD values lost precisi
 assert(helperContext.fmtBtc(0.000000001) === "<0.00000001 BTC", "Sub-satoshi BTC values must not be displayed as zero");
 assert(helperContext.fmtCompactUsd(0.004) !== "$0", "Compact USD formatting rounded a non-zero value to zero");
 
-assert(!inline.includes("introLiquidity"), "Legacy arbitrary starting-liquidity state remains");
-assert(!inline.includes("data-starting-liquidity"), "Legacy starting-liquidity inputs remain");
+assert(inline.includes("STARTING_LIQUIDITY_MIN=1500") && inline.includes("STARTING_LIQUIDITY_MAX=1500000"), "Starting Liquidity limits are missing or incorrect");
+assert(inline.includes("data-starting-cash") && inline.includes("Starting Liquidity"), "Starting Liquidity controls are missing");
+assert(inline.includes("state.cash=liquidity;state.startingCash=liquidity"), "The selected Starting Liquidity is not applied when a run begins");
 assert(inline.includes('data-action="starting-mode"'), "Difficulty controls are missing");
 assert(inline.includes("Starting difficulty"), "Method is missing difficulty documentation");
 assert(inline.includes("Transaction sizing and procurement"), "Method is missing transaction documentation");

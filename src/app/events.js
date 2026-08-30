@@ -16,7 +16,7 @@ document.getElementById("app").addEventListener("click",e=>{
   if(a==="starting-mode"){if(STARTING_MODES.some(mode=>mode.id===v)){introDifficulty=v;render()}return}
   if(a==="mobile-menu"){mobileMenuOpen=!mobileMenuOpen;render(false);return}
   if(a==="mobile-menu-section"){mobileMenuSection=v;mobileMenuOpen=true;render(false);return}
-  if(a==="begin"){const mode=startingMode(introDifficulty);state.cash=1500;state.startingCash=1500;state.time=mode.start;state.campaignStart=mode.start;state.lastMonth=new Date(mode.start).toISOString().slice(0,7);state.difficulty=mode.id;state.started=true;state.seen=["genesis"];log("Campaign start selected",`${mode.label} · ${dateFmt(mode.start)}`,"operations");awardLearning(LEARNING.find(x=>x.id==="cryptomailinglist"));if(!state.startingGrant){state.points+=1;state.startingGrant=true;log("Genesis operator grant","+1 skill point")}save();setTimer();render()}
+  if(a==="begin"){const mode=startingMode(introDifficulty),liquidity=clampStartingLiquidity(introStartingCash);state.cash=liquidity;state.startingCash=liquidity;state.time=mode.start;state.campaignStart=mode.start;state.lastMonth=new Date(mode.start).toISOString().slice(0,7);state.difficulty=mode.id;state.started=true;state.seen=["genesis"];log("Campaign start selected",`${mode.label} · ${dateFmt(mode.start)} · ${fmtUsd(liquidity)} starting liquidity`,"operations");awardLearning(LEARNING.find(x=>x.id==="cryptomailinglist"));if(!state.startingGrant){state.points+=1;state.startingGrant=true;log("Genesis operator grant","+1 skill point")}save();setTimer();render()}
   else if(a==="intro-next"){introStep=Math.min(INTRO_SLIDES.length-1,introStep+1);render()}
   else if(a==="intro-back"){introStep=Math.max(0,introStep-1);render()}
   else if(a==="wallet-setup-start"){state.walletSetup.step=1;save();render()}
@@ -78,7 +78,7 @@ document.getElementById("app").addEventListener("pointerup",e=>{
   const b=e.target.closest('[data-action="tab"]');if(!b||b.disabled)return;
   recentTouchTab={value:b.dataset.value,at:Date.now()};activeTab=b.dataset.value;mobileMenuOpen=false;render(false);window.scrollTo({top:0,behavior:"smooth"});
 });
-document.getElementById("app").addEventListener("input",e=>{if(e.target.matches("[data-percent-input]"))updateTradePercentage(e.target.dataset.percentInput,e.target.value,e.target);else if(e.target.matches("[data-pool-history]"))updatePoolExplorer(Number(e.target.value))});
+document.getElementById("app").addEventListener("input",e=>{if(e.target.matches("[data-starting-cash]")){introStartingCash=clampStartingLiquidity(e.target.value);document.querySelectorAll("[data-starting-cash]").forEach(input=>{if(input!==e.target)input.value=introStartingCash});const output=document.querySelector("[data-starting-cash-output]");if(output)output.textContent=fmtUsd(introStartingCash)}else if(e.target.matches("[data-percent-input]"))updateTradePercentage(e.target.dataset.percentInput,e.target.value,e.target);else if(e.target.matches("[data-pool-history]"))updatePoolExplorer(Number(e.target.value))});
 document.getElementById("app").addEventListener("change",e=>{
   if(e.target.matches("[data-hardware-qty],[data-hardware-currency]")){
     const wrap=e.target.closest(".hardware-buy-controls");if(!wrap)return;

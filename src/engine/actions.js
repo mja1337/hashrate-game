@@ -310,7 +310,7 @@ function venueAvailable(id){
   if(id==="etf")return state.time>=at("2024-01-10");return true;
 }
 function walletName(id){return({hot:"Node-connected hot wallet",cold:"Cold / hardware wallet",mtgox:"Mt. Gox",bitfinex:"Bitfinex",quadriga:"QuadrigaCX",frontier:"Frontier exchange",exchange:"Regulated exchange",etf:"ETF exposure",frozen:"Frozen claims"})[id]||id}
-function resetGame(){if(!confirm("Erase this run and return to the Genesis Block?"))return;state=initialState();OPERATOR_ERAS.forEach(era=>state.operator.eras[era.id]={months:0,solvent:0,profitable:0,uptime:0,competitive:0});migrateActivity(state);activeTab="dashboard";activityFilter="all";activityLimit=100;tradePercentages={};introDifficulty="hard";introStep=0;clearTimeout(faucetTimer);faucet=null;save();setTimer();render()}
+function resetGame(){if(!confirm("Erase this run and return to the Genesis Block?"))return;state=initialState();OPERATOR_ERAS.forEach(era=>state.operator.eras[era.id]={months:0,solvent:0,profitable:0,uptime:0,competitive:0});migrateActivity(state);activeTab="dashboard";activityFilter="all";activityLimit=100;tradePercentages={};introDifficulty="hard";introStartingCash=STARTING_LIQUIDITY_MIN;introStep=0;clearTimeout(faucetTimer);faucet=null;save();setTimer();render()}
 function exportSave(){
   const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="hashrate-save.json";a.click();URL.revokeObjectURL(url);
 }
