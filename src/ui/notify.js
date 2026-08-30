@@ -1,0 +1,20 @@
+"use strict";
+
+/* NOTIFICATIONS — transient toasts and the bad-event impact effect. These
+   are presentation, not simulation; they lived in the engine only because
+   the engine raises them. Every entry patches the DOM directly rather than
+   triggering a render, so a burst of events cannot rebuild the page. */
+
+function toastMarkup(t){const linked=!!t.tab;return `<div class="toast ${t.kind==="bad"?"toast-bad":t.kind==="milestone"?"toast-milestone":t.kind==="warning"?"toast-warning":""} ${linked?"toast-clickable":""}" ${linked?`data-action="tab" data-value="${t.tab}"${t.anchor?` data-anchor="${t.anchor}"`:""}`:""}><div><b>${t.title}</b><span>${t.message}</span></div>${linked?'<i class="toast-go">→</i>':""}</div>`}
+function showToast(title,message,kind="info",tab=null,anchor=null){toast={title,message,kind,tab,anchor};const markup=toastMarkup(toast),existing=document.querySelector(".toast"),host=document.getElementById("app");if(existing)existing.outerHTML=markup;else if(host&&state.started)host.insertAdjacentHTML("beforeend",markup);clearTimeout(toastTimer);toastTimer=setTimeout(()=>{toast=null;document.querySelector(".toast")?.remove()},8500);if(kind==="bad"&&state.started)triggerImpactEffect()}
+let lastImpactAt=0;
+function triggerImpactEffect(){
+  const now=performance.now(),recent=now-lastImpactAt<4000;lastImpactAt=now;
+  const flash=document.createElement("div");flash.className="impact-flash";document.body.appendChild(flash);
+  flash.addEventListener("animationend",()=>flash.remove());
+  // The shake translates the whole app, so a run of faults reads as the page
+  // throwing itself around. Flash every time; shake at most once every 4s.
+  if(recent)return;
+  const shell=document.querySelector(".app");
+  if(shell){shell.classList.remove("impact-shake");void shell.offsetWidth;shell.classList.add("impact-shake");shell.addEventListener("animationend",()=>shell.classList.remove("impact-shake"),{once:true})}
+}

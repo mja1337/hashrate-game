@@ -11,6 +11,11 @@
 - `src/data/operations.js` — facilities, regions, connectivity, energy contracts and staff.
 - `src/data/progression.js` — learning, skills, nodes, securities, donations and optional scenarios.
 - `src/data/content.js` — balance scenarios, release notes and historical story events.
+- `src/engine/operator.js` — experience, operator levels and the best-share record. Loaded **before** `simulation.js`, whose state migration calls `normalizeXp()` at the top level.
+- `src/engine/maintenance.js` — spare parts, fault attribution, service jobs and the hands-on repair puzzles.
+- `src/engine/pools.js` — pool selection, market share, fees and payout schemes (FPPS / PPS / PPS+ / PPLNS / TIDES).
+- `src/ui/notify.js` — transient toasts and the bad-event impact effect; presentation rather than simulation.
+- `src/ui/art.js` — per-facility mining-floor and spare-part illustration.
 - `src/engine/history.js` — interpolation and historical/protocol lookup functions.
 - `src/engine/thermal.js` — cooling capacity, active heat load, room temperature and thermal stress.
 - `src/engine/nodes.js` — node power, synchronization, independent verification and Lightning capability.

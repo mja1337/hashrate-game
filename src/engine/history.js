@@ -18,6 +18,11 @@ const targetHashAt=t=>difficultyAt(t)*2**32/600;
 function competitiveHashAt(t,playerHash=0){const historicalFloor=Math.max(hashAt(t),targetHashAt(t))*interp(NETWORK_COMPETITION_SCALE,t,false),responsiveFloor=Math.max(0,playerHash)*interp(NETWORK_RESPONSE,t,false);return Math.max(historicalFloor,responsiveFloor)}
 function playerNetworkShareAt(t,playerHash){const competition=competitiveHashAt(t,playerHash);return playerHash>0?playerHash/(competition+playerHash):0}
 function expectedBlocksPerDayForHash(hash,t=START){if(hash<=0)return 0;const recorded=hash*86400/(Math.max(1,difficultyAt(t))*2**32),competitionCap=144*playerNetworkShareAt(t,hash);return Math.min(recorded,competitionCap)}
+function yieldDampingAt(t,hash){
+  if(!(hash>0))return 1;
+  const uncapped=hash*86400/(Math.max(1,difficultyAt(t))*2**32),modelled=expectedBlocksPerDayForHash(hash,t);
+  return uncapped>0?modelled/uncapped:1;
+}
 function approxHeight(t){return Math.max(0,Math.floor(heightAt(t)))}
 const chainSizeAt=t=>t>END?futureChainSizeAt(t):interp(CHAIN_GB,t,false);
 const FUTURE_HALVING_INTERVAL=210000*600*1000;
