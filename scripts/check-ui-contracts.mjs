@@ -445,4 +445,22 @@ assert(inline.includes("function partFitSummary(partId)") && inline.includes('<d
 assert(inline.includes("Nothing in your fleet uses this") && inline.includes("const spares=SPARE_PARTS.map(part=>{const fit=partFitSummary(part.id)"), "A part no machine in the fleet uses must say so rather than looking like a valid purchase");
 assert(css.includes(".part-fit{") && css.includes(".part-fit.unused{"), "Part-fit lines are missing their styling");
 
+// Five treasury policies were really two. Measured over an identical seeded run,
+// "Cover the bill" and "HODL everything" were byte-identical whenever the operation
+// stayed solvent, and the fixed-ratio policies traded BTC for a fraction of its value
+// in cash. The screen now carries the one decision that exists.
+const policyContext = {};
+vm.runInNewContext(timelineSource.replace("const TREASURY_POLICIES", "var TREASURY_POLICIES") + "\nglobalThis.policies=TREASURY_POLICIES;", policyContext);
+const policies = policyContext.policies;
+assert(policies.length === 2, `Settlement conversion is one decision with two sides, not ${policies.length} options`);
+assert(policies[0].id === "cover" && policies[1].id === "hodl", "The two settlement-conversion instructions should be cover and hold");
+assert(policies.every(p => p.consequence && p.consequence.length > 40), "Each instruction must state its consequence, not just its name");
+assert(!policies.some(p => "ratio" in p), "The fixed-ratio policies are gone; nothing should still carry a ratio");
+assert(inline.includes('if(policy.id!=="cover")return 0;'), "Holding must sell nothing at settlement");
+assert(!/sell25|sell50|sell100/.test(inline.replace(/const CHANGELOG=[\s\S]*?\n\];/, "")), "A removed treasury policy is still referenced outside the changelog");
+assert(inline.includes("state.treasuryPolicy=TREASURY_POLICIES.some(x=>x.id===state.treasuryPolicy)?state.treasuryPolicy:\"cover\""), "A save holding a removed policy must fall back to covering the bill");
+assert(inline.includes("Settlement conversion") && !inline.includes('<h2>Treasury policy</h2>'), "The panel should be named for the decision it carries");
+assert(inline.includes('log("Settlement conversion changed"') && inline.includes("log(`Settlement conversion: ${policy.name}`"), "Ledger entries still call this a treasury policy");
+assert(inline.includes("Next automatic sale") && inline.includes("Forecast shortfall"), "The panel no longer shows what the current instruction will actually do at the next settlement");
+
 console.log("UI contracts passed: Mine purchases, difficulty and mobile speed controls, transaction precision, enhancement guards, mempool containment, fleet servicing, repair labour, overdrive, Method coverage, speed-resume safety, the exchange trade-ticket flow, network-hash display parity, bad-event impact effects, timed facility-upgrade risk, mining-floor connectivity/power status, the 100-year procedural sandbox continuation, pool fee display, pool shutdown fail-over, the custody transfer slider, Lightning gating, live market pricing, mempool realism, disabled-control tooltips, the single-venue market redesign, Mine-tab scroll stability, full-refurbishment puzzle consistency, the proactive settlement warning, connectivity ping, the unified incoming-fleet pipeline, proportional fleet-health severity colors, rival operators, milestone moments, the end-of-run recap, cross-run career persistence, the dice-entropy wallet-setup ceremony, the era-accurate wallet-software upgrade path, the resetGame() operator-era crash fix, the real mailing-list learning items, the Dashboard build-queue card, hands-on self-servicing before technicians are hired, the fault-clearing/offline-threshold repair fix, the non-blocking faucet popup, tiered spare parts, the historically-grounded custody/region exposure warnings, free self-serviced labour with real self-damage risk, the four hardware self-help skills, staff dismissal the operator XP/level system, dated pool payout schemes, one drawing per machine, and scroll-anchored, frame-aligned repaints");

@@ -7,11 +7,8 @@ const SANDBOX_END=END+DAY*365.25*100;
 const at=d=>Date.parse(d+"T00:00:00Z");
 const FAUCET_START=at("2010-06-11"), FAUCET_END=at("2012-06-11");
 const TREASURY_POLICIES=[
-  {id:"cover",name:"Cover the bill",short:"Sell only what settlement needs",ratio:null},
-  {id:"hodl",name:"HODL everything",short:"Keep every mined satoshi",ratio:0},
-  {id:"sell25",name:"Sell 25%",short:"Convert one quarter of monthly production",ratio:.25},
-  {id:"sell50",name:"Sell 50%",short:"Balance reserves and reinvestment",ratio:.5},
-  {id:"sell100",name:"Sell 100%",short:"Run a fiat-profit mining business",ratio:1}
+  {id:"cover",name:"Cover the bill",short:"Sell only what settlement needs",consequence:"At each settlement the operation sells just enough BTC to pay the bill, and nothing more. Time never pauses for a shortfall you could have covered."},
+  {id:"hodl",name:"Hold everything",short:"Never sell automatically",consequence:"Nothing is sold on your behalf. If liquid cash cannot meet the bill, the run pauses and you choose the rescue yourself."}
 ];
 const OPERATOR_ERAS=[
   {id:"frontier",name:"CPU frontier",start:GENESIS,end:at("2011-01-01")},

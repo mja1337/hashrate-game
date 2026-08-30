@@ -616,6 +616,26 @@ Installed units are drawn along the back wall of the floor; units still on order
 
 The change surfaced an existing bug in the headroom check. Buying cooling tested `fleet(trial).within`, which measures what the site is drawing *right now* — and cooling is thermostatic, so a cold room draws almost nothing. A player could order unlimited plant and trip the site later. Miners are held to peak draw through `potentialKw`; cooling now is too, counting anything already on order, and the blocked message names the projected total against the site's supply.
 
+## Mechanic change: five treasury policies were two
+
+Approved separately, and recorded here because it removes a screen the overhaul had been treating as a decision.
+
+The policy selector offered Cover the bill, HODL everything, Sell 25%, Sell 50% and Sell 100%. Measured over an identical seeded run from January 2013 with a fixed fleet and no intervention, the outcomes were:
+
+| Instruction | Final BTC | Cash | Net worth |
+| --- | --- | --- | --- |
+| Cover the bill | 93.01 | $40,647 | $130,768 |
+| HODL everything | 93.01 | $40,647 | $130,768 |
+| Sell 25% | 69.75 | $41,573 | $109,163 |
+| Sell 50% | 46.50 | $42,498 | $87,559 |
+| Sell 100% | 0 | $44,350 | $44,350 |
+
+Cover and HODL are identical byte for byte whenever the operation stays solvent, because covering sells only the shortfall and there was no shortfall. The three ratio policies converted $90,120 of BTC into $3,703 of cash. A falling-market window was no kinder: the spread across all five was 0.4%, because a fleet that has fallen behind mines too little for a ratio to matter.
+
+So the mechanic was one binary decision wearing five hats: sell automatically at settlement, or do not. It is now exactly that, on a panel renamed **Settlement conversion**, with each side stating its consequence — covering never pauses the clock for a shortfall it could have cleared; holding turns every shortfall into a rescue decision. The panel shows the forecast shortfall and what the current instruction will actually sell at the next settlement, so the choice is legible before it fires rather than after.
+
+Saves holding a removed policy fall back to covering the bill. Ledger entries were renamed to match the panel and now pass their category explicitly, since the new wording no longer matches the keyword test that classified them.
+
 ## Editorial review checklist
 
 Use this checklist for every rewritten surface:

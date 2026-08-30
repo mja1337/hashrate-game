@@ -309,8 +309,8 @@ function sellControlledBtc(amount){
 }
 function treasurySaleForSettlement(due){
   if(state.time<MARKET)return 0;const policy=treasuryPolicy(),fee=.006,price=priceAt(state.time);let btc=0;
-  if(policy.id==="cover")btc=Math.max(0,due-state.cash)/(price*(1-fee));else btc=state.operator.periodMined*(policy.ratio||0);
-  btc=Math.min(state.wallets.hot,btc);if(btc<=0)return 0;state.wallets.hot-=btc;const proceeds=btc*price*(1-fee);state.cash+=proceeds;log(`Treasury policy: ${policy.name}`,`${fmtBtc(btc)} sold · +${fmtUsd(proceeds)}`);return proceeds;
+  if(policy.id!=="cover")return 0;btc=Math.max(0,due-state.cash)/(price*(1-fee));
+  btc=Math.min(state.wallets.hot,btc);if(btc<=0)return 0;state.wallets.hot-=btc;const proceeds=btc*price*(1-fee);state.cash+=proceeds;log(`Settlement conversion: ${policy.name}`,`${fmtBtc(btc)} sold · +${fmtUsd(proceeds)}`,"trade");return proceeds;
 }
 function finishMonthlySettlement(kind="cash",automatic=false){
   const pending=state.pendingSettlement;if(!pending||state.cash+1e-8<pending.due)return false;const rescueFeedback=settlementRescueFeedback(kind,pending.due,state.cash-pending.due);state.cash-=pending.due;const interest=pending.loanInterest||0;log("Operating bill settled",fmtUsd(pending.due));if(interest>0)log("Project finance interest",fmtUsd(interest));recordOperatorMonth(pending.snapshot,kind==="cash"||kind==="policy");state.bill=0;state.billLedger=blankBillLedger();state.lastMonth=pending.month;state.pendingSettlement=null;state.debt=0;state.power=!state.policyLock;clearTimeout(toastTimer);toast=null;
