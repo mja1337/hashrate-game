@@ -650,6 +650,23 @@ The build script gained a `--difficulty-only` mode that rewrites that one array 
 
 Gameplay effect, measured for one Antminer S9 across 2013–2026: 361 of 4,968 days move at all, 85 move by more than 5%, and cumulative expected yield over the whole span shifts by **-0.43%**. The copy that called difficulty "reconstructed" was corrected in the header readout and the Method provenance chapter.
 
+## Data change, step one: the bundle stops repeating itself
+
+Half the historical bundle was ISO date strings sitting beside numbers that were often smaller than the date: 128 KB of 264 KB. And the series barely needed them — price had exactly three off-cadence gaps in 5,870 points, hash had one.
+
+A regular series now stores its start date and its cadence once, then just the values; the handful of off-cadence points ride along in `extra`, and an irregular series such as difficulty stays as explicit pairs because the encoder only compresses when it actually wins. The file decodes itself on load, so `window.HISTORICAL_DATA` still exposes exactly the `[date, value]` pairs the engine has always read and nothing downstream had to change.
+
+No value moved. The build gained a `--recompress` mode that re-encodes the bundle already on disk without touching the network, and it fails unless every series decodes back to precisely the values it was given. All six do.
+
+| | before | after |
+| --- | --- | --- |
+| Raw | 265.1 KB | 127.4 KB |
+| Gzipped | 84.5 KB | 56.6 KB |
+
+That headroom is the point: daily resolution on price, hash, fees, transactions and height costs about 257 KB in this encoding, which is less than the 265 KB the weekly data used to take. Step two is that rebuild.
+
+Worth recording, since it prompted the work: the 70 KB module ceiling never applied here. It is guarded by `file.startsWith("src/")`, and the bundle sits at the repository root — it was already four times that size and passing. The ceiling exists to stop application modules turning back into monoliths, which is a review concern rather than a data one.
+
 ## Editorial review checklist
 
 Use this checklist for every rewritten surface:

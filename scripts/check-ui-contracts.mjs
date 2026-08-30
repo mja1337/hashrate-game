@@ -490,7 +490,10 @@ assert(inline.includes('<div class="chart-labels end"><span id="dashboard-chart-
 // value per retarget is smaller than resampling it weekly and is the actual truth: the
 // previous series held 920 points, of which 919 were values that never existed.
 const bundle = await readFile(new URL("historical-data.js", root), "utf8");
-const recorded = JSON.parse(bundle.slice(bundle.indexOf("{"), bundle.lastIndexOf("}") + 1));
+const bundleContext = { window: {} };
+vm.runInNewContext(bundle, bundleContext);
+const recorded = bundleContext.window.HISTORICAL_DATA;
+assert(recorded && recorded.PRICE && recorded.DIFFICULTY, "The historical bundle did not define window.HISTORICAL_DATA");
 assert(recorded.DIFFICULTY.length >= 400 && recorded.DIFFICULTY.length <= 700, `Difficulty should be one point per retarget, not ${recorded.DIFFICULTY.length}`);
 assert(recorded.DIFFICULTY.length < recorded.HASH.length, "The difficulty series should be sparser than the hash series: it is a step function, not a sample");
 assert(recorded.DIFFICULTY[0][1] === 1, "Difficulty must start at 1, the genesis epoch");
@@ -500,5 +503,19 @@ assert(!inline.includes("reconstructed daily mean") && !inline.includes("Difficu
 assert(inline.includes("holds until the next retarget"), "The difficulty readout should say the value holds until the next retarget rather than drifting daily");
 assert(buildSource.includes("mempool.space/api/v1/mining/difficulty-adjustments") && buildSource.includes("--difficulty-only"), "The build script must fetch exact retargets, and must keep a mode that rewrites difficulty alone so an accuracy fix cannot pull unrelated revisions into every other series");
 assert(/value \/ previous > 4\.000001/.test(buildSource), "The build must reject any difficulty step outside the protocol's 4x clamp rather than trusting the feed");
+
+// Storage format: a regular series carries its start and cadence instead of repeating
+// an ISO date beside every number, which was half the bundle. The file decodes itself,
+// so everything downstream still sees the pair arrays it always did.
+assert(/^\(function\(\)\{/m.test(bundle) && bundle.includes("window.HISTORICAL_DATA=data;"), "The bundle must decode itself and expose the same window.HISTORICAL_DATA shape");
+assert(bundle.includes('"start"') && bundle.includes('"step"'), "The bundle is no longer storing regular series as start plus cadence");
+assert(recorded.PRICE.every(entry => Array.isArray(entry) && typeof entry[0] === "string" && Number.isFinite(entry[1])), "Decoded series must be [date, value] pairs");
+for (const key of ["PRICE", "HASH", "DIFFICULTY", "FEES", "TX", "HEIGHT"]) {
+  const dates = recorded[key].map(entry => entry[0]);
+  assert(dates.every((date, i) => i === 0 || date > dates[i - 1]), `${key} decodes out of date order`);
+  assert(new Set(dates).size === dates.length, `${key} decodes with a duplicated date`);
+}
+assert(bundle.length < 200_000, `The bundle is ${Math.round(bundle.length / 1024)} KB; the point of the encoding was to leave room for daily resolution`);
+assert(buildSource.includes("function encodeSeries(pairs)") && buildSource.includes("--recompress"), "The build must own the encoding, and keep a network-free mode that re-encodes the existing bundle");
 
 console.log("UI contracts passed: Mine purchases, difficulty and mobile speed controls, transaction precision, enhancement guards, mempool containment, fleet servicing, repair labour, overdrive, Method coverage, speed-resume safety, the exchange trade-ticket flow, network-hash display parity, bad-event impact effects, timed facility-upgrade risk, mining-floor connectivity/power status, the 100-year procedural sandbox continuation, pool fee display, pool shutdown fail-over, the custody transfer slider, Lightning gating, live market pricing, mempool realism, disabled-control tooltips, the single-venue market redesign, Mine-tab scroll stability, full-refurbishment puzzle consistency, the proactive settlement warning, connectivity ping, the unified incoming-fleet pipeline, proportional fleet-health severity colors, rival operators, milestone moments, the end-of-run recap, cross-run career persistence, the dice-entropy wallet-setup ceremony, the era-accurate wallet-software upgrade path, the resetGame() operator-era crash fix, the real mailing-list learning items, the Dashboard build-queue card, hands-on self-servicing before technicians are hired, the fault-clearing/offline-threshold repair fix, the non-blocking faucet popup, tiered spare parts, the historically-grounded custody/region exposure warnings, free self-serviced labour with real self-damage risk, the four hardware self-help skills, staff dismissal the operator XP/level system, dated pool payout schemes, one drawing per machine, and scroll-anchored, frame-aligned repaints");
