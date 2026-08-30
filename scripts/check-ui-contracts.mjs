@@ -125,7 +125,7 @@ assert(css.includes(".thermal-console{display:grid;grid-template-columns:repeat(
 
 const sandboxContext={};
 vm.runInNewContext(timelineSource.replace("const SANDBOX_END","var SANDBOX_END").replace("const OPERATOR_ERAS","var OPERATOR_ERAS"), sandboxContext);
-assert(sandboxContext.SANDBOX_END===4941907200000, "SANDBOX_END drifted from the intended ~100-year horizon");
+assert(sandboxContext.SANDBOX_END===4943721600000, "SANDBOX_END drifted from the intended ~100-year horizon");
 assert(sandboxContext.OPERATOR_ERAS.length===7 && sandboxContext.OPERATOR_ERAS[6].id==="frontier2", "Procedural-frontier operator era is missing or out of place");
 assert(/performance=eraPoints\/\(OPERATOR_ERAS\.length\*100\)\*\d+/.test(inline), "Operator performance subscore still divides by a hardcoded era count");
 assert(inline.includes("next>=SANDBOX_END&&state.sandbox&&!state.pendingSettlement") && inline.includes('state.endReason="sandbox-complete"'), "Sandbox continuation has no second, finite auto-end trigger");
@@ -494,6 +494,10 @@ const bundleContext = { window: {} };
 vm.runInNewContext(bundle, bundleContext);
 const recorded = bundleContext.window.HISTORICAL_DATA;
 assert(recorded && recorded.PRICE && recorded.DIFFICULTY, "The historical bundle did not define window.HISTORICAL_DATA");
+// The game's cutoff and the data's last day have to be the same day. If they drift, the
+// sandbox either starts before the recorded feed runs out or leaves recorded days unplayed.
+assert(recorded.meta.through === new Date(subsidy.END).toISOString().slice(0, 10), `The historical cutoff is ${new Date(subsidy.END).toISOString().slice(0, 10)} but the data runs to ${recorded.meta.through}`);
+assert(sandboxContext.SANDBOX_END - subsidy.END === Math.round(365.25 * 100 * 86_400_000), "The sandbox horizon should stay exactly a hundred years past the cutoff");
 assert(recorded.DIFFICULTY.length >= 400 && recorded.DIFFICULTY.length <= 700, `Difficulty should be one point per retarget, not ${recorded.DIFFICULTY.length}`);
 assert(recorded.DIFFICULTY.length < recorded.HASH.length, "The difficulty series should be sparser than the hash series: it is a step function, not a sample");
 assert(recorded.DIFFICULTY[0][1] === 1, "Difficulty must start at 1, the genesis epoch");

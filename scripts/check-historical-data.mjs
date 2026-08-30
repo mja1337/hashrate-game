@@ -36,7 +36,12 @@ for (const [name, minimum] of Object.entries(requirements)) {
     if (!Number.isFinite(value) || value < 0) throw new Error(`${name} has an invalid value at ${date}`);
     previous = time;
   }
-  if (series.at(-1)[0] !== data.meta.through) throw new Error(`${name} ends at ${series.at(-1)[0]}, expected ${data.meta.through}`);
+  if (name === "DIFFICULTY") {
+    if (series.at(-1)[0] > data.meta.through) throw new Error(`DIFFICULTY carries a retarget at ${series.at(-1)[0]}, past the ${data.meta.through} cutoff`);
+    if (Date.parse(data.meta.through) - Date.parse(series.at(-1)[0]) > 21 * 86_400_000) throw new Error(`DIFFICULTY's last retarget is ${series.at(-1)[0]}, more than a fortnight before the ${data.meta.through} cutoff`);
+  } else if (series.at(-1)[0] !== data.meta.through) {
+    throw new Error(`${name} ends at ${series.at(-1)[0]}, expected ${data.meta.through}`);
+  }
 }
 
 if (data.HEIGHT.some((entry, index) => index && entry[1] < data.HEIGHT[index - 1][1])) throw new Error("HEIGHT must be monotonic");

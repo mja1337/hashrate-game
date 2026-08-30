@@ -94,7 +94,7 @@ The early years are deliberately damped and the game says so: run the honest for
 
 **Equipment is ordered, not conjured.** Miners and cooling both carry lead times, reserve their capacity from the moment they are ordered, and earn or cool nothing until commissioned.
 
-**The sandbox is finite and honest.** The recorded feed ends on 08 August 2026. Continuing runs a hundred further years on deterministic projections: no new historical chapters and no new hardware are invented, while price, network hash rate, difficulty, transaction activity, fees, chain size and block height continue as models. Bitcoin's issuance schedule keeps running, so projected halvings keep cutting mining income — subsidies are whole satoshis, floored the way the protocol floors them, and each halving is labelled a projection rather than recorded history.
+**The sandbox is finite and honest.** The recorded feed ends on the last day the bundled dataset covers. Continuing runs a hundred further years on deterministic projections: no new historical chapters and no new hardware are invented, while price, network hash rate, difficulty, transaction activity, fees, chain size and block height continue as models. Bitcoin's issuance schedule keeps running, so projected halvings keep cutting mining income — subsidies are whole satoshis, floored the way the protocol floors them, and each halving is labelled a projection rather than recorded history.
 
 ## Copy conventions
 
