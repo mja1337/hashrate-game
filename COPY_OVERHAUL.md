@@ -686,6 +686,20 @@ Storage went from 127 KB to 375 KB, and 57 KB to 145 KB gzipped. That was measur
 
 Trimming values from nine significant figures to six would have recovered roughly 118 KB, and it was rejected: nothing is waiting on those bytes, block height and transaction counts have to stay exact, and price would have lost its cents. Fidelity was the cheaper thing to keep.
 
+## Mechanic change: missing a bill is now possible
+
+Reported as "if I run out of liquid cash nothing happens when I can't pay the bills, we just keep going." Two separate causes, and the second was the real one.
+
+**The visible one.** Under *Cover the bill*, a run with BTC in the wallet sells just enough each month to clear the bill and nothing more. Reproduced: seven consecutive months with liquid cash sitting at exactly \$0.00, no pause, no prompt, the game quietly liquidating BTC to keep the lights on. Working as designed, and indistinguishable from a stuck game.
+
+**The buried one.** `state.debt` is the arrears balance, and a full disconnection mechanic was built around it — a status banner, an Operator briefing, offline reasons for both nodes, a blocked mining floor, Finance copy, a *Pay* button. Every write to it in the entire codebase set it to zero. **Nothing could ever put you in arrears.** The only outcomes on a bill you could not pay were take a rescue now or enter receivership; the middle path the interface kept describing did not exist.
+
+The settlement modal now offers it as a fifth route, sitting above receivership because it is the least destructive thing on the screen: **Miss this month's bill** carries the shortfall into arrears and resumes the clock. The supplier waits until the next bill date. If the arrears are still owed then, power and internet are cut — mining and node service stop while rent, payroll, insurance and finance interest keep accruing — until they are paid from Finance, which restores service the same day. Only one bill can be carried at a time.
+
+Owing money and being cut off are now different states, and only the second stops the site. Every operational gate asks `gridCutOff()`; the banner, briefing and Finance copy read differently depending on which state you are in, because "you missed a bill and have until 1 March" and "the grid is off" are not the same news.
+
+Verified through the full cycle at a fixed date: bill date with nothing to pay it pauses; missing it carries the arrears and resumes with mining still running; two weeks later the site is still mining and the next bill is accruing on top; the next bill date cuts power, internet and both nodes; paying the arrears restores service and clears the deadline. Old saves load with a coherent arrears state.
+
 ## Editorial review checklist
 
 Use this checklist for every rewritten surface:

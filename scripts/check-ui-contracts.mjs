@@ -527,4 +527,25 @@ assert(recorded.DIFFICULTY.length < 700, "Difficulty is a step function and must
 assert(!buildSource.includes("elapsed % 7 === 0"), "A weekly sampling step is back in the build");
 assert(buildSource.includes("function encodeSeries(pairs)") && buildSource.includes("--recompress"), "The build must own the encoding, and keep a network-free mode that re-encodes the existing bundle");
 
+// state.debt had a whole disconnection mechanic built around it — a banner, an Operator
+// briefing, offline node reasons, a blocked mining floor — and nothing in the game ever
+// set it above zero. Missing a bill was not a thing that could happen. Guard the middle
+// path so it cannot go dead again.
+assert(/state\.debt\s*\+=\s*carried/.test(inline), "Nothing raises arrears; a missed bill must actually be carried into state.debt");
+assert(inline.includes("function deferSettlement()") && inline.includes('else if(a==="settle-defer")deferSettlement();'), "The miss-the-bill route is missing or unwired");
+assert(inline.includes("function gridCutOff(s=state)") && inline.includes("s.debt>0&&s.time>=(s.arrearsDue||Infinity)"), "The grace period is gone: arrears must not cut the grid until the next bill date");
+assert(inline.includes("state.arrearsDue=nextBillDate()"), "A missed bill must set the date the grid is cut if it stays unpaid");
+// Owing money and being cut off are different states, and only the second stops the site.
+for (const gate of ["function operating(){const fs=fleet();return state.power&&!gridCutOff()",
+  "function nodeHostPowered(){if(gridCutOff()||state.policyLock)return false;",
+  "function thermalPowerAvailable(s=state){return !!s.power&&!gridCutOff(s)&&"]) {
+  assert(inline.includes(gate), `An operational gate still cuts the site the moment arrears exist, which removes the grace month: ${gate.slice(0, 48)}`);
+}
+assert(!/operating\(\)\{const fs=fleet\(\);return state\.power&&state\.debt<=0/.test(inline), "operating() is back to cutting the site on any arrears");
+assert(inline.includes('id:"grid-arrears-grace"') && inline.includes('id:"grid-arrears"'), "The briefing must tell a warning apart from a disconnection");
+assert(inline.includes('gridCutOff()?"Grid disconnected":"Operating bill in arrears"'), "The banner reads the same whether the grid is on or off");
+assert(inline.includes("state.debt=0;state.arrearsDue=0;state.gridCutAnnounced=false;"), "Clearing arrears must also clear the cut-off date, or the site stays disconnected after paying");
+assert(inline.includes("state.arrearsDue=Number(state.arrearsDue)||0") && inline.includes("if(state.debt<=0){state.arrearsDue=0;state.gridCutAnnounced=false}"), "Old saves must load with a coherent arrears state");
+assert(inline.includes('showToast("Power and internet cut off"'), "The disconnection has to announce itself; it was silent before");
+
 console.log("UI contracts passed: Mine purchases, difficulty and mobile speed controls, transaction precision, enhancement guards, mempool containment, fleet servicing, repair labour, overdrive, Method coverage, speed-resume safety, the exchange trade-ticket flow, network-hash display parity, bad-event impact effects, timed facility-upgrade risk, mining-floor connectivity/power status, the 100-year procedural sandbox continuation, pool fee display, pool shutdown fail-over, the custody transfer slider, Lightning gating, live market pricing, mempool realism, disabled-control tooltips, the single-venue market redesign, Mine-tab scroll stability, full-refurbishment puzzle consistency, the proactive settlement warning, connectivity ping, the unified incoming-fleet pipeline, proportional fleet-health severity colors, rival operators, milestone moments, the end-of-run recap, cross-run career persistence, the dice-entropy wallet-setup ceremony, the era-accurate wallet-software upgrade path, the resetGame() operator-era crash fix, the real mailing-list learning items, the Dashboard build-queue card, hands-on self-servicing before technicians are hired, the fault-clearing/offline-threshold repair fix, the non-blocking faucet popup, tiered spare parts, the historically-grounded custody/region exposure warnings, free self-serviced labour with real self-damage risk, the four hardware self-help skills, staff dismissal the operator XP/level system, dated pool payout schemes, one drawing per machine, and scroll-anchored, frame-aligned repaints");

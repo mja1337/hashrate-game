@@ -6,7 +6,7 @@ function minerStatus(id){
   if(hardwareFault)return{kind:"hardware",label:reason||"Hardware fault"};
   if(reason)return{kind:"config",label:reason};
   if(hardwarePoweredDownCount(h)>=count)return{kind:"power",label:"Manually powered down"};
-  if(!state.power||state.debt>0||state.policyLock||siteOutage()||!fleet().within)return{kind:"power",label:state.debt>0?"Grid disconnected":state.policyLock||siteOutage()?"Site unavailable":"No electrical power"};
+  if(!state.power||gridCutOff()||state.policyLock||siteOutage()||!fleet().within)return{kind:"power",label:gridCutOff()?"Grid disconnected":state.policyLock||siteOutage()?"Site unavailable":"No electrical power"};
   return{kind:"online",label:"Online and hashing"};
 }
 function minerStatusSvg(id){const status=minerStatus(id);if(status.kind==="online")return `<circle class="miner-online" cx="56" cy="8" r="2"><title>${status.label}</title></circle>`;if(status.kind==="power")return `<g><title>${status.label}</title><path class="miner-power-warning" d="M56 1 63 14H49z"/><path d="m57 4-4 5h3l-2 4 6-6h-3l2-3z" fill="#17130b"/></g>`;if(status.kind==="hardware")return `<g><title>${status.label}</title><path class="miner-hardware-fire" d="M56 15c-5 0-8-3-7-7 1-3 4-4 5-7 3 2 4 4 3 6 2-1 3-2 3-4 4 4 5 7 3 10-1 2-4 2-7 2z"/><path d="M56 13c-2 0-3-1-2-3 0-1 1-2 2-3 2 2 3 4 0 6z" fill="#ffd36c"/></g>`;if(status.kind==="config")return `<g><title>${status.label}</title><path class="miner-config-warning" d="M56 1 63 14H49z"/><path d="M56 5v5m0 2v1" stroke="#17130b" stroke-width="1.5"/></g>`;return `<circle class="ops-pulse" cx="56" cy="8" r="2"><title>${status.label}</title></circle>`}

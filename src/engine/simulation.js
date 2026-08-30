@@ -13,7 +13,7 @@ const initialState=()=>{const seed=Math.floor(Math.random()*4294967296);return{
   lightning:{locked:0,earned:0},
   hardware:{laptop:1},poweredDownHardware:{},facility:"home",region:"na",thermal:{temperature:22,orders:[],equipment:{}},overdrive:false,settlementSaleMode:false,autoRepair:false,node:0,nodeStorage:50,nodePruned:false,nodeMode:"archival",nodeSync:{primaryLag:0,primaryPeak:0,backupLag:0,backupPeak:0},backupNode:{enabled:false,outageUntil:0},mode:"solo",pool:"f2pool",
   skills:[],points:0,startingGrant:false,seen:[],activeEvent:null,storyPause:true,shoppingPause:false,speculations:[],powerRateShock:null,hardwareGlut:null,hardwareAlerts:{seen:[],queue:[],active:null,resumeSpeed:0},hardwareToastSeen:[],exposureWarned:[],
-  treasuryPolicy:"cover",pendingSettlement:null,endReason:null,
+  treasuryPolicy:"cover",pendingSettlement:null,endReason:null,arrearsDue:0,gridCutAnnounced:false,
   operator:{eras:{},periodMined:0,periodUptime:0,periodDays:0,lastRevenueUsd:0,totalMonths:0,solventMonths:0,profitableMonths:0,competitiveMonths:0,bridgeLoans:0,restructures:0},
   xp:{total:0,level:1,peakLevel:1,bestDifficulty:0,shares:0,sources:{shares:0,record:0,deploy:0,repair:0}},
   knowledge:0,nextKnowledge:5,learning:null,completedLearning:[],maintenance:{condition:{},faults:{},faultsByPart:{},selfRepairs:{},parts:0,inventory:{fan:0,hashboard:0,powerPcb:0,coolantPump:0,coolingManifold:0,laptopfan:0,asicfan:0,hashboardearly:0,hashboardmodern:0},inventoryMigrated:true,orders:[],serviceJobs:[]},procurementOrders:[],inactiveHardware:{},commissioningJobs:[],decommissionedHardware:{},relocationJob:null,facilityUpgradeJob:null,ops:{firmwarePatchedUntil:0,hijackUntil:0,outageUntil:0,powerOutageUntil:0,venueFreezes:{},riskMonth:""},strategy:{mstr:0,strk:0,strf:0,strd:0,strc:0,yieldEarned:0},sandbox:false,contract:"standard",staff:[],projectLoan:0,insured:false,milestones:[],milestoneLog:[],walletSetup:{done:false,step:0,rolls:[],keyHex:""},guidance:{dismissed:[]},walletSoftware:0,donations:[],
@@ -107,6 +107,7 @@ state.xp=normalizeXp(state.xp);
 state.startingGrant=!!state.startingGrant;
 state.autoRepair=!!state.autoRepair;
 state.treasuryPolicy=TREASURY_POLICIES.some(x=>x.id===state.treasuryPolicy)?state.treasuryPolicy:"cover";
+state.debt=Math.max(0,Number(state.debt)||0);state.arrearsDue=Number(state.arrearsDue)||0;state.gridCutAnnounced=!!state.gridCutAnnounced;if(state.debt<=0){state.arrearsDue=0;state.gridCutAnnounced=false}
 state.pendingSettlement=state.pendingSettlement&&typeof state.pendingSettlement==="object"?state.pendingSettlement:null;
 state.operator=Object.assign({eras:{},periodMined:0,periodUptime:0,periodDays:0,lastRevenueUsd:0,totalMonths:0,solventMonths:0,profitableMonths:0,competitiveMonths:0,bridgeLoans:0,restructures:0},state.operator||{});
 state.operator.eras=state.operator.eras&&typeof state.operator.eras==="object"?state.operator.eras:{};
@@ -176,6 +177,22 @@ function fleet(s=state){
 function controlled(){return state.wallets.hot+state.wallets.cold}
 function hotWalletIncidentRisk(s=state){if(s.time<at("2011-01-01")||(s.wallets?.hot||0)<=0)return 0;const selfHeld=Math.max(1e-12,(s.wallets?.hot||0)+(s.wallets?.cold||0)),hotShare=(s.wallets?.hot||0)/selfHeld,base=.00065+hotShare*.0016;return base*(s.skills?.includes("multisig")?.42:1)}
 function hotWalletAnnualRisk(s=state){return 1-Math.pow(1-hotWalletIncidentRisk(s),12)}
+/* Arrears give you the rest of the month. The grid is cut at the next bill date if
+   the debt is still outstanding, which is when a real supplier stops waiting. */
+function gridCutOff(s=state){return s.debt>0&&s.time>=(s.arrearsDue||Infinity)}
+function nextBillDate(t=state.time){const d=new Date(t);return Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,1)}
+function deferSettlement(){
+  const pending=state.pendingSettlement;if(!pending)return;
+  const paid=Math.min(state.cash,pending.due),carried=pending.due-paid;
+  state.cash-=paid;state.debt+=carried;state.arrearsDue=nextBillDate();
+  state.operator.restructures=state.operator.restructures;
+  recordOperatorMonth(pending.snapshot,false);
+  state.bill=0;state.billLedger={energy:0,rent:0,internet:0,staff:0,insurance:0,nodeNetwork:0,other:0};
+  state.lastMonth=pending.month;state.pendingSettlement=null;state.settlementSaleMode=false;
+  log("Operating bill missed",`${fmtUsd(carried)} carried into arrears`,"finance");
+  showToast("Bill missed, grid still on",`${fmtUsd(carried)} is now in arrears. The site keeps running until the next bill on ${dateFmt(state.arrearsDue)}; if the arrears are still owed then, power and internet are cut until they are paid.`,"warning","finance");
+  state.speed=pending.resumeSpeed||state.returnSpeed||0;setTimer();save();render();
+}
 function treasuryPolicy(){return TREASURY_POLICIES.find(x=>x.id===state.treasuryPolicy)||TREASURY_POLICIES[0]}
 function operatorEraAt(t=state.time){return OPERATOR_ERAS.find(era=>t>=era.start&&t<era.end)||OPERATOR_ERAS[OPERATOR_ERAS.length-1]}
 function operatorEraStats(era=operatorEraAt()){return state.operator.eras[era.id]}
@@ -208,7 +225,7 @@ function log(text,amount="",category=""){
   const entry={id:++state.activitySeq,time:state.time,text,amount,category:category||activityCategory(text),cash:Number(state.cash)||0,btc:controlled(),hash:fleet().hash,price:state.time>=MARKET?priceAt(state.time):null};
   state.activity.unshift(entry);state.log=state.activity.slice(0,8);
 }
-function operating(){const fs=fleet();return state.power&&state.debt<=0&&!state.policyLock&&!siteOutage()&&!fleetGrounded()&&fs.within&&fs.hash>0}
+function operating(){const fs=fleet();return state.power&&!gridCutOff()&&!state.policyLock&&!siteOutage()&&!fleetGrounded()&&fs.within&&fs.hash>0}
 function asicCount(){return HARDWARE.filter(h=>h.era==="ASIC"||h.era==="HYDRO ASIC").reduce((n,h)=>n+(state.hardware[h.id]||0),0)}
 function firmwarePatchDue(){return asicCount()>0&&state.time>=at("2017-04-26")&&state.time>(state.ops?.firmwarePatchedUntil||0)}
 function firmwareHijacked(){return state.time<(state.ops?.hijackUntil||0)}
@@ -446,6 +463,7 @@ function tick(silent=false){
   const strategyYield=strategyDailyYield();if(strategyYield>0){state.cash+=strategyYield;state.strategy.yieldEarned+=strategyYield}
   const d=new Date(next),month=d.toISOString().slice(0,7);
   if(month!==state.lastMonth){
+    if(state.debt>0&&state.time>=(state.arrearsDue||Infinity)&&!state.gridCutAnnounced){state.gridCutAnnounced=true;log("Grid disconnected",`${fmtUsd(state.debt)} still unpaid`,"finance");if(!silent)showToast("Power and internet cut off",`${fmtUsd(state.debt)} of arrears went unpaid past its second bill date. Mining and node service stop while rent, payroll and finance keep accruing. Clear the arrears from Finance to be reconnected.`,"bad","finance")}
     const loanInterest=state.projectLoan*(hasStaff("treasurer")?.009:.012),due=state.bill+loanInterest;queueMonthlySettlement(due,month,loanInterest);
     if(strategyYield>0)log("Strategy preferred income",`+${fmtUsd(strategyYield*30.4375)}`);
     state.history.push({t:next,p:priceAt(next),btc:controlled(),worth:netWorth(),hash:fs.hash});state.history=state.history.slice(-240);

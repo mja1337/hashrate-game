@@ -204,7 +204,7 @@ function withdrawLightning(){
 }
 function payDebt(){
   if(state.debt<=0)return;if(state.cash<state.debt)return showToast("Bill still due",`You need ${fmtUsd(state.debt-state.cash)} more.`);
-  state.cash-=state.debt;log("Grid service restored",fmtUsd(state.debt));state.debt=0;state.power=!state.policyLock;save();render();
+  state.cash-=state.debt;log("Grid service restored",fmtUsd(state.debt),"finance");state.debt=0;state.arrearsDue=0;state.gridCutAnnounced=false;state.power=!state.policyLock;showToast("Arrears cleared","Power and internet are restored. The next operating bill is due at the month boundary as usual.","success","dashboard");save();render();
 }
 function setContract(id){if(!POWER_CONTRACTS.some(x=>x.id===id)||id===state.contract)return;state.contract=id;log("Power contract changed",powerContract().name);save();render()}
 function setConnectivityPlan(id){const plan=CONNECTIVITY_PLANS.find(x=>x.id===id);if(!plan||id===state.connectivity)return;if(plan.minFacility&&facilityTier()<plan.minFacility)return showToast("Connectivity unavailable",`${plan.name} requires a tier ${plan.minFacility} facility or larger.`);state.connectivity=id;log("Connectivity plan changed",`${plan.name} · ${fmtUsd(internetMonthlyCost())}/month`);save();render()}

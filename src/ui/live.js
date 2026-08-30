@@ -9,7 +9,7 @@ function refreshDashboard(){
   if(activeTab!=="dashboard")return;
   const fs=fleet(),monthly=monthlyCost(),share=playerNetworkShareAt(state.time,fs.hash)*100,online=operating(),exp=online?expectedDay():0;
   const set=(id,value)=>{const el=document.getElementById(id);if(el)el.textContent=value};
-  set("dashboard-status",online?"Your machines are securing the network.":state.policyLock?"Politics has shut the site.":state.debt>0?"The grid has cut you off.":"Mining is offline.");
+  set("dashboard-status",online?"Your machines are securing the network.":state.policyLock?"Politics has shut the site.":gridCutOff()?"The grid has cut you off.":state.debt>0?"An unpaid bill is in arrears.":"Mining is offline.");
   set("dashboard-copy",`${narrativeCopy("dashboard")} ${online?`You currently control ${fmtPct(share)} of effective hash.`:"Resolve the operational constraint or deliberately remain offline while history continues without you."}`);
   set("dashboard-yield",fmtBtc(exp));set("dashboard-controlled",fmtBtc(controlled()));set("dashboard-claims",fmtBtc(claims()));set("dashboard-runway",`${monthly.total?Math.max(0,state.cash/monthly.total).toFixed(1):"∞"} mo`);set("dashboard-runway-cost",`${fmtUsd(monthly.total)} expected monthly`);set("dashboard-load",`${(fs.kw/fs.cap*100).toFixed(1)}%`);set("dashboard-load-sub",`${fs.space} / ${facility().space} floor units`);set("dashboard-chart-date",dateFmt(state.time,true));set("dashboard-history-value",fmtBtc(controlled()));set("dashboard-bill",`Next bill accrued: ${fmtUsd(state.bill)}`);
   // Large visual cards deliberately wait for monthly/unlock renders so live

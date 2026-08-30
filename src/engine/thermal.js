@@ -12,7 +12,7 @@ function activeMinerWatts(s=state){
 }
 function coolingPeakWatts(s=state){return COOLING_EQUIPMENT.reduce((sum,item)=>sum+(s.thermal?.equipment?.[item.id]||0)*item.watts,0)}
 function coolingPowerWatts(s=state,minerWatts=activeMinerWatts(s)){if(minerWatts<=0)return 0;const capacity=Math.max(.1,coolingCapacityKw(s)),demand=Math.max(.12,Math.min(1,minerWatts/1000/capacity));return coolingPeakWatts(s)*demand}
-function thermalPowerAvailable(s=state){return !!s.power&&s.debt<=0&&!s.policyLock&&s.time>=(s.ops?.powerOutageUntil||0)&&!(s.relocationJob&&s.time<s.relocationJob.due)&&!(s.facilityUpgradeJob&&s.time<s.facilityUpgradeJob.due)}
+function thermalPowerAvailable(s=state){return !!s.power&&!gridCutOff(s)&&!s.policyLock&&s.time>=(s.ops?.powerOutageUntil||0)&&!(s.relocationJob&&s.time<s.relocationJob.due)&&!(s.facilityUpgradeJob&&s.time<s.facilityUpgradeJob.due)}
 function thermalTargetC(s=state){const ambient=ambientTemperatureC(s.time,s);if(!thermalPowerAvailable(s))return ambient+.5;const heatKw=activeMinerWatts(s)/1000;if(heatKw<=0)return ambient+.8;const capacity=coolingCapacityKw(s),overload=Math.max(0,heatKw-capacity)/Math.max(.25,capacity),utilisation=Math.min(1.5,heatKw/Math.max(.25,capacity));return Math.max(ambient+2,Math.min(88,ambient+2.5+utilisation*3.2+overload*18))}
 function roomTemperatureC(s=state){const value=Number(s.thermal?.temperature);return Number.isFinite(value)?value:ambientTemperatureC(s.time,s)+2}
 function temperatureWearMultiplier(s=state){return 1+Math.max(0,roomTemperatureC(s)-28)*.04}
