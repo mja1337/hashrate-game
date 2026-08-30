@@ -228,7 +228,28 @@ function poolData(id=state.pool){return POOLS.find(x=>x.id===id)||POOLS.find(x=>
 function poolClosed(id,t=state.time){const p=POOLS.find(x=>x.id===id);return !!p?.closed&&t>=at(p.closed)}
 function poolShareAt(id,t){const p=poolData(id);if(!p||id==="solo")return id==="solo"?0:0;const a=p.anchors.map(([d,v])=>[at(d),v]).sort((x,y)=>x[0]-y[0]);if(t<a[0][0])return 0;for(let i=0;i<a.length-1;i++){const [t0,v0]=a[i],[t1,v1]=a[i+1];if(t>=t0&&t<=t1){const f=(t-t0)/(t1-t0);return v0+(v1-v0)*f}}return a[a.length-1][1]}
 function activePoolShare(){return state.mode==="pool"?poolShareAt(state.pool,state.time):0}
-function poolFee(){const p=poolData();return Math.max(.005,(p?.fee||.02)-(hasSkill("poolops")?.004:0))}
+function poolFee(){const p=poolData();return Math.max(0,(p?.fee??.02)-(hasSkill("poolops")?.004:0))}
+function poolScheme(id=state.pool){return poolData(id)?.scheme||"fpps"}
+// PPS keeps the transaction fees; every other scheme passes them through.
+function poolRewardFactorAt(t,id=state.pool){const full=blockRewardAt(t);return poolScheme(id)==="pps"&&full>0?subsidyAt(t)/full:1}
+const POOL_SCHEMES={
+  fpps:{name:"FPPS",label:"Full pay-per-share",desc:"A flat rate per share covering both the subsidy and an average of transaction fees, paid whether or not the pool finds a block. The pool absorbs all the variance and charges for it."},
+  pps:{name:"PPS",label:"Pay-per-share",desc:"A flat rate per share on the block subsidy only — transaction fees stay with the pool. Almost irrelevant early on, increasingly expensive as fees grow into a real share of the reward."},
+  ppsplus:{name:"PPS+",label:"Pay-per-share plus",desc:"Subsidy paid as pay-per-share, transaction fees paid on what the pool actually collects. Steady on the big half of the reward, slightly lumpy on the rest."},
+  pplns:{name:"PPLNS",label:"Pay per last N shares",desc:"You are paid only out of blocks the pool actually finds, weighted by your recent shares. Same expected return, real variance, and the cheapest fees — a bet on the pool's luck."},
+  tides:{name:"TIDES",label:"Transparent index of deserving entities",desc:"A pay-per-last-N-shares scheme run against a published share window. Same variance profile as PPLNS, with the accounting made auditable."},
+  solo:{name:"Solo",label:"No pool",desc:"You keep whole blocks and nothing in between."}
+};
+// Scheme decides two real things: whether transaction fees reach you, and how
+// much variance you carry. Expected value is otherwise the same.
+function poolPayoutFor(lambda,t){
+  const scheme=poolScheme(),fee=poolFee(),subsidy=subsidyAt(t),full=blockRewardAt(t),feePart=Math.max(0,full-subsidy);
+  const jitter=(spread)=>1+(nextRand()*2-1)*spread;
+  if(scheme==="pps")return lambda*subsidy*(1-fee)*jitter(.01);
+  if(scheme==="ppsplus")return lambda*(1-fee)*(subsidy*jitter(.01)+feePart*jitter(.35));
+  if(scheme==="pplns"||scheme==="tides")return lambda*full*(1-fee)*jitter(.42);
+  return lambda*full*(1-fee)*jitter(.03);
+}
 function operating(){const fs=fleet();return state.power&&state.debt<=0&&!state.policyLock&&!siteOutage()&&!fleetGrounded()&&fs.within&&fs.hash>0}
 function asicCount(){return HARDWARE.filter(h=>h.era==="ASIC"||h.era==="HYDRO ASIC").reduce((n,h)=>n+(state.hardware[h.id]||0),0)}
 function firmwarePatchDue(){return asicCount()>0&&state.time>=at("2017-04-26")&&state.time>(state.ops?.firmwarePatchedUntil||0)}
@@ -711,7 +732,7 @@ function sellStrategy(id,fraction){const s=strategySecurity(id),shares=state.str
 function expectedDailyBtcForHash(hash,t=state.time){
   const blocks=expectedBlocksPerDayForHash(hash,t),reward=blockRewardAt(t);
   const uptime=Math.min(1,region().rely+(hasSkill("monitoring")?.01:0));
-  return blocks*reward*uptime*contractUptimeFactor()*connectivityMiningFactor()*nodeMiningFactor()*(state.mode==="pool"?1-poolFee():1)*(firmwareHijacked() ? .65 : 1);
+  return blocks*reward*uptime*contractUptimeFactor()*connectivityMiningFactor()*nodeMiningFactor()*(state.mode==="pool"?(1-poolFee())*poolRewardFactorAt(t):1)*(firmwareHijacked() ? .65 : 1);
 }
 function expectedDay(){return expectedDailyBtcForHash(fleet().hash,state.time)}
 function applyEvent(e){
@@ -782,11 +803,12 @@ function tick(silent=false){
   const fs=fleet(),r=region(),f=facility(),nodeW=nodePowerWatts();state.operator.periodDays++;
   const rate=powerRate(r,next),minerWatts=state.power&&state.debt<=0&&!state.policyLock&&!fleetGrounded()?fs.w*contractLoadFactor():0,nodeWatts=nodeHostPowered()?nodeW:0,dailyCosts={energy:dailyEnergyCostForWatts(minerWatts+nodeWatts,next,r),rent:f.rent/30.4375,internet:internetMonthlyCost()/30.4375,staff:staffMonthlyCost()/30.4375,insurance:insuranceMonthlyCost()/30.4375,nodeNetwork:totalNodeMonthlyOverhead()/30.4375},daily=Object.values(dailyCosts).reduce((sum,value)=>sum+value,0);
   Object.entries(dailyCosts).forEach(([key,value])=>state.billLedger[key]=(state.billLedger[key]||0)+value);state.bill+=daily;state.powerSpent+=daily;
+  if(state.mode==="pool"&&!poolClosed(state.pool)&&!poolEligible()){const lostPool=poolData();state.mode="solo";log(`${lostPool.name} no longer available`,`Requires ${SKILLS.find(x=>x.id===lostPool.requires)?.name||lostPool.requires} · failed over to solo mining`,"operations");if(!silent)showToast("Pool unavailable",`${lostPool.name} needs ${SKILLS.find(x=>x.id===lostPool.requires)?.name||lostPool.requires}. Your fleet has failed over to solo mining rather than quietly mining solo while the tab still said pool.`,"bad","pools")}
   if(state.mode==="pool"&&poolClosed(state.pool)){const closedPool=poolData();state.mode="solo";log(`${closedPool.name} shut down`,"Failed over to solo mining","operations");if(!silent)showToast("Pool shut down",`${closedPool.name} has ceased operating. Your fleet has failed over to solo mining.`,"bad","pools")}
   if(operating()){
     const lambda=expectedBlocksPerDayForHash(fs.hash,next)*Math.min(1,r.rely+(hasSkill("monitoring")?.01:0))*contractUptimeFactor()*connectivityMiningFactor()*nodeMiningFactor();
     let blocks,payout;
-    if(state.mode==="pool"&&availablePool()&&poolEligible()){blocks=lambda;payout=lambda*blockRewardAt(next)*(1-poolFee())*(.97+nextRand()*.06)}
+    if(state.mode==="pool"&&availablePool()&&poolEligible()){blocks=lambda;payout=poolPayoutFor(lambda,next)}
     else{blocks=poisson(lambda);payout=blocks*blockRewardAt(next)}
     if(firmwareHijacked())payout*=.65;
     if(payout>0){state.wallets.hot+=payout;state.mined+=payout;state.operator.periodMined+=payout;state.blocks+=blocks;if(blocks>=1)log(state.mode==="pool"?"Pool payout":blocks>1?`Block reward ×${blocks} (today)`:"Block reward (today)",`+${fmtBtc(payout)}`)}
