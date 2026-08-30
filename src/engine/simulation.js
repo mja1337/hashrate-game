@@ -301,6 +301,10 @@ function awardXp(amount,source){
   return amount;
 }
 function dailyShareCount(hash){return hash>0?hash*86400/SHARE_WORK:0}
+// Difficulty-1 work units. In pool mode these really are shares submitted to
+// the pool; solo against your own node nothing is submitted anywhere, so the
+// honest label is just the work found.
+function shareUnitLabel(plural=true){return state.mode==="pool"?(plural?"shares submitted":"share submitted"):(plural?"difficulty-1 shares found":"difficulty-1 share found")}
 function fmtDifficulty(value){value=Math.max(0,Number(value)||0);return value>=1e18?(value/1e18).toFixed(2)+"E":value>=1e15?(value/1e15).toFixed(2)+"P":value>=1e12?(value/1e12).toFixed(2)+"T":value>=1e9?(value/1e9).toFixed(2)+"G":value>=1e6?(value/1e6).toFixed(2)+"M":value>=1e3?(value/1e3).toFixed(2)+"K":value.toFixed(0)}
 function advanceOperatorXp(){
   const fs=fleet();if(!operating()||fs.hash<=0)return;
