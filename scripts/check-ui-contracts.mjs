@@ -463,4 +463,23 @@ assert(inline.includes("Settlement conversion") && !inline.includes('<h2>Treasur
 assert(inline.includes('log("Settlement conversion changed"') && inline.includes("log(`Settlement conversion: ${policy.name}`"), "Ledger entries still call this a treasury policy");
 assert(inline.includes("Next automatic sale") && inline.includes("Forecast shortfall"), "The panel no longer shows what the current instruction will actually do at the next settlement");
 
+// A home-built tower takes standard case fans; only the laptop takes a laptop fan.
+// The mapping lives on the machine so a new entry declares its own part.
+const hardwareSource2 = await readFile(new URL("src/data/hardware.js", root), "utf8");
+const fanContext = { };
+vm.runInNewContext(timelineSource + "\n" + hardwareSource2.replace(/^const /gm, "var ") + "\nglobalThis.fanApi={HARDWARE,fanTierFor,hashboardTierFor};", fanContext);
+const fanApi = fanContext.fanApi;
+const fanFor = id => fanApi.fanTierFor(fanApi.HARDWARE.find(h => h.id === id));
+assert(fanFor("laptop") === "laptopfan", "The mining laptop should take a laptop cooling fan");
+assert(fanFor("cpu") === "fan", "A home-built quad-core tower takes 120mm case fans, not a laptop's internal fan");
+assert(fanFor("5870") === "fan" && fanFor("fpga") === "fan", "GPU and FPGA hardware takes case fans");
+assert(fanFor("s9") === "asicfan" && fanFor("s21hydro") === "asicfan", "ASIC and hydro ASIC hardware takes blower fans");
+assert(fanApi.HARDWARE.filter(h => fanApi.fanTierFor(h) === "laptopfan").length === 1, "Only the laptop should take a laptop fan");
+// simulation.js migrates saves against these at load time, so they must already exist.
+const hardwareIdx = appScripts.indexOf("src/data/hardware.js"), simIdx = appScripts.indexOf("src/engine/simulation.js");
+assert(hardwareIdx >= 0 && simIdx > hardwareIdx, "fanTierFor lives in hardware.js and simulation.js calls it in a top-level save migration; hardware.js must load first or the whole engine aborts");
+assert(!/function fanTierFor|function hashboardTierFor/.test(await readFile(new URL("src/engine/maintenance.js", root), "utf8")), "The part-tier functions moved to hardware.js; a second copy in maintenance.js would shadow or contradict them");
+assert(inline.includes('HARDWARE.filter(h=>fanTierFor(h)!=="laptopfan").forEach(h=>{const byPart=state.maintenance.faultsByPart?.[h.id];if(byPart&&byPart.laptopfan)'), "An existing tower fault recorded against the laptop fan is not migrated to the case fan");
+assert(inline.includes('if(h&&job.part==="laptopfan"&&fanTierFor(h)!=="laptopfan")job.part=fanTierFor(h)'), "An in-flight repair recorded against the laptop fan is not migrated");
+
 console.log("UI contracts passed: Mine purchases, difficulty and mobile speed controls, transaction precision, enhancement guards, mempool containment, fleet servicing, repair labour, overdrive, Method coverage, speed-resume safety, the exchange trade-ticket flow, network-hash display parity, bad-event impact effects, timed facility-upgrade risk, mining-floor connectivity/power status, the 100-year procedural sandbox continuation, pool fee display, pool shutdown fail-over, the custody transfer slider, Lightning gating, live market pricing, mempool realism, disabled-control tooltips, the single-venue market redesign, Mine-tab scroll stability, full-refurbishment puzzle consistency, the proactive settlement warning, connectivity ping, the unified incoming-fleet pipeline, proportional fleet-health severity colors, rival operators, milestone moments, the end-of-run recap, cross-run career persistence, the dice-entropy wallet-setup ceremony, the era-accurate wallet-software upgrade path, the resetGame() operator-era crash fix, the real mailing-list learning items, the Dashboard build-queue card, hands-on self-servicing before technicians are hired, the fault-clearing/offline-threshold repair fix, the non-blocking faucet popup, tiered spare parts, the historically-grounded custody/region exposure warnings, free self-serviced labour with real self-damage risk, the four hardware self-help skills, staff dismissal the operator XP/level system, dated pool payout schemes, one drawing per machine, and scroll-anchored, frame-aligned repaints");

@@ -8,8 +8,6 @@
 
 function sparePart(id){return SPARE_PARTS.find(part=>part.id===id)}
 const PART_FAULT_LABELS={laptopfan:"Laptop fan bearing wear",fan:"Fan bearing seizure",asicfan:"Blower fan bearing seizure",hashboardearly:"Hashboard chip failure",hashboard:"Hashboard chip failure",hashboardmodern:"Hashboard chip failure",powerPcb:"PSU/power PCB failure",coolantPump:"Coolant pump failure",coolingManifold:"Cooling manifold leak"};
-function fanTierFor(h){return h.era==="ASIC"||h.era==="HYDRO ASIC"?"asicfan":h.era==="CPU"?"laptopfan":"fan"}
-function hashboardTierFor(h){if(h.era==="HYDRO ASIC")return"hashboardmodern";if(h.era!=="ASIC")return null;if(at(h.date)<at("2016-01-01"))return"hashboardearly";if(at(h.date)<at("2020-01-01"))return"hashboard";return"hashboardmodern"}
 function hardwareUsingPart(partId){return HARDWARE.filter(h=>Object.keys(partFaultWeights(h)).includes(partId))}
 function ownedHardwareUsingPart(partId){return hardwareUsingPart(partId).map(h=>({h,n:(state.hardware[h.id]||0)+(state.inactiveHardware?.[h.id]||0)})).filter(x=>x.n>0)}
 function partFitSummary(partId){

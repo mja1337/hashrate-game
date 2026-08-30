@@ -76,6 +76,8 @@ state.poweredDownHardware=state.poweredDownHardware&&typeof state.poweredDownHar
 state.thermal=Object.assign({temperature:22,equipment:{}},state.thermal||{});state.thermal.temperature=Math.max(-10,Math.min(90,Number(state.thermal.temperature)||22));state.thermal.equipment=state.thermal.equipment&&typeof state.thermal.equipment==="object"?state.thermal.equipment:{};
 COOLING_EQUIPMENT.forEach(item=>state.thermal.equipment[item.id]=Math.max(0,Math.floor(Number(state.thermal.equipment[item.id])||0)));
 state.thermal.orders=Array.isArray(state.thermal.orders)?state.thermal.orders.filter(o=>COOLING_EQUIPMENT.some(item=>item.id===o.id)&&Number.isFinite(Number(o.due))).map(o=>({id:o.id,qty:Math.max(1,Math.floor(Number(o.qty)||1)),due:Number(o.due),cost:Number(o.cost)||0})):[];
+HARDWARE.filter(h=>fanTierFor(h)!=="laptopfan").forEach(h=>{const byPart=state.maintenance.faultsByPart?.[h.id];if(byPart&&byPart.laptopfan){byPart[fanTierFor(h)]=(byPart[fanTierFor(h)]||0)+byPart.laptopfan;delete byPart.laptopfan}});
+(state.maintenance.serviceJobs||[]).forEach(job=>{const h=HARDWARE.find(x=>x.id===job.id);if(h&&job.part==="laptopfan"&&fanTierFor(h)!=="laptopfan")job.part=fanTierFor(h)});
 state.procurementOrders=Array.isArray(state.procurementOrders)?state.procurementOrders.filter(o=>HARDWARE.some(h=>h.id===o.id)&&Number(o.qty)>0&&Number.isFinite(Number(o.due))):[];
 state.inactiveHardware=state.inactiveHardware&&typeof state.inactiveHardware==="object"?state.inactiveHardware:{};
 HARDWARE.forEach(h=>state.inactiveHardware[h.id]=Math.max(0,Math.floor(Number(state.inactiveHardware[h.id])||0)));

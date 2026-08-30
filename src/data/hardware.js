@@ -1,7 +1,7 @@
 "use strict";
 
 const HARDWARE=[
-  {id:"laptop",name:"Basic laptop",maker:"Your faithful terminal",date:"2009-01-03",era:"CPU",hash:5e6,w:65,space:0,cost:0,permanent:true,desc:"Always yours. Slow, inefficient and historically plausible at Genesis."},
+  {id:"laptop",name:"Basic laptop",maker:"Your faithful terminal",date:"2009-01-03",era:"CPU",hash:5e6,w:65,space:0,cost:0,permanent:true,fan:"laptopfan",desc:"Always yours. Slow, inefficient and historically plausible at Genesis."},
   {id:"cpu",name:"Quad-core tower",maker:"Home build",date:"2009-06-01",era:"CPU",hash:2e7,w:230,space:1,cost:720,desc:"More cores, more heat—the final CPU step before GPUs."},
   {id:"5870",name:"Radeon HD 5870",maker:"GPU pioneer",date:"2010-07-01",era:"GPU",hash:4e8,w:220,space:1,cost:410,desc:"A step-change in parallel SHA-256 throughput."},
   {id:"gpurig",name:"Six-GPU open rig",maker:"Garage frame",date:"2011-02-01",era:"GPU",hash:2.4e9,w:1250,space:4,cost:3100,edge:3,desc:"Fast enough to turn a spare room into an electrical problem."},
@@ -20,9 +20,15 @@ const HARDWARE=[
   {id:"s21hydro",name:"Antminer S21 Hydro",maker:"Bitmain",date:"2024-02-01",era:"HYDRO ASIC",hash:3.35e14,w:5360,space:3,cost:7200,edge:1.7,requires:"liquidcool",minFacility:"warehouse",desc:"High-density water-cooled hashing. It needs liquid loops, industrial distribution and a serious site."},
   {id:"s21xp",name:"Antminer S21 XP",maker:"Bitmain",date:"2025-01-01",era:"ASIC",hash:2.7e14,w:3645,space:2,cost:6500,edge:1.6,desc:"Efficiency becomes the entire business model."}
 ];
+/* Which fan and which hashboard a machine takes. Defined here rather than in
+   maintenance.js because simulation.js migrates saves against them at load time,
+   and maintenance.js is parsed after simulation.js. */
+function fanTierFor(h){return h.fan||(h.era==="ASIC"||h.era==="HYDRO ASIC"?"asicfan":"fan")}
+function hashboardTierFor(h){if(h.era==="HYDRO ASIC")return"hashboardmodern";if(h.era!=="ASIC")return null;if(at(h.date)<at("2016-01-01"))return"hashboardearly";if(at(h.date)<at("2020-01-01"))return"hashboard";return"hashboardmodern"}
+
 const SPARE_PARTS=[
-  {id:"laptopfan",name:"Laptop cooling fan",cost:15,desc:"A small internal fan for CPU-era laptops and towers."},
-  {id:"fan",name:"120mm case fan",cost:45,desc:"Standard case airflow for GPU rigs and FPGA boards."},
+  {id:"laptopfan",name:"Laptop cooling fan",cost:15,desc:"A small internal fan for the mining laptop's chassis."},
+  {id:"fan",name:"120mm case fan",cost:45,desc:"Standard case airflow for home-built towers, GPU rigs and FPGA boards."},
   {id:"asicfan",name:"ASIC blower fan",cost:55,desc:"Compact, high-static-pressure blower fans for dense ASIC racks."},
   {id:"hashboardearly",name:"Early hashboard",cost:180,desc:"SHA-256 compute board for first-generation ASICs."},
   {id:"hashboard",name:"Hashboard",cost:480,desc:"SHA-256 compute board for mid-generation ASICs."},

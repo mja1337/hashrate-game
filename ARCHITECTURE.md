@@ -7,7 +7,7 @@
 - `historical-data.js` — generated, immutable runtime history. Rebuild it with `scripts/build-historical-data.mjs`; do not hand-edit it.
 - `src/config/timeline.js` — protocol dates, opening constants, treasury policies and scoring eras.
 - `src/data/network.js` — fallback price/hash/transaction series, pools and the recorded-data bindings.
-- `src/data/hardware.js` — miner specifications and spare parts.
+- `src/data/hardware.js` — miner specifications, spare parts, and which part each machine takes (`fanTierFor`, `hashboardTierFor`). Those two live here rather than in `maintenance.js` because `simulation.js` calls them in a top-level save migration, and `maintenance.js` is parsed after it.
 - `src/data/operations.js` — facilities, regions, connectivity, energy contracts and staff.
 - `src/data/progression.js` — learning, skills, nodes, securities, donations and optional scenarios.
 - `src/data/content.js` — balance scenarios, release notes and historical story events.
