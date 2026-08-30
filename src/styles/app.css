@@ -144,3 +144,4 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--orange);outline-off
 .wallet-key-reveal{margin:14px 0;padding:12px;border:1px solid var(--line);background:#0b1011;color:var(--green);font:12px/1.6 var(--mono);word-break:break-all}
 .action-link{border:0;background:none;color:var(--dim);font:9px var(--mono);cursor:pointer;margin-left:auto;padding:0}.action-link:hover{color:var(--muted)}
 .build-queue-eta{flex:0 0 auto;color:var(--orange2);font:9px var(--mono);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}.build-queue-eta.awaiting{color:var(--red)}
+.liquidity-head{margin-top:18px}
