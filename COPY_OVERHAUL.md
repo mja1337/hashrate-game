@@ -667,6 +667,25 @@ That headroom is the point: daily resolution on price, hash, fees, transactions 
 
 Worth recording, since it prompted the work: the 70 KB module ceiling never applied here. It is guarded by `file.startsWith("src/")`, and the bundle sits at the repository root — it was already four times that size and passing. The ceiling exists to stop application modules turning back into monoliths, which is a review concern rather than a data one.
 
+## Data change, step two: daily resolution
+
+With the dates gone, weekly sampling had nothing left to buy. Price and difficulty were already at their natural resolution and are byte-identical; hash rate, fees, transactions and block height are now recorded daily.
+
+| Series | Points | |
+| --- | --- | --- |
+| PRICE | 5,870 | unchanged, already daily |
+| HASH | 919 → 6,421 | daily |
+| FEES | 1,009 → 6,421 | daily |
+| TX | 919 → 6,427 | daily |
+| HEIGHT | 919 → 6,427 | daily |
+| DIFFICULTY | 463 | unchanged; a step function, not a sample |
+
+What the weekly version was costing, measured against the daily one across 2010–2026: hash rate was off by a median 0.55% with 21 days beyond 5%; transactions by a median 1.09% with 702 days beyond 5%; block height by as much as 325 blocks, about two days of chain. Fees were the worst served, with 2,103 days beyond 5% — on 17 December 2017, the peak of that era's fee market, the weekly series interpolated toward a later anchor and reported **5.34 BTC per block against an actual 3.22**, overstating fee income by two thirds at the single most dramatic moment in the series.
+
+Storage went from 127 KB to 375 KB, and 57 KB to 145 KB gzipped. That was measured rather than assumed before accepting it: page load 63 ms, bundle fetched in 10 ms, and a full 13.6-year run of 4,966 ticks takes 521 ms — 0.105 ms per tick against 0.099 ms on the weekly bundle. Seven times the anchors costs about three extra comparisons in a binary search.
+
+Trimming values from nine significant figures to six would have recovered roughly 118 KB, and it was rejected: nothing is waiting on those bytes, block height and transaction counts have to stay exact, and price would have lost its cents. Fidelity was the cheaper thing to keep.
+
 ## Editorial review checklist
 
 Use this checklist for every rewritten surface:

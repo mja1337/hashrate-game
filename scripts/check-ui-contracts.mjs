@@ -515,7 +515,16 @@ for (const key of ["PRICE", "HASH", "DIFFICULTY", "FEES", "TX", "HEIGHT"]) {
   assert(dates.every((date, i) => i === 0 || date > dates[i - 1]), `${key} decodes out of date order`);
   assert(new Set(dates).size === dates.length, `${key} decodes with a duplicated date`);
 }
-assert(bundle.length < 200_000, `The bundle is ${Math.round(bundle.length / 1024)} KB; the point of the encoding was to leave room for daily resolution`);
+assert(bundle.length < 500_000, `The bundle is ${Math.round(bundle.length / 1024)} KB; daily resolution should cost about 375 KB in this encoding, so anything much larger means the dates crept back`);
+const dailyCadence = ["PRICE", "HASH", "FEES", "TX", "HEIGHT"];
+for (const key of dailyCadence) {
+  const gaps = recorded[key].slice(1).map((entry, i) => Math.round((Date.parse(entry[0]) - Date.parse(recorded[key][i][0])) / 86_400_000));
+  const median = gaps.slice().sort((a, b) => a - b)[Math.floor(gaps.length / 2)];
+  assert(median === 1, `${key} should be recorded daily; its median gap is ${median} days`);
+  assert(recorded[key].length > 5_000, `${key} has only ${recorded[key].length} points for seventeen years of daily data`);
+}
+assert(recorded.DIFFICULTY.length < 700, "Difficulty is a step function and must not be resampled daily along with the rest");
+assert(!buildSource.includes("elapsed % 7 === 0"), "A weekly sampling step is back in the build");
 assert(buildSource.includes("function encodeSeries(pairs)") && buildSource.includes("--recompress"), "The build must own the encoding, and keep a network-free mode that re-encodes the existing bundle");
 
 console.log("UI contracts passed: Mine purchases, difficulty and mobile speed controls, transaction precision, enhancement guards, mempool containment, fleet servicing, repair labour, overdrive, Method coverage, speed-resume safety, the exchange trade-ticket flow, network-hash display parity, bad-event impact effects, timed facility-upgrade risk, mining-floor connectivity/power status, the 100-year procedural sandbox continuation, pool fee display, pool shutdown fail-over, the custody transfer slider, Lightning gating, live market pricing, mempool realism, disabled-control tooltips, the single-venue market redesign, Mine-tab scroll stability, full-refurbishment puzzle consistency, the proactive settlement warning, connectivity ping, the unified incoming-fleet pipeline, proportional fleet-health severity colors, rival operators, milestone moments, the end-of-run recap, cross-run career persistence, the dice-entropy wallet-setup ceremony, the era-accurate wallet-software upgrade path, the resetGame() operator-era crash fix, the real mailing-list learning items, the Dashboard build-queue card, hands-on self-servicing before technicians are hired, the fault-clearing/offline-threshold repair fix, the non-blocking faucet popup, tiered spare parts, the historically-grounded custody/region exposure warnings, free self-serviced labour with real self-damage risk, the four hardware self-help skills, staff dismissal the operator XP/level system, dated pool payout schemes, one drawing per machine, and scroll-anchored, frame-aligned repaints");

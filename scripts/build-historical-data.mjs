@@ -67,7 +67,7 @@ function dailyPrice(rows) {
   return [...byDate].sort((a, b) => day(a[0]) - day(b[0]));
 }
 
-function rollingSeries(rows, windowDays, valueForWindow, cadenceDays = 7) {
+function rollingSeries(rows, windowDays, valueForWindow, cadenceDays = 1) {
   const valid = rows.filter(row => valueForWindow([row]) !== null);
   const result = [];
   for (let i = 0; i < valid.length; i++) {
@@ -137,7 +137,7 @@ function smoothedFees(rows) {
     const blocks = window.reduce((sum, row) => sum + number(row.BlkCnt), 0);
     rolling.push(blocks > 0 ? fees / blocks : null);
     const elapsed = Math.round((day(dateOf(valid[i])) - day(dateOf(valid[0]))) / DAY);
-    if (i === 0 || elapsed % 7 === 0 || i === valid.length - 1) selected.add(i);
+    selected.add(i);
     const daily = number(valid[i].FeeTotNtv) / number(valid[i].BlkCnt);
     if (daily > 0.5 && rolling[i] !== null && daily > rolling[i] * 2) {
       selected.add(Math.max(0, i - 1));
@@ -167,7 +167,7 @@ function heights(rows) {
     if (blocks !== null && blocks > 0) height += Math.round(blocks);
     if (firstDate === null) firstDate = dateOf(rows[i]);
     const elapsed = Math.round((day(dateOf(rows[i])) - day(firstDate)) / DAY);
-    if (elapsed % 7 === 0 || i === rows.length - 1) result.push([dateOf(rows[i]), Math.max(0, height)]);
+    result.push([dateOf(rows[i]), Math.max(0, height)]);
   }
   return result.filter((entry, index, list) => index === 0 || entry[0] !== list[index - 1][0]);
 }
@@ -243,11 +243,11 @@ function render(data) {
         through: END,
         transforms: {
           price: "daily recorded PriceUSD after market launch; four manual discovery anchors before coverage",
-          hash: "14-day trailing mean of recorded daily HashRate, sampled weekly",
+          hash: "14-day trailing mean of recorded daily HashRate, recorded daily",
           difficulty: "one exact value per 2016-block retarget, held until the next one; the protocol changes it nowhere else",
-          fees: "seven-day total fees divided by seven-day blocks, sampled weekly with high-fee outliers retained",
-          transactions: "seven-day trailing mean of recorded TxCnt, sampled weekly",
-          height: "cumulative recorded daily block count, sampled weekly",
+          fees: "seven-day total fees divided by seven-day blocks, recorded daily",
+          transactions: "seven-day trailing mean of recorded TxCnt, recorded daily",
+          height: "cumulative recorded daily block count, recorded daily",
         },
     },
     ...data,
