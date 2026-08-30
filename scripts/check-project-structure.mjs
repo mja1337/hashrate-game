@@ -34,6 +34,7 @@ const expectedScripts = [
   "src/ui/enhance/mine-market.js",
   "src/ui/enhance/custody.js",
   "src/ui/enhance/operations.js",
+  "src/ui/live.js",
   "src/ui/render.js",
   "src/app/events.js",
   "src/app/bootstrap.js",
