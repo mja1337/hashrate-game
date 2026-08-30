@@ -80,6 +80,7 @@ function buildQueueCard(){
   const rows=[];
   state.procurementOrders.forEach(o=>{const h=HARDWARE.find(x=>x.id===o.id),days=Math.max(0,Math.ceil((o.due-state.time)/DAY));rows.push({label:`${o.qty} × ${h?.name||o.id}`,detail:`In transit · ${o.vendor||h?.maker||"Supplier"}`,eta:days,tab:"mine"})});
   state.commissioningJobs.forEach(j=>{const h=HARDWARE.find(x=>x.id===j.id),days=Math.max(0,Math.ceil((j.due-state.time)/DAY));rows.push({label:`${j.qty} × ${h?.name||j.id}`,detail:"Commissioning",eta:days,tab:"mine"})});
+  (state.thermal.orders||[]).forEach(o=>{const item=COOLING_EQUIPMENT.find(x=>x.id===o.id),days=Math.max(0,Math.ceil((o.due-state.time)/DAY));rows.push({label:`${item?.name||o.id}`,detail:"Cooling install",eta:days,tab:"mine"})});
   (state.maintenance.serviceJobs||[]).forEach(job=>{
     const h=HARDWARE.find(x=>x.id===job.id),days=Math.max(0,Math.ceil((job.due-state.time)/DAY)),stageIdx=Number.isFinite(job.stage)?Math.min(job.stage,REPAIR_STAGES.length-1):0,stageName=REPAIR_STAGES[stageIdx]?.name,awaiting=!job.auto&&REPAIR_STAGES[job.stage]?.id==="work"&&!job.workDone;
     rows.push({label:`${h?.name||job.id} servicing`,detail:`${job.part?`Replacing ${sparePart(job.part)?.name||job.part}`:"Full refurbishment"}${stageName?` · ${stageName}`:""}`,eta:awaiting?null:days,awaiting,tab:"mine"});

@@ -3,6 +3,9 @@
 /* THERMAL LAYER — installed cooling, active heat load and room response. */
 function hardwarePoweredDownCount(h,s=state){return Math.max(0,Math.min(s.hardware?.[h.id]||0,Math.floor(Number(s.poweredDownHardware?.[h.id])||0)))}
 function ambientTemperatureC(t=state.time,s=state){const r=REGIONS.find(x=>x.id===s.region)||REGIONS[0],date=new Date(t),start=Date.UTC(date.getUTCFullYear(),0,0),day=(t-start)/DAY,season=Math.sin((day-80)/365*Math.PI*2);return (r.ambientC??18)+(r.seasonalC??8)*season}
+function coolingInstallDays(item){const covid=state.time>=at("2020-03-12")&&state.time<at("2021-07-01");return Math.max(1,Math.round((item.install||14)*(covid?1.6:1)))}
+function pendingCoolingOrders(id=null){return (state.thermal?.orders||[]).filter(o=>!id||o.id===id)}
+function pendingCoolingCount(id){return pendingCoolingOrders(id).reduce((sum,o)=>sum+Number(o.qty||1),0)}
 function coolingCapacityKw(s=state){const f=FACILITIES.find(x=>x.id===s.facility)||FACILITIES[0],equipment=COOLING_EQUIPMENT.reduce((sum,item)=>sum+(s.thermal?.equipment?.[item.id]||0)*item.coolingKw,0);return Math.max(.1,(f.passiveCoolingKw||f.kw*.3)+equipment)*(s.skills?.includes("heat")?1.15:1)}
 function activeMinerWatts(s=state){
   return HARDWARE.reduce((sum,h)=>{const n=s.hardware?.[h.id]||0;if(!n||hardwareOfflineReason(h,s))return sum;const repairing=Math.min(n,Math.max(activeServiceJob(h.id,s)?.count||0,hardwareFaultCount(h,s))),paused=Math.min(n-repairing,hardwarePoweredDownCount(h,s));return sum+h.w*Math.max(0,n-repairing-paused)},0)*(s.skills?.includes("undervolt") ? .95 : 1)*(s.overdrive?1.25:1)

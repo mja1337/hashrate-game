@@ -11,7 +11,7 @@ const initialState=()=>{const seed=Math.floor(Math.random()*4294967296);return{
   cash:1500,startingCash:1500,difficulty:"medium",campaignStart:START,debt:0,bill:0,billLedger:{energy:0,rent:0,internet:0,staff:0,insurance:0,nodeNetwork:0,other:0},lastMonth:new Date(START).toISOString().slice(0,7),power:true,policyLock:null,
   wallets:{hot:0,cold:0,mtgox:0,bitfinex:0,quadriga:0,frontier:0,exchange:0,etf:0,frozen:0},
   lightning:{locked:0,earned:0},
-  hardware:{laptop:1},poweredDownHardware:{},facility:"home",region:"na",thermal:{temperature:22,equipment:{}},overdrive:false,settlementSaleMode:false,autoRepair:false,node:0,nodeStorage:50,nodePruned:false,nodeMode:"archival",nodeSync:{primaryLag:0,primaryPeak:0,backupLag:0,backupPeak:0},backupNode:{enabled:false,outageUntil:0},mode:"solo",pool:"f2pool",
+  hardware:{laptop:1},poweredDownHardware:{},facility:"home",region:"na",thermal:{temperature:22,orders:[],equipment:{}},overdrive:false,settlementSaleMode:false,autoRepair:false,node:0,nodeStorage:50,nodePruned:false,nodeMode:"archival",nodeSync:{primaryLag:0,primaryPeak:0,backupLag:0,backupPeak:0},backupNode:{enabled:false,outageUntil:0},mode:"solo",pool:"f2pool",
   skills:[],points:0,startingGrant:false,seen:[],activeEvent:null,storyPause:true,shoppingPause:false,speculations:[],powerRateShock:null,hardwareGlut:null,hardwareAlerts:{seen:[],queue:[],active:null,resumeSpeed:0},hardwareToastSeen:[],exposureWarned:[],
   treasuryPolicy:"cover",pendingSettlement:null,endReason:null,
   operator:{eras:{},periodMined:0,periodUptime:0,periodDays:0,lastRevenueUsd:0,totalMonths:0,solventMonths:0,profitableMonths:0,competitiveMonths:0,bridgeLoans:0,restructures:0},
@@ -75,6 +75,7 @@ if(!state.maintenance.inventoryMigrated){state.maintenance.inventory.fan+=Math.f
 state.poweredDownHardware=state.poweredDownHardware&&typeof state.poweredDownHardware==="object"?state.poweredDownHardware:{};
 state.thermal=Object.assign({temperature:22,equipment:{}},state.thermal||{});state.thermal.temperature=Math.max(-10,Math.min(90,Number(state.thermal.temperature)||22));state.thermal.equipment=state.thermal.equipment&&typeof state.thermal.equipment==="object"?state.thermal.equipment:{};
 COOLING_EQUIPMENT.forEach(item=>state.thermal.equipment[item.id]=Math.max(0,Math.floor(Number(state.thermal.equipment[item.id])||0)));
+state.thermal.orders=Array.isArray(state.thermal.orders)?state.thermal.orders.filter(o=>COOLING_EQUIPMENT.some(item=>item.id===o.id)&&Number.isFinite(Number(o.due))).map(o=>({id:o.id,qty:Math.max(1,Math.floor(Number(o.qty)||1)),due:Number(o.due),cost:Number(o.cost)||0})):[];
 state.procurementOrders=Array.isArray(state.procurementOrders)?state.procurementOrders.filter(o=>HARDWARE.some(h=>h.id===o.id)&&Number(o.qty)>0&&Number.isFinite(Number(o.due))):[];
 state.inactiveHardware=state.inactiveHardware&&typeof state.inactiveHardware==="object"?state.inactiveHardware:{};
 HARDWARE.forEach(h=>state.inactiveHardware[h.id]=Math.max(0,Math.floor(Number(state.inactiveHardware[h.id])||0)));
@@ -412,7 +413,7 @@ function tick(silent=false){
   advanceLearning();
   advanceThermals();
   advanceMaintenance();
-  advanceProcurement();
+  advanceProcurement();advanceCoolingInstalls();
   advanceFleetLifecycle();
   const crossed=EVENTS.filter(e=>at(e.date)>prev&&at(e.date)<=next&&!state.seen.includes(e.id)).sort((a,b)=>at(a.date)-at(b.date));
   crossed.forEach(e=>{state.seen.push(e.id);applyEvent(e)});

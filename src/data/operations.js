@@ -11,13 +11,13 @@ const FACILITIES=[
   {id:"megacampus",name:"Sovereign megacampus",date:"2025-01-01",kw:180000,space:360000,rent:1500000,cost:90000000,passiveCoolingKw:60000,desc:"Utility-scale mining campus designed for national-scale power agreements and geopolitical risk."}
 ];
 const COOLING_EQUIPMENT=[
-  {id:"boxfan",name:"Workshop box fan",date:"2009-01-03",minTier:1,maxTier:3,cost:95,coolingKw:1.6,watts:85,desc:"Moves room air cheaply; useful at home and in a small garage."},
-  {id:"exhaust",name:"Ducted exhaust kit",date:"2010-01-01",minTier:2,maxTier:4,cost:780,coolingKw:10,watts:420,desc:"Pulls a deliberate hot aisle out of a garage or small industrial unit."},
-  {id:"axial",name:"Industrial axial fan wall",date:"2012-01-01",minTier:3,maxTier:6,cost:5200,coolingKw:68,watts:2600,desc:"High-volume intake and extraction for rows of air-cooled miners."},
-  {id:"ahu",name:"Filtered air-handling unit",date:"2015-01-01",minTier:4,maxTier:8,cost:54000,coolingKw:620,watts:22000,desc:"A controlled industrial airflow plant with filtration and economiser logic."},
-  {id:"evap",name:"Evaporative cooling bank",date:"2018-01-01",minTier:5,maxTier:8,cost:420000,coolingKw:5200,watts:165000,desc:"Utility-scale evaporative cooling: capital intensive, efficient at large loads."},
-  {id:"drycooler",name:"Closed-loop dry cooler",date:"2020-01-01",minTier:6,maxTier:8,cost:1850000,coolingKw:22000,watts:760000,desc:"Container and hydro-loop heat rejection with pumps, controls and redundancy."},
-  {id:"coolingtower",name:"Industrial cooling tower",date:"2023-01-01",minTier:7,maxTier:8,cost:7200000,coolingKw:72000,watts:2400000,desc:"Campus-scale heat rejection for dense liquid-cooled fleets."}
+  {id:"boxfan",name:"Workshop box fan",date:"2009-01-03",minTier:1,maxTier:3,cost:95,install:3,coolingKw:1.6,watts:85,desc:"Moves room air cheaply; useful at home and in a small garage."},
+  {id:"exhaust",name:"Ducted exhaust kit",date:"2010-01-01",minTier:2,maxTier:4,cost:780,install:9,coolingKw:10,watts:420,desc:"Pulls a deliberate hot aisle out of a garage or small industrial unit."},
+  {id:"axial",name:"Industrial axial fan wall",date:"2012-01-01",minTier:3,maxTier:6,cost:5200,install:21,coolingKw:68,watts:2600,desc:"High-volume intake and extraction for rows of air-cooled miners."},
+  {id:"ahu",name:"Filtered air-handling unit",date:"2015-01-01",minTier:4,maxTier:8,cost:54000,install:35,coolingKw:620,watts:22000,desc:"A controlled industrial airflow plant with filtration and economiser logic."},
+  {id:"evap",name:"Evaporative cooling bank",date:"2018-01-01",minTier:5,maxTier:8,cost:420000,install:60,coolingKw:5200,watts:165000,desc:"Utility-scale evaporative cooling: capital intensive, efficient at large loads."},
+  {id:"drycooler",name:"Closed-loop dry cooler",date:"2020-01-01",minTier:6,maxTier:8,cost:1850000,install:90,coolingKw:22000,watts:760000,desc:"Container and hydro-loop heat rejection with pumps, controls and redundancy."},
+  {id:"coolingtower",name:"Industrial cooling tower",date:"2023-01-01",minTier:7,maxTier:8,cost:7200000,install:120,coolingKw:72000,watts:2400000,desc:"Campus-scale heat rejection for dense liquid-cooled fleets."}
 ];
 const REGIONS=[
   {id:"na",name:"North America",date:"2009-01-03",kwh:.12,rely:.995,netRisk:.008,internet:25,move:0,ambientC:18,seasonalC:11,policy:"Stable, expensive",desc:"Reliable grid access and deep capital markets; middling power prices."},

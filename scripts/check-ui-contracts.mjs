@@ -415,4 +415,26 @@ for (const file of copyFiles) {
 }
 assert(legacyHits.length === 0, `Legacy terminology is back in player-facing copy:\n  ${legacyHits.slice(0, 8).join("\n  ")}`);
 
+// Cooling plant is ordered and installed, not conjured. It was the only thing in the
+// room that appeared instantly and was never drawn, so both are now checked.
+const operationsSource = await readFile(new URL("src/data/operations.js", root), "utf8");
+const coolingRows = [...operationsSource.matchAll(/\{id:"(\w+)",name:"([^"]+)",date:"[\d-]+",minTier:\d+,maxTier:\d+,cost:(\d+),install:(\d+),/g)];
+assert(coolingRows.length === 7, `Every cooling item needs an install lead time; ${coolingRows.length} of 7 have one`);
+let previousInstall = 0;
+for (const [, id, name, cost, install] of coolingRows) {
+  const days = Number(install);
+  assert(days >= 1 && days <= 200, `${name} has an implausible install lead time of ${days} days`);
+  assert(days >= previousInstall, `Cooling install times should not shrink as the plant gets bigger: ${name} takes ${days} days`);
+  previousInstall = days;
+}
+assert(inline.includes("function coolingInstallDays(item)") && inline.includes("function advanceCoolingInstalls()") && inline.includes("advanceProcurement();advanceCoolingInstalls();"), "Cooling installs are not resolved on the simulation tick");
+assert(inline.includes("state.thermal.orders.push({id,qty:1,due:state.time+days*DAY,cost:item.cost})") && !/state\.cash-=item\.cost;state\.thermal\.equipment\[id\]=/.test(inline), "Buying cooling must book an install rather than grant heat rejection immediately");
+assert(inline.includes("thermal:{temperature:22,orders:[]") && inline.includes("state.thermal.orders=Array.isArray(state.thermal.orders)"), "Cooling orders are missing from the initial state or from the save migration");
+assert(inline.includes("const projected=fleet(trial);if(projected.potentialKw>projected.cap)"), "The cooling headroom check must use peak draw: cooling is thermostatic, so a cold room draws almost nothing and a live-draw check passes however much plant is on order");
+assert(inline.includes("function miningFloorCooling()") && inline.includes("${miningFloorCooling()}<div class=\"floor-units\""), "Installed cooling is not drawn on the live mining floor");
+assert(inline.includes('<i class="cooling"></i> Cooling plant') && inline.includes('<i class="cooling-pending"></i> Cooling on order'), "The mining-floor legend does not explain the cooling sprites");
+assert(css.includes(".floor-cooling-row{") && css.includes(".floor-cooling.pending{") && css.includes(".floor-cooling-row{top:58px;left:8px"), "Floor cooling sprites are missing their styling or their phone layout, where the facility caption spans the room and a right-aligned row collides with it");
+assert(inline.includes('detail:"Cooling install"'), "A cooling install does not appear in the Dashboard build queue");
+assert(inline.includes("${installDays}-day install") && inline.includes(">Order · ${fmtCompactUsd(item.cost)}</button>"), "The cooling card does not preview its install delay before the player commits");
+
 console.log("UI contracts passed: Mine purchases, difficulty and mobile speed controls, transaction precision, enhancement guards, mempool containment, fleet servicing, repair labour, overdrive, Method coverage, speed-resume safety, the exchange trade-ticket flow, network-hash display parity, bad-event impact effects, timed facility-upgrade risk, mining-floor connectivity/power status, the 100-year procedural sandbox continuation, pool fee display, pool shutdown fail-over, the custody transfer slider, Lightning gating, live market pricing, mempool realism, disabled-control tooltips, the single-venue market redesign, Mine-tab scroll stability, full-refurbishment puzzle consistency, the proactive settlement warning, connectivity ping, the unified incoming-fleet pipeline, proportional fleet-health severity colors, rival operators, milestone moments, the end-of-run recap, cross-run career persistence, the dice-entropy wallet-setup ceremony, the era-accurate wallet-software upgrade path, the resetGame() operator-era crash fix, the real mailing-list learning items, the Dashboard build-queue card, hands-on self-servicing before technicians are hired, the fault-clearing/offline-threshold repair fix, the non-blocking faucet popup, tiered spare parts, the historically-grounded custody/region exposure warnings, free self-serviced labour with real self-damage risk, the four hardware self-help skills, staff dismissal the operator XP/level system, dated pool payout schemes, one drawing per machine, and scroll-anchored, frame-aligned repaints");

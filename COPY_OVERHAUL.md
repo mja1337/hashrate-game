@@ -606,6 +606,16 @@ The audit contract bans the shapes that were actually wrong — the word standin
 - Copy contracts for required help patterns beyond the page-help map already covered.
 - Two legs of the walkthrough matrix. The fault leg is half walked: a real engine-raised fault on a 20-machine S7 fleet shows its capacity-lost copy and the servicing bench, with no overflow at either width, but the self-repair-failure and successful-repair messages need the right spare part in inventory and were not driven to completion. Receivership was not reached. Both sets of strings are contract-covered.
 
+## Mechanic change: cooling is ordered, not conjured
+
+Approved separately from the copy overhaul, and recorded here because it changes what the Mine tab shows and says.
+
+Cooling plant was the only thing in the room that appeared the instant it was paid for, and the only thing never drawn on the live floor. Both are fixed. Each item now carries an install lead time — three days for a box fan, twenty-one for an axial fan wall, four months for a cooling tower — extended by 60% inside the COVID freight window, matching how miner procurement already behaves. It is paid for on order and rejects no heat until the installers finish.
+
+Installed units are drawn along the back wall of the floor; units still on order appear ghosted with their remaining days, so the wait is visible where the heat is. The install also appears in the Dashboard build queue, and the shop card previews the delay on the card and in the button's tooltip before the player commits.
+
+The change surfaced an existing bug in the headroom check. Buying cooling tested `fleet(trial).within`, which measures what the site is drawing *right now* — and cooling is thermostatic, so a cold room draws almost nothing. A player could order unlimited plant and trip the site later. Miners are held to peak draw through `potentialKw`; cooling now is too, counting anything already on order, and the blocked message names the projected total against the site's supply.
+
 ## Editorial review checklist
 
 Use this checklist for every rewritten surface:
