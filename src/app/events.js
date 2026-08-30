@@ -63,7 +63,11 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(a==="project-loan")takeProjectLoan();
   else if(a==="repay-loan")repayProjectLoan();
   else if(a==="speed"){state.speed=Number(v);state.returnSpeed=state.speed||state.returnSpeed;setTimer();save();render()}
-  else if(a==="tab"){activeTab=v;mobileMenuOpen=false;render(false);const anchor=b.dataset.anchor;if(anchor)setTimeout(()=>document.getElementById(anchor)?.scrollIntoView({behavior:"smooth",block:"start"}),60);else window.scrollTo({top:0,behavior:"smooth"})}
+  else if(a==="tab"){activeTab=v;mobileMenuOpen=false;render(false);const anchor=b.dataset.anchor;if(anchor)setTimeout(()=>revealMethodAnchor(anchor),60);else window.scrollTo({top:0,behavior:"smooth"})}
+  else if(a==="method-chapter")revealMethodAnchor(id);
+  else if(a==="glossary"){glossaryOpen=true;render(true);setTimeout(()=>document.querySelector("[data-glossary-search]")?.focus(),0)}
+  else if(a==="close-glossary"){glossaryOpen=false;render(true)}
+  else if(a==="glossary-method"){glossaryOpen=false;activeTab="method";render(false);const anchor=b.dataset.anchor;setTimeout(()=>revealMethodAnchor(anchor),60)}
   else if(a==="activate-hw")activateHardware(id);else if(a==="decommission-hw")decommissionHardware(id,Number(v));else if(a==="buy-hw")buyHardware(id,Number(v));else if(a==="buy-hw-btc")buyHardwareBtc(id,Number(v));else if(a==="sell-hw")sellHardware(id,Number(v));else if(a==="sell-hw-btc")sellHardwareBtc(id,Number(v));else if(a==="facility")upgradeFacility(id);else if(a==="region")moveRegion(id);else if(a==="buy-node")buyNode(Number(v));
   else if(a==="buy-btc")buyBtc(id,actionFraction(b));else if(a==="sell-btc")sellBtc(id,actionFraction(b));else if(a==="lightning")deployLightning(Number(v));else if(a==="lightning-withdraw")withdrawLightning();else if(a==="transfer")transfer(b.dataset.from,b.dataset.to,actionFraction(b));else if(a==="speculate")takeSpeculation(id,Number(v));else if(a==="skill")unlockSkill(id);
   else if(a==="mode"){if(state.mode!==v){state.mode=v;log(v==="pool"?"Pool mining selected":"Solo mining selected",v==="pool"?poolData().name:"No pool fee","operations")}save();render()}else if(a==="pool"){const selected=poolData(v);if(availablePool()&&selected&&!poolClosed(v)&&poolEligible(selected)){state.pool=v;state.mode="pool";log("Mining pool changed",`${selected.name} · ${(poolFee()*100).toFixed(2)}% fee`,"operations");save();render()}}else if(a==="toggle-power"){state.power=!state.power;log(state.power?"Mining fleet started":"Mining fleet stopped","manual","operations");save();render()}else if(a==="toggle-overdrive"){state.overdrive=!state.overdrive;log(state.overdrive?"Overdrive engaged":"Overdrive disengaged",state.overdrive?"+15% hash · +25% power draw · elevated wear and fault risk":"Back to rated settings","fleet");save();render()}else if(a==="toggle-auto-repair"){if(fieldTechnicianCount()<1)return;state.autoRepair=!state.autoRepair;log(state.autoRepair?"Auto-repair enabled":"Auto-repair disabled",state.autoRepair?"Technician crew will service faulted units automatically while parts are in stock":"Repairs need to be started manually again","fleet");save();renderMineContent()}
@@ -80,7 +84,7 @@ document.getElementById("app").addEventListener("pointerup",e=>{
   const b=e.target.closest('[data-action="tab"]');if(!b||b.disabled)return;
   recentTouchTab={value:b.dataset.value,at:Date.now()};activeTab=b.dataset.value;mobileMenuOpen=false;render(false);window.scrollTo({top:0,behavior:"smooth"});
 });
-document.getElementById("app").addEventListener("input",e=>{if(e.target.matches("[data-starting-cash]")){introStartingCash=clampStartingLiquidity(e.target.value);document.querySelectorAll("[data-starting-cash]").forEach(input=>{if(input!==e.target)input.value=introStartingCash});const output=document.querySelector("[data-starting-cash-output]");if(output)output.textContent=fmtUsd(introStartingCash)}else if(e.target.matches("[data-percent-input]"))updateTradePercentage(e.target.dataset.percentInput,e.target.value,e.target);else if(e.target.matches("[data-pool-history]"))updatePoolExplorer(Number(e.target.value))});
+document.getElementById("app").addEventListener("input",e=>{if(e.target.matches("[data-starting-cash]")){introStartingCash=clampStartingLiquidity(e.target.value);document.querySelectorAll("[data-starting-cash]").forEach(input=>{if(input!==e.target)input.value=introStartingCash});const output=document.querySelector("[data-starting-cash-output]");if(output)output.textContent=fmtUsd(introStartingCash)}else if(e.target.matches("[data-percent-input]"))updateTradePercentage(e.target.dataset.percentInput,e.target.value,e.target);else if(e.target.matches("[data-glossary-search]"))filterGlossary(e.target.value);else if(e.target.matches("[data-pool-history]"))updatePoolExplorer(Number(e.target.value))});
 document.getElementById("app").addEventListener("change",e=>{
   if(e.target.matches("[data-hardware-qty],[data-hardware-currency]")){
     const wrap=e.target.closest(".hardware-buy-controls");if(!wrap)return;
@@ -95,4 +99,5 @@ document.getElementById("app").addEventListener("change",e=>{
   }
   if(e.target.id==="importSave"&&e.target.files&&e.target.files[0])importSave(e.target.files[0])
 });
+document.getElementById("app").addEventListener("toggle",e=>{if(e.target.classList?.contains("method-chapter"))rememberMethodChapter(e.target)},true);
 document.getElementById("app").addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.matches(".story-item"))e.target.click()});

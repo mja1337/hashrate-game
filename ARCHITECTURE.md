@@ -11,6 +11,7 @@
 - `src/data/operations.js` — facilities, regions, connectivity, energy contracts and staff.
 - `src/data/progression.js` — learning, skills, nodes, securities, donations and optional scenarios.
 - `src/data/content.js` — balance scenarios, release notes and historical story events.
+- `src/data/glossary.js` — the canonical terminology, its searchable aliases and the Method chapter each term points at.
 - `src/engine/operator.js` — experience, operator levels and the best-share record. Loaded **before** `simulation.js`, whose state migration calls `normalizeXp()` at the top level.
 - `src/engine/maintenance.js` — spare parts, fault attribution, service jobs and the hands-on repair puzzles.
 - `src/engine/pools.js` — pool selection, market share, fees and payout schemes (FPPS / PPS / PPS+ / PPLNS / TIDES).

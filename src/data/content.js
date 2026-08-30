@@ -53,9 +53,9 @@ const CHANGELOG=[
 const MILESTONES=[
   {id:"coin",label:"First full BTC",blurb:"Self-held wallets crossed a whole bitcoin for the first time.",check:()=>controlled()>=1},
   {id:"uptime",label:"One operating year",blurb:"The fleet logged 365 cumulative days of mining uptime.",check:()=>state.uptimeDays>=365},
-  {id:"scale",label:"Petahash operator",blurb:"Installed fleet hashrate passed 1 PH/s.",check:()=>fleet().hash>=1e15},
+  {id:"scale",label:"Petahash operator",blurb:"Installed fleet hash rate passed 1 PH/s.",check:()=>fleet().hash>=1e15},
   {id:"reserve",label:"Six-month cash reserve",blurb:"Unborrowed fiat now covers six months of the full operating and finance bill.",check:()=>reserveMilestoneStatus().ok},
-  {id:"exahash",label:"Exahash operator",blurb:"Installed fleet hashrate passed 1 EH/s.",check:()=>fleet().hash>=1e18},
+  {id:"exahash",label:"Exahash operator",blurb:"Installed fleet hash rate passed 1 EH/s.",check:()=>fleet().hash>=1e18},
   {id:"fiveyears",label:"Five operating years",blurb:"The fleet logged 1,825 cumulative days of mining uptime.",check:()=>state.uptimeDays>=1825},
   {id:"networth",label:"Seven-figure net worth",blurb:"Mark-to-market net worth passed $1,000,000.",check:()=>netWorth()>=1e6},
   {id:"selfheld",label:"100 BTC self-held",blurb:"Hot and cold wallets combined now hold 100 BTC.",check:()=>controlled()>=100},

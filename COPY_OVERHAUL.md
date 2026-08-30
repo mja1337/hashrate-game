@@ -1,6 +1,6 @@
 # Hashrate copy and help overhaul
 
-Status: Phases 1–5 complete; Phase 6 reference and editorial QA is next.
+Status: Phases 1–5 complete. Phase 6 is in progress: Method, the glossary, the procedural sandbox and terminology normalization are done; the remaining copy contracts and the full editorial walkthrough matrix are outstanding.
 
 This document is the source of truth for rewriting the game's introduction, interface copy, contextual help, feedback, historical storytelling and technical reference material. Update it when copy conventions, scope or decisions change.
 
@@ -376,11 +376,15 @@ This is the implementation map for the rewrite. It identifies ownership rather t
 
 ### Phase 6 — Reference and editorial QA
 
-- [ ] Split Method into navigable or collapsible chapters.
-- [ ] Add an in-game glossary.
-- [ ] Normalize terms, abbreviations, units, capitalization and recurring-cost notation.
-- [ ] Add automated copy contracts for legacy terms and required help patterns.
-- [ ] Complete desktop and mobile editorial walkthroughs.
+- [x] Split Method into navigable, collapsible chapters with a clear distinction between player guidance, exact calculations, historical sources and modelling assumptions.
+- [x] Add a searchable in-game glossary that defines canonical terms in plain English and links back to the relevant Method chapter.
+- [x] Add a dedicated procedural-sandbox chapter covering what continues after the recorded history ends, what stops, and which values become modelled.
+- [x] Rewrite the 2026 continuation decision and first sandbox briefing so players understand that no new recorded news or hardware is added, while price, network activity, difficulty, fees, block height and halvings continue procedurally.
+- [x] Explain projected halvings as protocol-driven operational events, including their effect on subsidy and expected mining income, without presenting their modelled calendar dates as recorded history.
+- [x] Correct projected subsidy calculations to use whole satoshis and add boundary checks for the first post-record halving and the 100-year endpoint.
+- [x] Normalize terms, abbreviations, units, capitalization and recurring-cost notation across every primary, contextual and reference surface.
+- [ ] Add automated copy contracts for legacy terms, required help patterns, procedural/recorded labels and sandbox-halving explanations.
+- [ ] Complete desktop and mobile editorial walkthroughs covering onboarding, the operating loop, transactions, faults, historical events, settlement, the 2026 ending, sandbox continuation and the final recap.
 
 ## Phase 2 implementation record
 
@@ -461,6 +465,116 @@ Historical chapters separate **What happened**, **Why it mattered** and **Effect
 High-stakes operating feedback now leads with consequence and recovery. Fault messages name lost mining capacity and the part to repair. Settlement choices state both the immediate rescue and lasting cost; successful rescues report what was sold or borrowed; receivership reports seized assets, mining status and strike count. The end-of-run recap adds a plain-English assessment, the run's defining lesson and three evidence points for solvency, profitability and remaining BTC before the technical score breakdown.
 
 Automated contracts cover semantic feedback kinds, transaction hierarchy, event boundaries, settlement consequences, repair language and recap structure. Desktop and 390 px mobile walkthroughs verified the transaction review, historical chapter and blocked-action alert. The visual pass also caught and corrected a halving event that initially inherited the generic “no direct rule change” fallback despite immediately reducing the block subsidy.
+
+## Phase 6 planned implementation
+
+Phase 6 should turn Method from a long manual into the canonical reference behind the contextual-help system. Its first view should provide a short table of contents and concise chapter summaries. Exact formulas, edge cases, provenance and source notes should remain available inside collapsed detail rather than dominating the initial reading experience.
+
+Proposed Method structure:
+
+1. **Start here** — the operating loop, cash versus BTC and the monthly operating bill.
+2. **Mining and rewards** — hash rate, network difficulty, subsidy, transaction fees, solo variance and pool schemes.
+3. **Fleet and facilities** — capacity, power, cooling, condition, faults, procurement and commissioning.
+4. **Market, treasury and finance** — prices, fees, custody boundaries, runway, debt and settlement.
+5. **Custody and verification** — keys, wallets, venues, nodes, Lightning and counterparty risk.
+6. **Progression and scoring** — knowledge, skills, milestones, eras and Operator Score.
+7. **Recorded history and sources** — bundled datasets, interpolation and event sourcing.
+8. **Procedural sandbox** — post-2026 projections, assumptions, limits and the 100-year endpoint.
+
+The glossary should be reachable from every contextual-help disclosure and should initially cover the canonical terminology table in this document. Definitions should stay short enough for a newcomer while linking to Method for formulas and exceptions. Search should match abbreviations such as BTC, ASIC, FPPS and PPA as well as their expanded names.
+
+### Procedural sandbox copy requirements
+
+The sandbox transition must state four things before the player continues:
+
+1. The recorded historical feed ends on 08 August 2026.
+2. No new historical chapters or hardware releases are invented after that date.
+3. Price, network hash rate, network difficulty, transaction activity, fees, chain size and block height continue through deterministic modelled projections.
+4. Bitcoin's subsidy schedule continues, so future halvings reduce mining income even though their exact in-game dates are projections based on a constant ten-minute block interval.
+
+The first post-record halving is projected around April 2028 and reduces the subsidy from 3.125 BTC to 1.5625 BTC per block. Each subsequent halving should create an operational notification and Ledger entry that says **Projected protocol halving**, states the old and new subsidy, and recommends reviewing mining margin. These notices must not appear as recorded historical chapters.
+
+The sandbox currently runs to approximately August 2126 and includes about 25 post-2024 halvings. By the endpoint the subsidy is approximately nine satoshis per block. The calculation must floor each subsidy to a whole satoshi, matching Bitcoin's indivisible accounting unit; fractional satoshis must not enter mining payouts, forecasts or displayed values.
+
+Required sandbox contracts:
+
+- The first projected halving occurs only after the historical cutoff and reduces 3.125 BTC to 1.5625 BTC.
+- Projected halving notifications and Ledger entries are labelled modelled/procedural, never recorded.
+- Mining reward and profitability calculations use the reduced subsidy immediately after each boundary.
+- Subsidy values are whole satoshis throughout the 100-year continuation.
+- The sandbox endpoint, approximately August 2126, remains finite and suppresses another continuation action.
+- No new hardware release or historical-event chapter is generated after the recorded cutoff.
+
+### Final editorial walkthrough matrix
+
+The final pass should cover both 1440 px desktop and 390 px mobile layouts, with keyboard and touch-accessible controls checked where applicable:
+
+- Standard first run and Impossible first run.
+- First bill, first miner order, first pool choice and first BTC trade.
+- Custody transfer, node prerequisite and a blocked action.
+- Hardware fault, self-repair failure and successful repair.
+- Historical event with a direct effect and one with context only.
+- Cash shortfall, each rescue route and receivership.
+- Historical ending, sandbox decision, projected halving and 100-year ending.
+- End-of-run recap at both strong and weak scores.
+
+The walkthrough should finish with a repository-wide language audit for legacy synonyms, unexplained abbreviations, recurring costs without `/month`, physical values without units, ambiguous uses of “liquidity,” and claims that blur recorded history with derived or modelled behaviour.
+
+## Phase 6 implementation record
+
+### Method as eight chapters
+
+Method now opens as a table of contents over eight collapsible chapters rather than a numbered list of sixteen sections. Each chapter carries a one-line summary in the contents and on its own header, and each opens with a plain-language lead that states the idea before any formula appears. Only the first chapter is expanded by default.
+
+Section numbering is gone, because chapters now carry the order. Every section id that contextual help depends on is written into the markup, replacing the runtime helper that identified headings by matching their text against prefixes such as `"7. Facilities"` — a coupling that would have broken the moment a heading was renumbered or reworded. Deep links now open the chapter they point inside before scrolling, since a collapsed `<details>` cannot be scrolled to.
+
+Two accumulated `enhanceMethod` overrides in `bootstrap.js` were folded away as part of this. Eight of their eleven `innerHTML` string replacements were already dead against the Phase 1–5 copy; the three that still applied were folded into the source text, and the dataset provenance panel moved into the Recorded history and sources chapter, where it belongs. Method no longer rebuilds its own DOM twice after every render.
+
+The chapter-level separation of guidance, calculation, provenance and modelling is in place: chapter leads carry the guidance layer, the sources chapter carries provenance, and the sandbox chapter carries the modelling boundary. Layering the *inside* of the denser sections — several are a single 1,700-character paragraph containing both the explanation and its formula — is editorial rewriting still to do.
+
+### Searchable glossary
+
+`src/data/glossary.js` holds 47 canonical terms, each with a one-or-two sentence plain-English definition, a set of search aliases and the Method target that carries the formula. Search matches abbreviations, their expansions and common synonyms against the same entry, so `fpps`, `full pay per share`, `ppa`, `power purchase agreement`, `asic`, `hashrate` and `sats` all resolve.
+
+The glossary is a modal rather than a page, so a term can be looked up from wherever it confused the player without losing their place. It opens from the "Terms and help" disclosure on every non-Dashboard tab and from the Method contents; filtering happens in the DOM rather than through a re-render, so the search field keeps focus as the player types.
+
+### The procedural sandbox
+
+The continuation decision no longer offers a single sentence of small print. It now separates what stops at the cutoff, what continues as a deterministic model, and what continues because it is protocol, and the Method sandbox chapter carries the same three-way split in full. A dismissible Operator briefing repeats the boundary once the sandbox has started and links to that chapter.
+
+Projected halvings are treated as operational events rather than historical ones. Each states its old and new subsidy, is labelled **Projected protocol halving** in both the notification and the Ledger, attributes its date to the constant ten-minute block interval that produced it, and recommends re-checking mining margin. None of them appear as recorded chapters.
+
+The subsidy model was wrong and is now correct. `subsidyAt` computed `50 / 2**halvings`, which stays exact for the first nine halvings and then pays fractions of a satoshi: from April 2048 the tenth epoch should be 4,882,812 satoshis, not 4,882,812.5. Subsidies are now integer satoshis floored by halving, matching Bitcoin's own integer division, and reach zero rather than paying an impossible fraction. Displayed subsidies switch from BTC to satoshi notation below 0.001 BTC, so the late sandbox reads `9 sats` rather than `9e-8 BTC`.
+
+### Contracts added
+
+All six required sandbox contracts are in place and were mutation-tested against the original `50 / 2**n` model, which they catch at the 2048 boundary. They cover the first projected halving landing after the cutoff and taking 3.125 BTC to 1.5625 BTC, the 25 projected halvings before the endpoint, whole-satoshi subsidies at weekly resolution across the full 100 years, rewards using the reduced subsidy from the boundary itself, the nine-satoshi endpoint, and the absence of any event or hardware release dated after the cutoff. Further contracts cover the four required statements in the continuation decision, the sandbox briefing, the eight Method chapters and their static anchors, the deep-link reveal, and glossary coverage, aliases and Method targets.
+
+### Terminology normalization
+
+`hashrate` is now `hash rate` in all 28 player-facing uses. The product name keeps its spelling, as do the save keys, the export filename and the shipped release notes — a release note records what was written at the time, and a save key is an identifier, not prose.
+
+`/mo` is now `/month` in all 23 recurring-cost displays. Both breakpoints were re-checked across ten tabs afterwards: the longer suffix clips nothing and introduces no horizontal overflow.
+
+A legacy-terminology contract now walks every module and fails on either term outside its documented exemptions, with the offending line quoted. It was mutation-tested by reintroducing `Network hashrate` on Pools.
+
+Two audits found nothing to change. Every use of "the Bitcoin" is correct English before a noun — the whitepaper, the network, the community — rather than the banned use for the asset. "modeled" appears once, deliberately, as a search alias so the American spelling finds the entry.
+
+### What the walkthrough caught
+
+Verifying the new surfaces in the browser at 1440 px and 390 px turned up three defects that the contracts alone would not have:
+
+- **Chapters snapped shut under the reader.** `render()` rebuilds a tab from a template string, so every chapter a reader opened closed again on the next simulation tick — and on Method the clock is usually running. Which chapters are open is now transient view state that survives a repaint, with a contract to keep it that way.
+- **A halving was labelled "Advance warning."** That label belongs to a risk that has not landed yet; a halving that has already cut the subsidy is a rules change, and the tense of the message contradicted the label. Added a `notice` feedback kind reading **Rules change**, which shares the amber warning treatment.
+- **An 11 px touch target.** The "How this works in Method" link inside each glossary entry inherited a bare text-link style, against the Phase 4 rule of 34 px desktop and 40 px mobile. Both are now enforced by contract.
+
+One copy error came from the formatter rather than the writing: a sentence arguing that satoshis are indivisible rendered 312,500,000 as "312.5M", because the shared number formatter compacts above a million. It now prints in full.
+
+### Still outstanding
+
+- Copy contracts for required help patterns beyond the page-help map already covered.
+- The full editorial walkthrough matrix. The new Method, glossary and sandbox surfaces are verified at both widths; the transaction, fault, settlement, rescue and recap journeys in the matrix are not yet re-walked.
+- Paragraph-level layering of guidance versus exact calculation inside the denser Method sections.
 
 ## Editorial review checklist
 

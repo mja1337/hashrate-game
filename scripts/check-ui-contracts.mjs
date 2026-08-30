@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import vm from "node:vm";
 
 const root = new URL("../", import.meta.url);
@@ -131,6 +131,68 @@ assert(inline.includes("next>=SANDBOX_END&&state.sandbox&&!state.pendingSettleme
 assert(inline.includes('body.querySelector(\'[data-action="continue-run"]\')||state.endReason==="sandbox-complete")return'), "Continue-sandbox button is not suppressed once the procedural horizon is reached");
 assert(inline.includes("function futurePriceAt(") && inline.includes("function futureHashAt(") && inline.includes("function futureHeightAt(") && inline.includes("function futureChainSizeAt("), "Procedural continuation model for price/hash/height/chain-size is missing");
 assert(!inline.includes("nextRand()") || !inline.slice(inline.indexOf("function futurePriceAt("), inline.indexOf("function futurePriceAt(")+2000).includes("nextRand()"), "Procedural price model must stay a pure function of time, not the live gameplay PRNG");
+// Bitcoin issues whole satoshis. The 100-year continuation projects roughly
+// twenty-five further halvings, and by the endpoint the subsidy is single-digit
+// satoshis — exactly where a 50/2**n model starts paying fractions of a unit
+// that cannot exist.
+const historySource = await readFile(new URL("src/engine/history.js", root), "utf8");
+const subsidySliceStart = historySource.indexOf("const FUTURE_HALVING_INTERVAL=");
+const subsidySliceEnd = historySource.indexOf("function feeAt(", subsidySliceStart);
+assert(subsidySliceStart >= 0 && subsidySliceEnd > subsidySliceStart, "The subsidy and halving-schedule block could not be extracted from history.js");
+const subsidyContext = { Math, Date, Number };
+vm.runInNewContext(
+  timelineSource + "\n" + historySource.slice(subsidySliceStart, subsidySliceEnd) +
+  "\nglobalThis.subsidyApi={subsidyAt,subsidySatsAt,subsidyHalvingIndex,halvingTimeAt,halvingIsProjected,nextHalvingTime,END,SANDBOX_END,DAY};",
+  subsidyContext
+);
+const subsidy = subsidyContext.subsidyApi;
+const firstProjectedHalving = subsidy.halvingTimeAt(5);
+assert(subsidy.halvingIsProjected(5) && !subsidy.halvingIsProjected(4), "The fourth halving is recorded history; the fifth is the first projection");
+assert(firstProjectedHalving > subsidy.END, "The first projected halving must fall after the recorded historical cutoff");
+assert(new Date(firstProjectedHalving).toISOString().slice(0, 7) === "2028-04", "The first projected halving drifted away from April 2028");
+assert(subsidy.subsidyAt(firstProjectedHalving - subsidy.DAY) === 3.125 && subsidy.subsidyAt(firstProjectedHalving) === 1.5625, "The first projected halving must take the subsidy from 3.125 BTC to 1.5625 BTC");
+assert(subsidy.subsidyAt(firstProjectedHalving) === subsidy.subsidyAt(firstProjectedHalving + subsidy.DAY), "Mining rewards must use the reduced subsidy from the halving boundary onward, not a day later");
+let projectedHalvings = 0;
+for (let index = 5; subsidy.halvingTimeAt(index) <= subsidy.SANDBOX_END; index += 1) {
+  const boundary = subsidy.halvingTimeAt(index);
+  const before = subsidy.subsidySatsAt(boundary - subsidy.DAY);
+  assert(subsidy.subsidySatsAt(boundary) === Math.floor(before / 2), "Projected halving " + index + " does not halve the subsidy on its own boundary");
+  projectedHalvings += 1;
+}
+assert(projectedHalvings === 25, "The sandbox should contain 25 projected halvings, not " + projectedHalvings);
+for (let t = subsidy.END; t <= subsidy.SANDBOX_END; t += subsidy.DAY * 7) {
+  const sats = subsidy.subsidySatsAt(t);
+  const day = new Date(t).toISOString().slice(0, 10);
+  assert(Number.isInteger(sats) && sats >= 0, "The projected subsidy is not a whole number of satoshis at " + day);
+  assert(Math.round(subsidy.subsidyAt(t) * 1e8) === sats, "The BTC subsidy and its satoshi value disagree at " + day);
+}
+assert(subsidy.subsidySatsAt(subsidy.SANDBOX_END) === 9, "By the 100-year endpoint the projected subsidy should be nine satoshis per block");
+assert(subsidy.subsidyAt(subsidy.SANDBOX_END + subsidy.DAY * 365 * 200) === 0, "The subsidy must reach zero rather than pay a fraction of a satoshi");
+assert(inline.includes("function fmtSubsidy(") && inline.includes("fmtSubsidy(subsidyAt(state.time))"), "The subsidy readout does not use the satoshi-aware formatter, so late-sandbox values render in scientific notation");
+assert(inline.includes('log("Projected protocol halving"') && inline.includes("Modelled, not recorded: subsidy"), "The sandbox halving Ledger entry must be labelled as a projection, not as recorded history");
+assert(inline.includes('showToast("Projected protocol halving"') && inline.includes("Review your mining margin"), "The sandbox halving notification must name the projection and recommend reviewing mining margin");
+assert(inline.includes('notice:"Rules change"') && css.includes(".toast.toast-notice{") && inline.includes('earns half the subsidy it did yesterday.`,"notice","mine")'), "A halving that has already cut the subsidy must not be labelled an advance warning; it needs the rules-change kind");
+// The continuation decision has to say all four things before the player commits:
+// what stops, what continues as a model, that the model is deterministic, and that
+// the issuance schedule keeps cutting mining income on projected dates.
+assert(inline.includes("function sandboxContinuationNote()") && inline.includes('insertAdjacentHTML("beforebegin",sandboxContinuationNote())'), "The sandbox continuation decision no longer explains itself before the player commits");
+assert(["Stops at the cutoff", "Continues as a model", "Continues as protocol"].every(label => inline.includes(label)), "The sandbox decision no longer separates what stops, what is modelled and what is protocol");
+assert(inline.includes("No new historical chapters and no new hardware releases are invented"), "The sandbox decision must state that no new recorded news or hardware is invented after the cutoff");
+assert(inline.includes("chain size and block height continue through deterministic modelled projections"), "The sandbox decision must name the series that continue procedurally");
+assert(inline.includes("constant ten-minute block interval"), "Projected halving dates must be attributed to the constant ten-minute block interval that produces them");
+assert(inline.includes('id:"sandbox-start"') && inline.includes('anchor:"method-sandbox"'), "The first sandbox briefing is missing, or no longer links to the Method sandbox chapter");
+assert(inline.includes('${tip.anchor?`data-anchor="${tip.anchor}"`:""}'), "Operator briefings can no longer deep-link to a Method chapter");
+
+const contentSource = await readFile(new URL("src/data/content.js", root), "utf8");
+const eventsStart = contentSource.indexOf("const EVENTS=[");
+const eventsSource = contentSource.slice(eventsStart, contentSource.indexOf("\n];", eventsStart));
+const hardwareSource = await readFile(new URL("src/data/hardware.js", root), "utf8");
+for (const [label, source] of [["historical event", eventsSource], ["hardware release", hardwareSource]]) {
+  for (const [, date] of source.matchAll(/date:"(\d{4}-\d{2}-\d{2})"/g)) {
+    assert(Date.parse(date + "T00:00:00Z") <= subsidy.END, "A " + label + " is dated " + date + ", after the recorded cutoff — the sandbox must not invent recorded history");
+  }
+}
+
 assert(inline.includes('["Effective fee",state.mode==="pool"?'), "Pools quick-stat strip shows a fee while solo mining");
 assert(inline.includes("function poolClosed(") && inline.includes('closed:"2013-06-30"') && inline.includes('state.mode==="pool"&&poolClosed(state.pool)') && inline.includes("function miningConnectionPanel()"), "Pool shutdown fail-over to solo mining is missing");
 assert(inline.includes("t>=at(p.date)&&!poolClosed(p.id,t)"), "The dashboard pool-concentration chart bypasses the pool-closure filter");
@@ -241,8 +303,22 @@ assert(inline.includes("const PAGE_HELP={") && orientationTabs.every(tab=>new Re
 assert(inline.includes("function contextualHelp(tab)") && inline.includes("Terms and help") && inline.includes("What do these numbers mean?") && inline.includes("How ${help.label} works in this simulation"), "The expandable contextual-help component is missing its definition or simulation-reference layers");
 assert(inline.includes("function enhanceDisabledControls()") && inline.includes('button.action:disabled') && inline.includes('a==="blocked-help"') && inline.includes("Why this is unavailable"), "Disabled actions do not expose a touch-accessible blocker explanation");
 assert(inline.includes('control.setAttribute("aria-describedby",id)') && inline.includes('description.className="sr-only"') && css.includes(".blocked-help{") && css.includes(".sr-only{"), "Blocked-action help is missing its accessible description or visible touch target");
-assert(inline.includes('data-value="method" data-anchor="${help.anchor}"') && inline.includes('else if(a==="tab"){activeTab=v') && inline.includes("document.getElementById(anchor)?.scrollIntoView"), "Contextual help cannot deep-link to the relevant Method chapter");
-assert(inline.includes("function ensureMethodAnchors()") && ["method-facilities","method-market","method-progression","method-ledger"].every(id=>inline.includes(id)), "Facilities, Market, progression or Ledger help lacks a precise Method chapter target");
+// Method is eight named chapters behind a table of contents. Chapter ids and section
+// ids are written into the markup rather than matched by heading text at runtime, and a
+// deep link has to open the collapsed chapter it points inside before it can scroll to it.
+assert(inline.includes('data-value="method" data-anchor="${help.anchor}"') && inline.includes('else if(a==="tab"){activeTab=v') && inline.includes("setTimeout(()=>revealMethodAnchor(anchor),60)"), "Contextual help cannot deep-link to the relevant Method chapter");
+assert(inline.includes("function revealMethodAnchor(id)") && inline.includes('if(node.tagName==="DETAILS")node.open=true'), "A deep link into a collapsed Method chapter cannot scroll to a target the browser is still hiding");
+assert(!inline.includes("ensureMethodAnchors"), "Method anchors are written into the markup now; the runtime heading-text matcher must not come back");
+const methodSource = await readFile(new URL("src/ui/tabs/method.js", root), "utf8");
+const methodChapterIds = [...methodSource.matchAll(/\{id:"(method-[a-z]+)",title:/g)].map(match => match[1]);
+assert(methodChapterIds.length === 8, `Method should open as eight named chapters, not ${methodChapterIds.length}`);
+assert(methodChapterIds[0] === "method-start" && methodChapterIds[7] === "method-sandbox", "Method must open on Start here and close on the procedural sandbox");
+assert(inline.includes("function methodTocHtml(chapters)") && inline.includes('data-action="method-chapter"') && inline.includes('else if(a==="method-chapter")revealMethodAnchor(id)'), "The Method table of contents is missing, or its links do not open the chapter they name");
+assert(inline.includes('<details class="method-chapter" id="${chapter.id}"') && inline.includes("method-chapter-lead"), "Method chapters are no longer collapsible, or have lost their plain-language lead");
+assert(inline.includes("const methodOpenChapters=new Set([\"method-start\"])") && inline.includes('${methodOpenChapters.has(chapter.id)?"open":""}') && inline.includes('if(e.target.classList?.contains("method-chapter"))rememberMethodChapter(e.target)'), "A chapter the reader opened must survive the next simulation tick; render() rebuilds the tab from a template and would otherwise snap it shut");
+assert(["method-mining","method-hardware","method-maintenance","method-firmware","method-energy","method-facilities","method-connectivity","method-market","method-custody","method-xp","method-progression","method-finance","method-risk","method-events","method-reference","method-ledger"].every(id => methodSource.includes(`id="${id}"`)), "A mechanic lost its precise Method section target");
+assert(inline.includes("function recordedMetricSnapshot()") && !inline.includes("alpha25EnhanceMethod") && !inline.includes("alpha24EnhanceMethod"), "Dataset provenance belongs in the Method sources chapter, not in a stack of bootstrap innerHTML patches");
+assert(["What stops at the cutoff","What continues as a model","What continues as protocol","Whole satoshis"].every(heading => methodSource.includes(heading)), "The procedural-sandbox chapter no longer separates what stops, what is modelled, what is protocol and how satoshis are floored");
 assert(inline.includes("function feedbackKind(") && inline.includes("function feedbackLabel(") && ["Action needed","Advance warning","Cannot do that","Milestone reached","Completed"].every(label=>inline.includes(label)) && inline.includes('aria-live="${assertive?"assertive":"polite"}'), "Phase 5 feedback has lost its semantic kinds, human-readable status labels or accessible live-region priority");
 assert(css.includes(".toast.toast-success{") && css.includes(".toast.toast-blocked{") && inline.includes("Open ${escapeHtml(t.tab)}"), "Success and blocked feedback lack distinct styling or a clear destination action");
 assert(inline.includes("function transactionImpact(transaction)") && inline.includes("Operational consequence") && inline.includes("You give now") && inline.includes("Position afterward"), "Transaction review no longer separates the immediate exchange, operational consequence and resulting position");
@@ -250,4 +326,64 @@ assert(inline.includes("function eventGameplayEffect(e)") && ["What happened","W
 assert(inline.includes("Immediate effect: move BTC") && inline.includes("Consequence: the month is recorded as a rescue") && inline.includes("function settlementRescueFeedback(") && inline.includes("Receivership kept the run alive"), "Settlement, rescue or receivership feedback has lost its immediate and lasting consequences");
 assert(inline.includes("Mining capacity lost to a fault") && inline.includes("The self-repair caused damage") && inline.includes("Part replacement complete"), "Repair and failure feedback no longer states the capacity effect or recovery state");
 assert(inline.includes('class="run-verdict"') && inline.includes("Final assessment") && inline.includes("Financial resilience") && inline.includes("The defining lesson is"), "The end-of-run recap no longer provides an assessment, operating evidence and a lesson");
+// A glossary is only useful where the confusion happens: it opens from any contextual-help
+// disclosure, searches abbreviations as well as expansions, and hands off to Method for
+// the formula behind each term.
+const glossarySource = await readFile(new URL("src/data/glossary.js", root), "utf8");
+const glossaryContext = { };
+vm.runInNewContext(glossarySource.replace("const GLOSSARY", "var GLOSSARY") + "\nglobalThis.glossaryApi={GLOSSARY,glossaryEntries};", glossaryContext);
+const glossaryApi = glossaryContext.glossaryApi;
+const methodTargets = new Set([...methodChapterIds, ...[...methodSource.matchAll(/ id="(method-[a-z-]+)"/g)].map(match => match[1])]);
+assert(glossaryApi.GLOSSARY.length >= 40, "The glossary no longer covers the canonical terminology");
+for (const entry of glossaryApi.GLOSSARY) {
+  assert(entry.term && entry.def && entry.anchor, `Glossary entry "${entry.term}" is missing its definition or Method destination`);
+  assert(methodTargets.has(entry.anchor), `Glossary entry "${entry.term}" points at a Method target that does not exist: ${entry.anchor}`);
+}
+for (const [query, expected] of [["fpps", "FPPS"], ["full pay per share", "FPPS"], ["ppa", "PPA"], ["power purchase agreement", "PPA"], ["asic", "ASIC"], ["btc", "BTC"], ["hashrate", "Hash rate"], ["runway", "Cash runway"], ["sats", "Satoshi"]]) {
+  const hits = glossaryApi.glossaryEntries(query).map(entry => entry.term);
+  assert(hits.includes(expected), `Searching the glossary for "${query}" no longer finds ${expected}`);
+}
+assert(glossaryApi.glossaryEntries("").length === glossaryApi.GLOSSARY.length, "An empty glossary search should list every term");
+assert(inline.includes("function glossaryModalHtml()") && inline.includes("${glossaryOpen?glossaryModalHtml():\"\"}") && inline.includes('else if(a==="glossary"){glossaryOpen=true'), "The glossary modal is missing or cannot be opened");
+assert(inline.includes('data-action="glossary">Open the glossary'), "Contextual help no longer offers a route into the glossary");
+assert(inline.includes("function filterGlossary(query)") && inline.includes('e.target.matches("[data-glossary-search]")'), "Glossary search is not wired to the search field");
+assert(inline.includes('else if(a==="glossary-method")') && inline.includes("data-action=\"glossary-method\""), "A glossary entry can no longer hand off to its Method chapter");
+assert(css.includes(".glossary-entry .action-link{display:inline-flex;align-items:center;min-height:34px}") && css.includes(".glossary-entry .action-link{min-height:40px}"), "The Method link inside a glossary entry is an 11px text link without these rules — unusable on touch");
+
+// Legacy-term audit. "Hashrate" is the product name; "hash rate" is the measurement,
+// and "/mo" is an unexplained abbreviation on a recurring cost. Both are easy to
+// reintroduce by copying a nearby line, so they are checked rather than trusted.
+const copyFiles = [];
+async function collectCopyFiles(dir) {
+  for (const entry of await readdir(new URL(dir, root), { withFileTypes: true })) {
+    if (entry.isDirectory()) await collectCopyFiles(`${dir}${entry.name}/`);
+    else if (entry.name.endsWith(".js")) copyFiles.push(`${dir}${entry.name}`);
+  }
+}
+await collectCopyFiles("src/");
+// A save key is an identifier, an export filename is a filename, and a shipped release
+// note records what was written at the time. None of them are player-facing prose.
+const LEGACY_EXEMPT = ['"hashrate-save.json"', '"hashrate-career-v1"', '"hashrate-genesis-save-v1"', "not a valid Hashrate save."];
+const legacyHits = [];
+for (const file of copyFiles) {
+  const source = await readFile(new URL(file, root), "utf8");
+  const exempt = LEGACY_EXEMPT.flatMap(text => {
+    const at = source.indexOf(text);
+    return at < 0 ? [] : [[at, at + text.length]];
+  });
+  if (file.endsWith("data/content.js")) {
+    const start = source.indexOf("const CHANGELOG=[");
+    exempt.push([start, source.indexOf("\n];", start)]);
+  }
+  if (file.endsWith("data/glossary.js")) exempt.push([0, source.length]);
+  const covered = index => exempt.some(([from, to]) => index >= from && index < to);
+  for (const match of source.matchAll(/[Hh]ashrate/g)) {
+    if (!covered(match.index)) legacyHits.push(`${file}: "hashrate" should be "hash rate" (…${source.slice(Math.max(0, match.index - 30), match.index + 25).replace(/\s+/g, " ")}…)`);
+  }
+  for (const match of source.matchAll(/\/mo(?![a-z])/g)) {
+    if (!covered(match.index)) legacyHits.push(`${file}: "/mo" should be "/month" (…${source.slice(Math.max(0, match.index - 30), match.index + 8).replace(/\s+/g, " ")}…)`);
+  }
+}
+assert(legacyHits.length === 0, `Legacy terminology is back in player-facing copy:\n  ${legacyHits.slice(0, 8).join("\n  ")}`);
+
 console.log("UI contracts passed: Mine purchases, difficulty and mobile speed controls, transaction precision, enhancement guards, mempool containment, fleet servicing, repair labour, overdrive, Method coverage, speed-resume safety, the exchange trade-ticket flow, network-hash display parity, bad-event impact effects, timed facility-upgrade risk, mining-floor connectivity/power status, the 100-year procedural sandbox continuation, pool fee display, pool shutdown fail-over, the custody transfer slider, Lightning gating, live market pricing, mempool realism, disabled-control tooltips, the single-venue market redesign, Mine-tab scroll stability, full-refurbishment puzzle consistency, the proactive settlement warning, connectivity ping, the unified incoming-fleet pipeline, proportional fleet-health severity colors, rival operators, milestone moments, the end-of-run recap, cross-run career persistence, the dice-entropy wallet-setup ceremony, the era-accurate wallet-software upgrade path, the resetGame() operator-era crash fix, the real mailing-list learning items, the Dashboard build-queue card, hands-on self-servicing before technicians are hired, the fault-clearing/offline-threshold repair fix, the non-blocking faucet popup, tiered spare parts, the historically-grounded custody/region exposure warnings, free self-serviced labour with real self-damage risk, the four hardware self-help skills, staff dismissal the operator XP/level system, dated pool payout schemes, one drawing per machine, and scroll-anchored, frame-aligned repaints");

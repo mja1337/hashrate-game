@@ -25,7 +25,7 @@ function activateHardware(id){const h=HARDWARE.find(x=>x.id===id),qty=Math.max(0
 function decommissionHardware(id,requested=1){const h=HARDWARE.find(x=>x.id===id),owned=state.hardware[id]||0;if(!h||h.permanent||owned<1)return;const qty=Math.min(owned,Math.max(1,Math.floor(Number(requested)||1)));state.hardware[id]-=qty;state.poweredDownHardware[id]=Math.min(state.poweredDownHardware[id]||0,state.hardware[id]);state.decommissionedHardware[id]=(state.decommissionedHardware[id]||0)+qty;log(`Retired ${qty} × ${h.name}`,"Isolated from power and ready for resale","fleet");showToast("Machines retired",`${qty} × ${h.name} is in storage and ready to sell.`,"info","mine");save();renderMineContent()}
 function setHardwarePower(id,powerOn,requested=1){
   const h=HARDWARE.find(x=>x.id===id),owned=state.hardware[id]||0;if(!h||owned<1)return;const paused=hardwarePoweredDownCount(h),qty=Math.max(1,Math.floor(Number(requested)||1));
-  if(powerOn){const changed=Math.min(paused,qty);if(!changed)return;state.poweredDownHardware[id]=paused-changed;log(`Started ${changed} × ${h.name}`,`${state.poweredDownHardware[id]} remain manually off`,"fleet");showToast("Miners started",`${changed} × ${h.name} will add heat and hashrate while site power is available.`,"info","mine")}
+  if(powerOn){const changed=Math.min(paused,qty);if(!changed)return;state.poweredDownHardware[id]=paused-changed;log(`Started ${changed} × ${h.name}`,`${state.poweredDownHardware[id]} remain manually off`,"fleet");showToast("Miners started",`${changed} × ${h.name} will add heat and hash rate while site power is available.`,"info","mine")}
   else{const repairing=Math.min(owned,Math.max(hardwareFaultCount(h),activeServiceJob(id)?.count||0)),available=Math.max(0,owned-paused-repairing),changed=Math.min(available,qty);if(!changed)return showToast("No running units",`Every available ${h.name} is already stopped or in repair.`);state.poweredDownHardware[id]=paused+changed;log(`Paused ${changed} × ${h.name}`,"Cooling load reduced without retiring hardware","fleet");showToast("Heat load reduced",`${changed} × ${h.name} is off. It earns nothing, draws no miner power and stops accumulating wear.`,"info","mine")}
   save();renderMineContent();
 }
@@ -129,7 +129,7 @@ function upgradeNodeStorage(gb){
   if(state.cash<tier.cost)return showToast("Not enough cash",`${tier.name} costs ${fmtUsd(tier.cost)}.`);
   state.cash-=tier.cost;state.nodeStorage=tier.gb;log("Node storage upgraded",`${tier.name} · -${fmtUsd(tier.cost)}`);save();render();
 }
-function setNodeMode(id){const profile=NODE_MODES.find(x=>x.id===id);if(!profile||(profile.requires&&state.node<profile.requires))return;state.nodeMode=id;state.nodePruned=id==="pruned";log(`Node profile: ${profile.name}`,`${nodeModeWatts(profile)} W · ${nodeModeConnections(profile)} peers · ${fmtUsd(nodeModeMonthly(profile))}/mo network`);save();render()}
+function setNodeMode(id){const profile=NODE_MODES.find(x=>x.id===id);if(!profile||(profile.requires&&state.node<profile.requires))return;state.nodeMode=id;state.nodePruned=id==="pruned";log(`Node profile: ${profile.name}`,`${nodeModeWatts(profile)} W · ${nodeModeConnections(profile)} peers · ${fmtUsd(nodeModeMonthly(profile))}/month network`);save();render()}
 function toggleNodePruning(){setNodeMode(state.nodeMode==="pruned"?"archival":"pruned")}
 function deriveWalletKeyHex(rolls){
   let n=0n;for(const r of rolls)n=n*6n+BigInt(r-1);
@@ -198,7 +198,7 @@ function payDebt(){
 function setContract(id){if(!POWER_CONTRACTS.some(x=>x.id===id)||id===state.contract)return;state.contract=id;log("Power contract changed",powerContract().name);save();render()}
 function setConnectivityPlan(id){const plan=CONNECTIVITY_PLANS.find(x=>x.id===id);if(!plan||id===state.connectivity)return;if(plan.minFacility&&facilityTier()<plan.minFacility)return showToast("Connectivity unavailable",`${plan.name} requires a tier ${plan.minFacility} facility or larger.`);state.connectivity=id;log("Connectivity plan changed",`${plan.name} · ${fmtUsd(internetMonthlyCost())}/month`);save();render()}
 function setTreasuryPolicy(id){if(!TREASURY_POLICIES.some(x=>x.id===id)||id===state.treasuryPolicy)return;state.treasuryPolicy=id;log("Treasury policy changed",treasuryPolicy().name);save();render()}
-function hireStaff(id){const s=STAFF.find(x=>x.id===id);if(!s||(id!=="fieldtech"&&hasStaff(id)))return;if(!staffHiringAvailable())return showToast("Staffing unavailable","Move into the tier 3 Light industrial unit or a larger facility before building an internal team.");state.staff.push(id);const count=fieldTechnicianCount();log(`Hired ${s.name}`,id==="fieldtech"?`${count} technicians · ${fmtUsd(s.salary*count)}/mo total`:`${fmtUsd(s.salary)}/mo`);save();render()}
+function hireStaff(id){const s=STAFF.find(x=>x.id===id);if(!s||(id!=="fieldtech"&&hasStaff(id)))return;if(!staffHiringAvailable())return showToast("Staffing unavailable","Move into the tier 3 Light industrial unit or a larger facility before building an internal team.");state.staff.push(id);const count=fieldTechnicianCount();log(`Hired ${s.name}`,id==="fieldtech"?`${count} technicians · ${fmtUsd(s.salary*count)}/month total`:`${fmtUsd(s.salary)}/month`);save();render()}
 function dismissStaff(id){
   const role=STAFF.find(x=>x.id===id);if(!role||!hasStaff(id))return;
   if(id==="fieldtech"){
@@ -213,7 +213,7 @@ function dismissStaff(id){
   showToast(`${role.name} dismissed`,`Salary stops now. One month's notice (${fmtUsd(role.salary)}) is added to the accrued bill.${id==="fieldtech"&&!techs?" You are back to servicing the fleet yourself.":""}`,"info");
   save();render();
 }
-function toggleInsurance(){state.insured=!state.insured;log(state.insured?"Migration insurance bound":"Migration insurance cancelled",state.insured?`${fmtUsd(insuranceMonthlyCost())}/mo`:"");save();render()}
+function toggleInsurance(){state.insured=!state.insured;log(state.insured?"Migration insurance bound":"Migration insurance cancelled",state.insured?`${fmtUsd(insuranceMonthlyCost())}/month`:"");save();render()}
 function fiatCollateral(){return Math.max(0,state.cash-state.projectLoan)}
 function reserveMilestoneStatus(){const monthlyBurn=monthlyCost().total+(state.projectLoan||0)*(hasStaff("treasurer")?.009:.012),required=monthlyBurn*6,collateral=fiatCollateral(),days=Math.max(0,state.uptimeDays||0),tier=facilityTier();return{monthlyBurn,required,collateral,days,tier,ok:tier>=2&&days>=180&&state.debt<=0&&collateral>=required}}
 function reserveMilestoneProgress(){const r=reserveMilestoneStatus();if(state.milestones.includes("reserve"))return"Six-month reserve achieved";if(r.tier<2)return"Reserve goal: move into a tier 2 facility";if(r.days<180)return`Reserve goal: ${180-r.days} operating day${180-r.days===1?"":"s"} remaining`;if(state.debt>0)return"Reserve goal: clear grid arrears";return`Reserve goal: ${fmtUsd(r.collateral)} / ${fmtUsd(r.required)} unborrowed fiat`}
