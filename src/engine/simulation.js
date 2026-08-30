@@ -306,17 +306,29 @@ function dailyShareCount(hash){return hash>0?hash*86400/SHARE_WORK:0}
 // honest label is just the work found.
 function shareUnitLabel(plural=true){return state.mode==="pool"?(plural?"shares submitted":"share submitted"):(plural?"difficulty-1 shares found":"difficulty-1 share found")}
 function fmtDifficulty(value){value=Math.max(0,Number(value)||0);return value>=1e18?(value/1e18).toFixed(2)+"E":value>=1e15?(value/1e15).toFixed(2)+"P":value>=1e12?(value/1e12).toFixed(2)+"T":value>=1e9?(value/1e9).toFixed(2)+"G":value>=1e6?(value/1e6).toFixed(2)+"M":value>=1e3?(value/1e3).toFixed(2)+"K":value.toFixed(0)}
-function advanceOperatorXp(){
+function advanceOperatorXp(blocksFound=0,silent=false){
   const fs=fleet();if(!operating()||fs.hash<=0)return;
   const shares=dailyShareCount(fs.hash);state.xp.shares+=shares;
   awardXp(1.2*Math.log2(1+shares),"shares");
-  const roll=Math.max(1e-9,nextRand()),best=shares/roll;
+  // Best-of-N difficulty-1 shares is Pareto(1): P(share >= d) = 1/d, so the
+  // daily maximum is well modelled by shares/U.
+  const difficulty=Math.max(1,difficultyAt(state.time));
+  let best=shares/Math.max(1e-9,nextRand());
+  // A share at or above network difficulty IS a block. Solo, that has to agree
+  // with what the day actually produced, or the record implies blocks the
+  // player was never paid for.
+  const solo=state.mode!=="pool"||!availablePool()||!poolEligible();
+  if(solo){
+    if(blocksFound>0)best=Math.max(best,difficulty/Math.max(1e-9,nextRand()));
+    else if(best>=difficulty)best=difficulty*(.55+nextRand()*.44);
+  }
   if(best>state.xp.bestDifficulty){
     const previous=Math.max(1,state.xp.bestDifficulty);state.xp.bestDifficulty=best;
     awardXp(Math.min(400,40*Math.log2(best/previous)),"record");
     if(best>=previous*4){
-      log("New best share difficulty",`${fmtDifficulty(best)} — your highest yet`,"fleet");
-      showToast("New best share",`Your fleet found a share at difficulty ${fmtDifficulty(best)} — a personal record.`,"milestone","dashboard");
+      const blockNote=best>=difficulty?solo?" — that share was your block":` — that share found ${poolData().name}'s block`:"";
+      log("New best share difficulty",`${fmtDifficulty(best)} · highest yet${blockNote}`,"fleet");
+      if(!silent)showToast("New best share",`Your fleet found a share at difficulty ${fmtDifficulty(best)}${blockNote||" — a personal record"}.`,"milestone","dashboard");
     }
   }
 }
@@ -764,7 +776,6 @@ function tick(silent=false){
   crossed.forEach(e=>{state.seen.push(e.id);applyEvent(e)});
   queueAsicReleases(prev,next);
   queueExposureWarnings(prev,next);
-  advanceOperatorXp();
   advanceOperationalRisks(next);
   advanceNodeSync(silent);
   if(!silent&&!faucet&&faucetActive(next)&&nextRand()<.05)triggerFaucet(next);
@@ -780,7 +791,8 @@ function tick(silent=false){
     if(firmwareHijacked())payout*=.65;
     if(payout>0){state.wallets.hot+=payout;state.mined+=payout;state.operator.periodMined+=payout;state.blocks+=blocks;if(blocks>=1)log(state.mode==="pool"?"Pool payout":blocks>1?`Block reward ×${blocks} (today)`:"Block reward (today)",`+${fmtBtc(payout)}`)}
     state.uptimeDays++;state.operator.periodUptime++;
-  }
+    advanceOperatorXp(blocks,silent);
+  }else advanceOperatorXp(0,silent);
   if(nodeOnline())state.nodeDays++;
   state.wallets.etf*=1-.0025/365;
   const routing=lightningDailyFee();
