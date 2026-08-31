@@ -3,6 +3,7 @@
 let recentTouchTab=null;
 document.getElementById("app").addEventListener("click",e=>{
   const b=e.target.closest("[data-action]");if(!b||b.disabled)return;const a=b.dataset.action,v=b.dataset.value,id=b.dataset.id,part=b.dataset.part;
+  if(b.closest(".toast")){dismissToast();if(a==="dismiss-toast")return}
   if(a==="tab"&&recentTouchTab&&recentTouchTab.value===v&&Date.now()-recentTouchTab.at<800){recentTouchTab=null;return}
   if(a==="blocked-help"){showToast("Why this is unavailable",b.dataset.help||"This action is not available in the current state.");return}
   if(a==="percent-snap"){updateTradePercentage(id,Number(v));return}
