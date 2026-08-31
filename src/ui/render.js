@@ -135,7 +135,26 @@ function endModal(){
   const score=operatorScoreBreakdown(),peers=[{name:"Cycle architect",score:940},{name:"Antifragile operator",score:860},{name:"Industrial compounder",score:775},{name:"Disciplined miner",score:680},{name:"Surviving operator",score:540},{name:"Passive early holder",score:260},{name:"Insolvent hasher",score:120},{name:"You",score:score.total,you:true}].sort((a,b)=>b.score-a.score),rank=peers.findIndex(x=>x.you)+1,reason=state.endReason==="receivership"?"The scored campaign ended in a third receivership.":state.endReason==="sandbox-complete"?"100 simulated years of procedural continuation have now passed.":"The historical record is complete.";
   return `<div class="modal-backdrop"><section class="modal" role="dialog" aria-modal="true"><div class="modal-top"></div><div class="modal-body"><div class="modal-kicker">Operator campaign complete</div><h2>You finished #${rank} of ${peers.length} · ${operatorGrade(score.total)}.</h2><p class="lead">${reason} Final Operator Score: ${score.total} / 1,000.</p><div class="intro-grid"><div class="intro-fact"><b>${score.performance}</b><span>operations · max 740</span></div><div class="intro-fact"><b>${score.mastery}</b><span>operator mastery · max 60</span></div><div class="intro-fact"><b>${score.milestones+score.holdings}</b><span>milestones + holdings · max 120</span></div><div class="intro-fact"><b>${score.balance+score.resilience}</b><span>reserves + resilience · max 80</span></div><div class="intro-fact"><b>${fmtBtc(totalBtc()+lightningLocked())}</b><span>total BTC · any custody</span></div></div><p class="modal-note">Peak operator level ${state.xp.peakLevel} contributed ${score.mastery} of a possible 60 mastery points, earned from ${fmtNum(Math.round(state.xp.total))} lifetime XP: ${fmtNum(Math.round(state.xp.sources.shares))} from difficulty-1 shares found, ${fmtNum(Math.round(state.xp.sources.record))} from new best-share records (best: ${state.xp.bestDifficulty?fmtDifficulty(state.xp.bestDifficulty):"none"}), ${fmtNum(Math.round(state.xp.sources.deploy))} from machines deployed and ${fmtNum(Math.round(state.xp.sources.repair))} from repairs completed.</p><p class="modal-note">The score rewards operating through every era. Total BTC held at the end counts the same whether it sits in self-held keys, an exchange balance or a Lightning channel — but it cannot replace profitable months, paid bills, uptime and competitive reinvestment.</p>${runRecap()}${careerSummaryHtml("end")}<div class="leaderboard">${peers.map((x,i)=>`<div class="rank ${x.you?"you":""}"><span>#${i+1}</span><span>${x.name}</span><b>${x.score}</b></div>`).join("")}</div><p class="modal-note">Synthetic comparison strategies for gameplay—not real miners or investment results.</p><div class="modal-actions"><button class="action primary" data-action="close-end">Inspect final ledger</button><button class="action" data-action="export">Export run</button></div></div></section></div>`
 }
+let pointerHeld=false,deferredRender=null,deferredSince=0;
+function runDeferredRender(){const run=deferredRender;deferredRender=null;deferredSince=0;if(run)run()}
+function holdRendersDuringPress(){
+  document.addEventListener("pointerdown",()=>{pointerHeld=true},true);
+  // Flush after the click has been dispatched, never before: releasing and repainting in
+  // the same task would destroy the target again on the way to the handler.
+  document.addEventListener("click",()=>{pointerHeld=false;runDeferredRender()},false);
+  for(const type of ["pointerup","pointercancel"]) document.addEventListener(type,()=>{pointerHeld=false},true);
+  window.addEventListener("blur",()=>{pointerHeld=false;runDeferredRender()});
+  // A press that never reports a release must not freeze the interface.
+  setInterval(()=>{if(deferredRender&&!pointerHeld&&performance.now()-deferredSince>350){runDeferredRender()}else if(deferredRender&&performance.now()-deferredSince>1500){pointerHeld=false;runDeferredRender()}},150);
+}
+function deferWhilePressed(repaint){
+  if(!pointerHeld)return false;
+  deferredRender=repaint;if(!deferredSince)deferredSince=performance.now();
+  return true;
+}
 function render(preserveScroll=true){
+  if(deferWhilePressed(()=>render(preserveScroll)))return;
+  deferredRender=null;deferredSince=0;
   const revision=++renderRevision;
   const app=document.getElementById("app"),scrollX=window.scrollX,scrollY=window.scrollY||document.documentElement.scrollTop||0,keepPosition=preserveScroll&&scrollY>0,previousHeight=app.offsetHeight;
   const anchor=keepPosition?captureScrollAnchor():null;
@@ -176,6 +195,7 @@ function restoreScrollAnchor(anchor){
   requestAnimationFrame(apply);
 }
 function renderMineContent(){
+  if(deferWhilePressed(renderMineContent))return;
   if(activeTab!=="mine")return render();
   const host=document.querySelector(".content");if(!host)return render();
   const scrollY=window.scrollY||document.documentElement.scrollTop||0,keepPosition=scrollY>0,previousHeight=host.offsetHeight;
