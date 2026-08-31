@@ -56,7 +56,10 @@ assert(inline.includes("Starting difficulty"), "Method is missing difficulty doc
 assert(inline.includes("Transaction sizing and procurement"), "Method is missing transaction documentation");
 assert(inline.includes('if(a==="starting-mode")'), "Difficulty action is not handled");
 assert(inline.includes("transactionPreviewValid(preview)"), "Invalid transaction quotes are not blocked");
-assert(inline.includes("revision===renderRevision&&activeTab===tab"), "Stale tab enhancers can still duplicate injected visuals");
+assert(inline.includes("function enhanceActiveTab()") && inline.includes("const enhancer=TAB_ENHANCERS[activeTab];"), "Tab enhancement must be dispatched from one place that always runs");
+assert(/document\.getElementById\("app"\)\.innerHTML=`[\s\S]*?\n  enhanceActiveTab\(\);/.test(renderSource), "The enhancer has to run in the same task as the markup it completes: deferring it to a timeout meant any repaint landing in the gap cancelled it, and nothing retried");
+assert(!inline.includes("function deferEnhancement("), "The deferred-enhancement helper is what left the Mine tab half-built; it should not come back");
+assert(!/deferEnhancement\(revision/.test(inline), "A tab enhancer is being deferred again");
 assert(inline.includes('class="card span-12 exchange-balance-desk"'), "Market exchange-balance summary is missing");
 assert(inline.includes('class="span-12 facility-grid facility-options"'), "Facilities choices do not have a stable ordering target");
 assert(inline.includes('if(command&&facilityOptions)command.insertAdjacentElement("afterend",facilityOptions)'), "Facility choices are not placed directly below the current-facility command");
