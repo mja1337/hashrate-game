@@ -664,4 +664,19 @@ assert(!/pointerup[\s\S]{0,80}setTimeout\([\s\S]{0,40}runDeferredRender/.test(in
 assert(/setInterval\(\(\)=>\{if\(deferredRender/.test(inline) && inline.includes("performance.now()-deferredSince>1500"), "A stuck press would hold repaints forever without a sweeper");
 assert(inline.includes('window.addEventListener("blur",()=>{pointerHeld=false;runDeferredRender()})'), "Losing focus mid-press must release the hold");
 
+// Changing speed rebuilt the whole application to toggle one class, so the button was
+// destroyed and recreated under the player's finger on every click — no active state, no
+// focus, and any press overlapping the rebuild was lost. Four things depend on the speed;
+// patch those and leave the rest of the DOM alone.
+assert(inline.includes('else if(a==="speed"){state.speed=Number(v);state.returnSpeed=state.speed||state.returnSpeed;setTimer();save();refreshSpeedControls();refreshLive()}'), "Changing speed must patch its own controls, not rebuild the page underneath them");
+assert(inline.includes("function refreshSpeedControls()"), "The speed-control patcher is missing");
+assert(inline.includes('document.querySelectorAll(\'button.speed[data-action="speed"]\').forEach') && inline.includes('button.classList.toggle("active",Number(button.dataset.value)===state.speed)'), "The speed buttons no longer track the active speed in place");
+// Replacing the button's children under a finger detaches the press target just as surely
+// as replacing the button, so the icon and label are patched by textContent.
+assert(inline.includes('<span class="pause-icon" aria-hidden="true">') && inline.includes('<span class="pause-label">'), "The mobile pause button needs separately patchable icon and label elements");
+assert(inline.includes('if(icon)icon.textContent=state.speed?"Ⅱ":"▶"') && inline.includes('if(label)label.textContent=state.speed?"Pause":"Run"'), "The mobile pause button is being rebuilt rather than patched");
+assert(!/\.mobile-pause-button[\s\S]{0,120}\.innerHTML=/.test(inline), "Setting innerHTML on the pause button detaches whatever the player is pressing");
+assert(inline.includes("[data-live-simulation]") && inline.includes('label==="Simulation"?` data-live-simulation`:""'), "The Simulation metric has no hook, so it cannot be patched without a rebuild");
+assert(inline.includes("[data-live-speed-panel]"), "The mobile speed panel has no hook");
+
 console.log("UI contracts passed: Mine purchases, difficulty and mobile speed controls, transaction precision, enhancement guards, mempool containment, fleet servicing, repair labour, overdrive, Method coverage, speed-resume safety, the exchange trade-ticket flow, network-hash display parity, bad-event impact effects, timed facility-upgrade risk, mining-floor connectivity/power status, the 100-year procedural sandbox continuation, pool fee display, pool shutdown fail-over, the custody transfer slider, Lightning gating, live market pricing, mempool realism, disabled-control tooltips, the single-venue market redesign, Mine-tab scroll stability, full-refurbishment puzzle consistency, the proactive settlement warning, connectivity ping, the unified incoming-fleet pipeline, proportional fleet-health severity colors, rival operators, milestone moments, the end-of-run recap, cross-run career persistence, the dice-entropy wallet-setup ceremony, the era-accurate wallet-software upgrade path, the resetGame() operator-era crash fix, the real mailing-list learning items, the Dashboard build-queue card, hands-on self-servicing before technicians are hired, the fault-clearing/offline-threshold repair fix, the non-blocking faucet popup, tiered spare parts, the historically-grounded custody/region exposure warnings, free self-serviced labour with real self-damage risk, the four hardware self-help skills, staff dismissal the operator XP/level system, dated pool payout schemes, one drawing per machine, and scroll-anchored, frame-aligned repaints");

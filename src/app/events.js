@@ -63,7 +63,7 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(a==="insurance")toggleInsurance();
   else if(a==="project-loan")takeProjectLoan();
   else if(a==="repay-loan")repayProjectLoan();
-  else if(a==="speed"){state.speed=Number(v);state.returnSpeed=state.speed||state.returnSpeed;setTimer();save();render()}
+  else if(a==="speed"){state.speed=Number(v);state.returnSpeed=state.speed||state.returnSpeed;setTimer();save();refreshSpeedControls();refreshLive()}
   else if(a==="tab"){activeTab=v;mobileMenuOpen=false;render(false);const anchor=b.dataset.anchor;if(anchor)setTimeout(()=>revealMethodAnchor(anchor),60);else window.scrollTo({top:0,behavior:"smooth"})}
   else if(a==="method-chapter")revealMethodAnchor(id);
   else if(a==="glossary"){glossaryOpen=true;render(true);setTimeout(()=>document.querySelector("[data-glossary-search]")?.focus(),0)}

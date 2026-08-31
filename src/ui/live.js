@@ -5,6 +5,29 @@
    simulation state and write text and innerHTML, and they lived in the engine only
    because the engine drives the clock. */
 
+/* Changing speed used to rebuild the entire application to toggle one class. That
+   destroyed the control under the player's finger on every single click — losing the
+   active state, the focus ring and any press that overlapped the rebuild. Only four
+   things actually depend on the speed, so patch those and leave the DOM alone. */
+function refreshSpeedControls(){
+  document.querySelectorAll('button.speed[data-action="speed"]').forEach(button=>{
+    button.classList.toggle("active",Number(button.dataset.value)===state.speed);
+  });
+  const pause=document.querySelector(".mobile-pause-button");
+  if(pause){
+    pause.classList.toggle("running",!!state.speed);pause.classList.toggle("paused",!state.speed);
+    pause.dataset.value=String(state.speed?0:(state.returnSpeed||1));
+    pause.setAttribute("aria-label",state.speed?"Pause simulation":"Resume simulation");
+    const icon=pause.querySelector(".pause-icon"),label=pause.querySelector(".pause-label");
+    if(icon)icon.textContent=state.speed?"Ⅱ":"▶";
+    if(label)label.textContent=state.speed?"Pause":"Run";
+  }
+  const panel=document.querySelector("[data-live-speed-panel]");
+  if(panel)panel.textContent=state.speed?`${state.speed}× running`:"Paused";
+  document.querySelectorAll("[data-live-simulation]").forEach(el=>{
+    el.textContent=state.speed?`${state.speed}× live`:"Paused";
+  });
+}
 function refreshDashboard(){
   if(activeTab!=="dashboard")return;
   const fs=fleet(),monthly=monthlyCost(),share=playerNetworkShareAt(state.time,fs.hash)*100,online=operating(),exp=online?expectedDay():0;
