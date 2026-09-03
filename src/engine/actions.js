@@ -234,19 +234,48 @@ function projectFinanceReason(){if(state.time<PROJECT_FINANCE_START)return`Unava
 function takeProjectLoan(){const max=projectLoanHeadroom(),amount=Math.min(max,Math.max(1000,Math.round(projectLoanLimit()*.25/1000)*1000));if(amount<=0)return showToast("Growth funding unavailable",projectFinanceReason());state.projectLoan+=amount;state.cash+=amount;log("Fiat-backed finance drawn",`+${fmtUsd(amount)}`);save();render()}
 function repayProjectLoan(){const amount=Math.min(state.cash,state.projectLoan);if(amount<=0)return;state.cash-=amount;state.projectLoan-=amount;log("Project finance repaid",`-${fmtUsd(amount)}`);save();render()}
 function checkMilestones(){MILESTONES.forEach(m=>{if(!state.milestones.includes(m.id)&&m.check()){state.milestones.push(m.id);state.milestoneLog.push({id:m.id,time:state.time});state.points++;log(`Milestone: ${m.label}`,"+1 skill point","milestone");showToast(m.label,`${m.blurb} +1 skill point.`,"milestone")}})}
+/* ORDER-BOOK DEPTH — a book whose depth scales with the size of the market moves against
+   you in proportion to the fraction of that market your order represents. Market
+   capitalisation is recorded; the constant, and the premise that depth tracks
+   capitalisation, are modelled.
+
+   This is what stops an early fortune from being a free one. In December 2010 the whole
+   market was capitalised at $1.3M, so an idle run's holdings were most of a percent of every
+   bitcoin in existence and could not be sold at the quote at any price. The same order is a
+   rounding error by 2020, so the effect retires itself as the market grows — no era-specific
+   tuning, and nothing to unwind once the market is deep.
+
+   Proportional rather than square-root impact: the recorded capitalisation spans six orders
+   of magnitude across the campaign, and a square-root law compresses that into a range too
+   narrow to be either honest about 2010 or fair to 2026.
+
+   Pressure carries between trades and decays with a three-day half-life. Slicing one
+   unsellable order into a hundred small ones saves at most half the impact, the same
+   advantage real execution algorithms get, while genuinely waiting for the book to refill
+   works properly — which is the decision the era actually posed. Buying relieves your own
+   selling pressure, so only a same-direction imbalance counts against you. */
+const IMPACT_K=66,IMPACT_MAX=.85,IMPACT_FLOOR=.001,PRESSURE_HALFLIFE=3*DAY;
+function recentPressure(){const p=state.marketPressure;if(!p||!p.usd)return 0;const elapsed=Math.max(0,state.time-p.at);if(elapsed>PRESSURE_HALFLIFE*20)return 0;return p.usd*Math.pow(.5,elapsed/PRESSURE_HALFLIFE)}
+function addPressure(usd,side){state.marketPressure={usd:recentPressure()+side*Math.max(0,usd),at:state.time}}
+function tradeImpact(usd,side){const cap=marketCapAt(state.time);if(!(cap>0)||!(usd>0))return 0;const standing=Math.max(0,side*recentPressure()),impact=IMPACT_K*(standing+usd)/cap;return impact<IMPACT_FLOOR?0:Math.min(IMPACT_MAX,impact)}
+function impactNote(impact){return impact>=IMPACT_FLOOR?`${(impact*100).toFixed(impact<.01?2:1)}% market impact`:""}
 function venueTradeFee(bucket){return bucket==="mtgox"?.008:bucket==="frontier"?.004:bucket==="etf"?.0025:.006}
 function buyBtc(bucket,fraction){
   if(state.time<MARKET)return;fraction=clamp(Number(fraction)||0,0.01,1);const usd=state.cash*fraction;if(usd<1)return showToast("Order too small","Increase the selected percentage so the buy order is at least $1.");
   const fee=venueTradeFee(bucket);
-  const btc=usd*(1-fee)/priceAt(state.time);state.cash-=usd;state.wallets[bucket]+=btc;log(bucket==="etf"?"Bought ETF exposure":"Bought bitcoin",`+${fmtBtc(btc)} · -${fmtUsd(usd)} at ${fmtUsd(priceAt(state.time))}`,"trade");showToast(bucket==="etf"?"ETF purchase complete":"Bitcoin purchase complete",`${fmtUsd(usd)} became ${fmtBtc(btc)} in ${walletName(bucket)}. ${fmtUsd(state.cash)} cash remains.`,"info","market");save();render();
+  const impact=bucket==="etf"?0:tradeImpact(usd,-1),btc=usd*(1-fee)/(priceAt(state.time)*(1+impact));
+  if(impact>0)addPressure(usd,-1);
+  state.cash-=usd;state.wallets[bucket]+=btc;log(bucket==="etf"?"Bought ETF exposure":"Bought bitcoin",`+${fmtBtc(btc)} · -${fmtUsd(usd)} at ${fmtUsd(priceAt(state.time))}`,"trade");showToast(bucket==="etf"?"ETF purchase complete":"Bitcoin purchase complete",`${fmtUsd(usd)} became ${fmtBtc(btc)} in ${walletName(bucket)}. ${fmtUsd(state.cash)} cash remains.`,"info","market");save();render();
 }
 function sellBtc(bucket,fraction){
   if(venueFrozen(bucket))return showToast("Withdrawals frozen",`${walletName(bucket)} has paused withdrawals until ${dateFmt(state.ops.venueFreezes[bucket])}.`);
   fraction=clamp(Number(fraction)||0,0.01,1);const btc=state.wallets[bucket]*fraction;if(btc<=0)return;
   const fee=venueTradeFee(bucket);
-  const usd=btc*priceAt(state.time)*(1-fee);state.wallets[bucket]-=btc;state.cash+=usd;log(bucket==="etf"?"Sold ETF exposure":"Sold bitcoin",`-${fmtBtc(btc)} · +${fmtUsd(usd)} at ${fmtUsd(priceAt(state.time))}`,"trade");
+  const price=priceAt(state.time),notional=btc*price,impact=bucket==="etf"?0:tradeImpact(notional,1),usd=notional*(1-fee)*(1-impact);
+  if(impact>0)addPressure(notional,1);
+  state.wallets[bucket]-=btc;state.cash+=usd;log(bucket==="etf"?"Sold ETF exposure":"Sold bitcoin",`-${fmtBtc(btc)} · +${fmtUsd(usd)} at ${fmtUsd(price)}${impact>=.001?` · ${impactNote(impact)}`:""}`,"trade");
   if(state.settlementSaleMode&&state.pendingSettlement&&state.cash+1e-8>=state.pendingSettlement.due){state.settlementSaleMode=false;finishMonthlySettlement("btc-rescue");return}
-  showToast(bucket==="etf"?"ETF sale complete":"Bitcoin sale complete",`${fmtBtc(btc)} became ${fmtUsd(usd)} after fees. ${fmtUsd(state.cash)} cash is now available.`,"info","market");save();render();
+  showToast(bucket==="etf"?"ETF sale complete":"Bitcoin sale complete",impact>=.01?`${fmtBtc(btc)} became ${fmtUsd(usd)}. The order was ${formatPercent(impact*100)}% of its quoted value larger than the book could absorb, so it filled below the quote. ${fmtUsd(state.cash)} cash is now available.`:`${fmtBtc(btc)} became ${fmtUsd(usd)} after fees. ${fmtUsd(state.cash)} cash is now available.`,"info","market");save();render();
 }
 function transfer(from,to,fraction){
   if(venueFrozen(from))return showToast("Withdrawals frozen",`${walletName(from)} has paused withdrawals until ${dateFmt(state.ops.venueFreezes[from])}.`);
@@ -258,12 +287,12 @@ const CONFIRMABLE_ACTIONS=new Set(["buy-btc","sell-btc","buy-hw","buy-hw-btc","s
 function transactionPreview(button){
   const action=button.dataset.action,id=button.dataset.id||null,base={action,id,from:button.dataset.from||null,to:button.dataset.to||null,resumeSpeed:state.speed,quoteTime:state.time};
   if(action==="buy-btc"){
-    if(state.time<MARKET)return null;const fraction=actionFraction(button),usd=state.cash*fraction,feeRate=venueTradeFee(id),price=priceAt(state.time);if(usd<1){showToast("Order too small","Increase the selected percentage so the buy order is at least $1.");return null}const btc=usd*(1-feeRate)/price,isEtf=id==="etf";
-    return{...base,fraction,title:isEtf?"Review ETF purchase":`Review bitcoin purchase · ${walletName(id)}`,kicker:"Market buy · quote locked",give:fmtUsd(usd),giveSub:`${formatPercent(fraction*100)}% of ${fmtUsd(state.cash)} liquid cash`,receive:isEtf?`${fmtBtc(btc)} equivalent exposure`:fmtBtc(btc),receiveSub:isEtf?"Brokerage exposure · not withdrawable BTC":`Credited to ${walletName(id)}`,reference:`${fmtUsd(price)} per BTC`,fees:`${fmtUsd(usd*feeRate)} · ${(feeRate*100).toFixed(2)}%`,after:`${fmtUsd(state.cash-usd)} cash · ${fmtBtc(state.wallets[id]+btc)} position`,confirmLabel:"Confirm buy",confirmClass:"primary"}
+    if(state.time<MARKET)return null;const fraction=actionFraction(button),usd=state.cash*fraction,feeRate=venueTradeFee(id),price=priceAt(state.time);if(usd<1){showToast("Order too small","Increase the selected percentage so the buy order is at least $1.");return null}const isEtf=id==="etf",impact=isEtf?0:tradeImpact(usd,-1),btc=usd*(1-feeRate)/(price*(1+impact));
+    return{...base,fraction,title:isEtf?"Review ETF purchase":`Review bitcoin purchase · ${walletName(id)}`,kicker:"Market buy · quote locked",give:fmtUsd(usd),giveSub:`${formatPercent(fraction*100)}% of ${fmtUsd(state.cash)} liquid cash`,receive:isEtf?`${fmtBtc(btc)} equivalent exposure`:fmtBtc(btc),receiveSub:isEtf?"Brokerage exposure · not withdrawable BTC":`Credited to ${walletName(id)}`,reference:`${fmtUsd(price)} per BTC`,fees:`${fmtUsd(usd*feeRate)} · ${(feeRate*100).toFixed(2)}%`,depth:impact>=.001?`${impactNote(impact)} · fills above the quote`:"",after:`${fmtUsd(state.cash-usd)} cash · ${fmtBtc(state.wallets[id]+btc)} position`,confirmLabel:"Confirm buy",confirmClass:"primary"}
   }
   if(action==="sell-btc"){
-    if(venueFrozen(id)){showToast("Withdrawals frozen",`${walletName(id)} has paused withdrawals until ${dateFmt(state.ops.venueFreezes[id])}.`);return null}const fraction=actionFraction(button),btc=state.wallets[id]*fraction,feeRate=venueTradeFee(id),price=priceAt(state.time),gross=btc*price,usd=gross*(1-feeRate),isEtf=id==="etf";if(btc<=0)return null;
-    return{...base,fraction,title:isEtf?"Review ETF sale":`Review bitcoin sale · ${walletName(id)}`,kicker:"Market sell · quote locked",give:isEtf?`${fmtBtc(btc)} equivalent exposure`:fmtBtc(btc),giveSub:`${formatPercent(fraction*100)}% of the ${walletName(id)} position`,receive:fmtUsd(usd),receiveSub:"Added to liquid fiat after fees",reference:`${fmtUsd(price)} per BTC`,fees:`${fmtUsd(gross*feeRate)} · ${(feeRate*100).toFixed(2)}%`,after:`${fmtUsd(state.cash+usd)} cash · ${fmtBtc(state.wallets[id]-btc)} position`,confirmLabel:"Confirm sell",confirmClass:"danger"}
+    if(venueFrozen(id)){showToast("Withdrawals frozen",`${walletName(id)} has paused withdrawals until ${dateFmt(state.ops.venueFreezes[id])}.`);return null}const fraction=actionFraction(button),btc=state.wallets[id]*fraction,feeRate=venueTradeFee(id),price=priceAt(state.time),gross=btc*price,isEtf=id==="etf",impact=isEtf?0:tradeImpact(gross,1),usd=gross*(1-feeRate)*(1-impact);if(btc<=0)return null;
+    return{...base,fraction,title:isEtf?"Review ETF sale":`Review bitcoin sale · ${walletName(id)}`,kicker:"Market sell · quote locked",give:isEtf?`${fmtBtc(btc)} equivalent exposure`:fmtBtc(btc),giveSub:`${formatPercent(fraction*100)}% of the ${walletName(id)} position`,receive:fmtUsd(usd),receiveSub:"Added to liquid fiat after fees",reference:`${fmtUsd(price)} per BTC`,fees:`${fmtUsd(gross*feeRate)} · ${(feeRate*100).toFixed(2)}%`,depth:impact>=.001?`−${fmtUsd(gross*(1-feeRate)*impact)} · ${impactNote(impact)}`:"",after:`${fmtUsd(state.cash+usd)} cash · ${fmtBtc(state.wallets[id]-btc)} position`,confirmLabel:"Confirm sell",confirmClass:"danger"}
   }
   if(action==="buy-hw"||action==="buy-hw-btc"){
     const h=HARDWARE.find(item=>item.id===id);if(!h||h.permanent)return null;const payBtc=action==="buy-hw-btc",unitUsd=hardwareUnitCost(h),unit=payBtc?unitUsd/priceAt(state.time):unitUsd,balance=payBtc?state.wallets.hot:state.cash;let qty=Math.min(Math.max(1,Math.floor(Number(button.dataset.value)||1)),Math.floor(balance/unit));while(qty>0&&!plannedFleetFits(id,qty))qty--;if(qty<1){showToast(payBtc?"Not enough hot BTC":"Purchase unavailable",payBtc?`One ${h.name} costs ${fmtBtc(unit)} at the locked quote.`:facilityLimitMessage(id));return null}const cost=unit*qty,terms=procurementTerms(h);

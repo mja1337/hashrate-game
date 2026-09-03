@@ -24,6 +24,7 @@ const requirements = {
   FEES: 900,
   TX: 800,
   HEIGHT: 800,
+  CAP: 700,
 };
 
 for (const [name, minimum] of Object.entries(requirements)) {
@@ -47,6 +48,11 @@ for (const [name, minimum] of Object.entries(requirements)) {
 if (data.HEIGHT.some((entry, index) => index && entry[1] < data.HEIGHT[index - 1][1])) throw new Error("HEIGHT must be monotonic");
 if (Math.max(...data.FEES.map(entry => entry[1])) <= 1) throw new Error("FEES did not retain high-fee periods");
 if (data.DIFFICULTY[0][1] !== 1) throw new Error("DIFFICULTY must start at 1, the difficulty of the genesis epoch");
+// Capitalisation anchors the order-book depth model, so it has to be monotonic in neither
+// direction but must span the market's whole life and stay strictly positive.
+if (data.CAP.some(entry => !(entry[1] > 0))) throw new Error("CAP carries a non-positive capitalisation");
+if (data.CAP[0][0] > "2010-08-01") throw new Error(`CAP starts at ${data.CAP[0][0]}, too late to cover the market's opening`);
+if (Math.max(...data.CAP.map(e => e[1])) < 1e12) throw new Error("CAP never reaches the trillion-dollar era, so it cannot be the recorded series");
 for (let i = 1; i < data.DIFFICULTY.length; i += 1) {
   const [date, value] = data.DIFFICULTY[i];
   const previous = data.DIFFICULTY[i - 1][1];

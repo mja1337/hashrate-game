@@ -9,7 +9,7 @@ const OUTPUT = resolve(ROOT, "historical-data.js");
 const START = "2009-01-03";
 const END = "2026-08-29";
 const DAY = 86_400_000;
-const METRICS = ["PriceUSD", "HashRate", "FeeTotNtv", "BlkCnt", "TxCnt"];
+const METRICS = ["PriceUSD", "HashRate", "FeeTotNtv", "BlkCnt", "TxCnt", "CapMrktCurUSD"];
 const ENDPOINT = "https://community-api.coinmetrics.io/v4/timeseries/asset-metrics";
 
 function day(date) {
@@ -156,6 +156,17 @@ function smoothedTransactions(rows) {
   });
 }
 
+// Market capitalisation anchors the order-book depth model. It is a slow, smooth series
+// used only to scale trade impact, so a weekly cadence carries it at a fraction of the
+// storage a daily one would cost. Recorded, not derived: this is CapMrktCurUSD as reported.
+function marketCap(rows) {
+  return rollingSeries(rows, 7, window => {
+    const values = window.map(row => number(row.CapMrktCurUSD)).filter(value => value !== null && value > 0);
+    if (!values.length) return null;
+    return values.reduce((sum, value) => sum + value, 0) / values.length;
+  }, 7);
+}
+
 function heights(rows) {
   const result = [[START, 0]];
   // Block height is zero-based while BlkCnt is a count, so Genesis contributes
@@ -248,6 +259,7 @@ function render(data) {
           fees: "seven-day total fees divided by seven-day blocks, recorded daily",
           transactions: "seven-day trailing mean of recorded TxCnt, recorded daily",
           height: "cumulative recorded daily block count, recorded daily",
+          cap: "seven-day trailing mean of recorded CapMrktCurUSD, recorded weekly",
         },
     },
     ...data,
@@ -291,6 +303,23 @@ if (difficultyOnly) {
   process.exit(0);
 }
 
+// Adds or refreshes only the CAP series in the existing bundle, so introducing the depth
+// model cannot quietly pull unrelated revisions into price, hash, fees or height.
+if (process.argv.includes("--cap-only")) {
+  const existing = readFileSync(OUTPUT, "utf8");
+  const context = { window: {} };
+  vm.runInNewContext(existing, context);
+  const payload = context.window.HISTORICAL_DATA;
+  if (!payload) throw new Error("Could not read the existing bundle");
+  const next = marketCap(await fetchRows());
+  if (!next.length) throw new Error("Coin Metrics returned no market cap rows");
+  console.log(`CAP ${(payload.CAP || []).length} -> ${next.length} points`);
+  payload.CAP = next;
+  payload.meta.transforms.cap = "seven-day trailing mean of recorded CapMrktCurUSD, recorded weekly";
+  await writeFile(OUTPUT, renderBundle(payload), "utf8");
+  process.exit(0);
+}
+
 const rows = await fetchRows();
 if (!rows.length) throw new Error("Coin Metrics returned no BTC rows");
 const data = {
@@ -300,6 +329,7 @@ const data = {
   FEES: smoothedFees(rows),
   TX: smoothedTransactions(rows),
   HEIGHT: heights(rows),
+  CAP: marketCap(rows),
 };
 await mkdir(dirname(OUTPUT), { recursive: true });
 await writeFile(OUTPUT, render(data), "utf8");

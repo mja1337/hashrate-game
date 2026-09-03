@@ -94,7 +94,25 @@ const controlsSource = inline.slice(controlsStart, controlsEnd);
 assert((controlsSource.match(/<button/g) || []).length === 1, "A Mine card's unified buy control should render exactly one button");
 assert(controlsSource.includes("data-hardware-qty") && controlsSource.includes("data-hardware-currency"), "Mine buy control is missing the quantity or currency selector");
 
-assert(inline.includes('internet:25'), "Starter NA region internet bill is not reduced");
+assert(inline.includes("internet:45"), "Starter NA region internet bill is not the era-accurate residential figure");
+// ORDER-BOOK DEPTH — the constraint that stops an early fortune being a free one.
+assert(inline.includes("function tradeImpact("), "Order-book depth model is missing");
+assert(inline.includes("function marketCapAt("), "Market capitalisation accessor is missing");
+assert(inline.includes("const CAP=RECORDED.CAP"), "Recorded market cap series is not bound");
+assert(/IMPACT_K\s*=\s*66/.test(inline), "Trade impact constant is not at its calibrated value");
+assert(inline.includes("function addPressure(") && inline.includes("PRESSURE_HALFLIFE"),
+  "Standing market pressure and its decay are missing, so slicing an order would dodge the impact");
+assert(/sellBtc[\s\S]{0,400}tradeImpact\(/.test(inline), "sellBtc does not apply order-book impact");
+assert(/buyBtc[\s\S]{0,400}tradeImpact\(/.test(inline), "buyBtc does not apply order-book impact");
+assert(inline.includes("const impact=tradeImpact(btc*price,1);if(impact>0)addPressure(btc*price,1);")
+  && inline.includes("const proceeds=btc*price*(1-fee)*(1-impact)"),
+  "The automatic settlement sale does not pay order-book impact, making it a way around depth");
+assert(/for\(let i=0;i<5&&btc>0;i\+\+\)\{const slip=tradeImpact\(/.test(inline),
+  "The settlement sale does not solve for the impact it will itself cause, so it under-sells and leaves the bill short");
+assert(inline.includes("marketPressure:{usd:0,at:0}"), "marketPressure is missing from the initial state");
+assert(/state\.marketPressure=state\.marketPressure&&/.test(inline), "marketPressure has no save migration");
+assert(inline.includes("transaction.depth"), "The confirmation modal does not show order-book impact before confirming");
+
 assert(inline.includes("function hardwareFaultBreakdown(") && inline.includes("faultsByPart"), "Part-specific fault attribution is missing");
 assert(inline.includes("function serviceHardwarePart(") && inline.includes('a==="service-part"'), "Targeted part-swap service action is not wired");
 assert(inline.includes("PART_FAULT_LABELS"), "Part fault-cause labels are missing");

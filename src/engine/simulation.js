@@ -13,7 +13,7 @@ const initialState=()=>{const seed=Math.floor(Math.random()*4294967296);return{
   lightning:{locked:0,earned:0},
   hardware:{laptop:1},poweredDownHardware:{},facility:"home",region:"na",thermal:{temperature:22,orders:[],equipment:{}},overdrive:false,settlementSaleMode:false,autoRepair:false,node:0,nodeStorage:50,nodePruned:false,nodeMode:"archival",nodeSync:{primaryLag:0,primaryPeak:0,backupLag:0,backupPeak:0},backupNode:{enabled:false,outageUntil:0},mode:"solo",pool:"f2pool",
   skills:[],points:0,startingGrant:false,seen:[],activeEvent:null,storyPause:true,shoppingPause:false,speculations:[],powerRateShock:null,hardwareGlut:null,hardwareAlerts:{seen:[],queue:[],active:null,resumeSpeed:0},hardwareToastSeen:[],exposureWarned:[],
-  treasuryPolicy:"cover",pendingSettlement:null,endReason:null,arrearsDue:0,gridCutAnnounced:false,
+  treasuryPolicy:"cover",pendingSettlement:null,endReason:null,arrearsDue:0,gridCutAnnounced:false,marketPressure:{usd:0,at:0},
   operator:{eras:{},periodMined:0,periodUptime:0,periodDays:0,lastRevenueUsd:0,totalMonths:0,solventMonths:0,profitableMonths:0,competitiveMonths:0,bridgeLoans:0,restructures:0},
   xp:{total:0,level:1,peakLevel:1,bestDifficulty:0,shares:0,sources:{shares:0,record:0,deploy:0,repair:0}},
   knowledge:0,nextKnowledge:5,learning:null,completedLearning:[],maintenance:{condition:{},faults:{},faultsByPart:{},selfRepairs:{},parts:0,inventory:{fan:0,hashboard:0,powerPcb:0,coolantPump:0,coolingManifold:0,laptopfan:0,asicfan:0,hashboardearly:0,hashboardmodern:0},inventoryMigrated:true,orders:[],serviceJobs:[]},procurementOrders:[],inactiveHardware:{},commissioningJobs:[],decommissionedHardware:{},relocationJob:null,facilityUpgradeJob:null,ops:{firmwarePatchedUntil:0,hijackUntil:0,outageUntil:0,powerOutageUntil:0,venueFreezes:{},riskMonth:""},strategy:{mstr:0,strk:0,strf:0,strd:0,strc:0,yieldEarned:0},sandbox:false,contract:"standard",staff:[],projectLoan:0,insured:false,milestones:[],milestoneLog:[],walletSetup:{done:false,step:0,rolls:[],keyHex:""},guidance:{dismissed:[]},walletSoftware:0,donations:[],
@@ -128,6 +128,7 @@ Object.keys(numericDefaults).forEach(k=>{if(!Number.isFinite(Number(state[k])))s
 if(state.shoppingPause){state.shoppingPause=false;if(state.started&&state.speed<=0&&!state.activeEvent&&!state.ended)state.speed=Number(state.returnSpeed)||1}
 state.overdrive=!!state.overdrive;
 state.settlementSaleMode=!!state.settlementSaleMode&&!!state.pendingSettlement;
+state.marketPressure=state.marketPressure&&typeof state.marketPressure.usd==="number"&&typeof state.marketPressure.at==="number"?state.marketPressure:{usd:0,at:0};
 state.hardware=state.hardware&&typeof state.hardware==="object"?state.hardware:{};
 HARDWARE.forEach(h=>{if(!Number.isFinite(Number(state.hardware[h.id])))state.hardware[h.id]=h.permanent?1:0;else state.hardware[h.id]=Math.max(h.permanent?1:0,Math.floor(Number(state.hardware[h.id])));state.poweredDownHardware[h.id]=Math.max(0,Math.min(state.hardware[h.id],Math.floor(Number(state.poweredDownHardware[h.id])||0)))});
 function hasSkill(id){return state.skills.includes(id)}
@@ -328,8 +329,12 @@ function sellControlledBtc(amount){
 }
 function treasurySaleForSettlement(due,silent=false){
   if(state.time<MARKET)return 0;const policy=treasuryPolicy(),fee=.006,price=priceAt(state.time);let btc=0;
-  if(policy.id!=="cover")return 0;btc=Math.max(0,due-state.cash)/(price*(1-fee));
-  btc=Math.min(state.wallets.hot,btc);if(btc<=0)return 0;state.wallets.hot-=btc;const proceeds=btc*price*(1-fee);state.cash+=proceeds;
+  if(policy.id!=="cover")return 0;const need=Math.max(0,due-state.cash);btc=need/(price*(1-fee));
+  // The automatic sale is charged the same order-book impact as a manual one, so routing a
+  // large liquidation through the settlement path is not a way around the book. Impact
+  // grows with size and size grows with impact, so the amount needed is solved iteratively.
+  for(let i=0;i<5&&btc>0;i++){const slip=tradeImpact(Math.min(state.wallets.hot,btc)*price,1);btc=need/(price*(1-fee)*(1-slip))}
+  btc=Math.min(state.wallets.hot,btc);if(btc<=0)return 0;const impact=tradeImpact(btc*price,1);if(impact>0)addPressure(btc*price,1);state.wallets.hot-=btc;const proceeds=btc*price*(1-fee)*(1-impact);state.cash+=proceeds;
   log(`Settlement conversion: ${policy.name}`,`${fmtBtc(btc)} sold · +${fmtUsd(proceeds)}`,"trade");
   const left=controlled(),drained=btc/Math.max(btc+left,1e-12);
   if(!silent){

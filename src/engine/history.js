@@ -13,6 +13,16 @@ function interp(list,time,log=true){
 function stepAt(list,time){if(time<=anchorTime(list[0]))return list[0][1];if(time>=anchorTime(list[list.length-1]))return list[list.length-1][1];const i=upperAnchorIndex(list,time);return anchorTime(list[i])===time?list[i][1]:list[i-1][1]}
 function hashFrac(x){const s=Math.sin(x*12.9898+78.233)*43758.5453;return s-Math.floor(s)}
 const priceAt=t=>t>END?futurePriceAt(t):interp(PRICE,t),hashAt=t=>t>END?futureHashAt(t):interp(HASH,t),txAt=t=>t>END?Math.round(futureTxAt(t)):Math.round(interp(TX,t)),heightAt=t=>t>END?futureHeightAt(t):(HEIGHT.length?interp(HEIGHT,t,false):Math.max(0,(t-GENESIS)/DAY*144));
+/* Market capitalisation, the anchor for order-book depth. Recorded weekly through the
+   cutoff; past it, capitalisation tracks the modelled price, since after 2026 over 99.5%
+   of the supply is already mined and the remainder changes the total by a few percent
+   across the whole continuation. */
+const LAST_CAP=CAP.length?CAP[CAP.length-1][1]:0;
+function marketCapAt(t){
+  if(!CAP.length)return 0;
+  if(t>END){const base=priceAt(END);return base>0?LAST_CAP*futurePriceAt(t)/base:LAST_CAP}
+  return Math.max(0,interp(CAP,t));
+}
 const difficultyAt=t=>t>END?hashAt(t)*600/2**32:(DIFFICULTY.length?stepAt(DIFFICULTY,t):hashAt(t)*600/2**32);
 const targetHashAt=t=>difficultyAt(t)*2**32/600;
 function competitiveHashAt(t,playerHash=0){const historicalFloor=Math.max(hashAt(t),targetHashAt(t))*interp(NETWORK_COMPETITION_SCALE,t,false),responsiveFloor=Math.max(0,playerHash)*interp(NETWORK_RESPONSE,t,false);return Math.max(historicalFloor,responsiveFloor)}
