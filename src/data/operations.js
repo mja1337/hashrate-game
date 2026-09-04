@@ -10,14 +10,30 @@ const FACILITIES=[
   {id:"hydroplant",name:"Hydro colocation plant",date:"2023-01-01",kw:75000,space:155000,rent:760000,cost:34000000,indoorBaseC:8,passiveCoolingKw:24000,desc:"Purpose-built high-density infrastructure beside generation. Huge upside, huge contractual exposure."},
   {id:"megacampus",name:"Sovereign megacampus",date:"2025-01-01",kw:180000,space:360000,rent:1500000,cost:90000000,indoorBaseC:5,passiveCoolingKw:60000,desc:"Utility-scale mining campus designed for national-scale power agreements and geopolitical risk."}
 ];
+/* The ladder is deliberately monotonic in BOTH directions: each step up rejects more heat
+   per kilowatt it draws, and costs more per kilowatt of rejection to buy. That is the whole
+   trade-off — bigger plant runs cheaper and buys dearer — and it only works if no unit beats
+   another on both counts.
+
+   It used to. Evaporative cooling was the efficiency peak AND the cheapest per kilowatt, so
+   the two larger units above it were strictly worse: at a megacampus you would install
+   thirty-five evaporative banks rather than two cooling towers, and they would be cheaper,
+   more efficient and quicker to commission. The tier bands overlapped four deep at the top,
+   which is what let a small unit stand next to plant ten times its size and win.
+
+   Bands are now three tiers wide at most, so each site chooses between neighbours on the
+   ladder rather than the whole catalog. What a dry cooler really buys you over an
+   evaporative bank is not efficiency, it is that it consumes no water — and water is not
+   something this game models, so here it earns its place the honest way, by rejecting more
+   heat per kilowatt drawn than the bank below it and costing more per kilowatt to install. */
 const COOLING_EQUIPMENT=[
-  {id:"boxfan",name:"Workshop box fan",date:"2009-01-03",minTier:1,maxTier:3,cost:95,install:3,coolingKw:1.6,watts:85,desc:"Moves room air cheaply; useful at home and in a small garage."},
-  {id:"exhaust",name:"Ducted exhaust kit",date:"2010-01-01",minTier:2,maxTier:4,cost:780,install:9,coolingKw:10,watts:420,desc:"Pulls a deliberate hot aisle out of a garage or small industrial unit."},
-  {id:"axial",name:"Industrial axial fan wall",date:"2012-01-01",minTier:3,maxTier:6,cost:5200,install:21,coolingKw:68,watts:2600,desc:"High-volume intake and extraction for rows of air-cooled miners."},
-  {id:"ahu",name:"Filtered air-handling unit",date:"2015-01-01",minTier:4,maxTier:8,cost:54000,install:35,coolingKw:620,watts:22000,desc:"A controlled industrial airflow plant with filtration and economiser logic."},
-  {id:"evap",name:"Evaporative cooling bank",date:"2018-01-01",minTier:5,maxTier:8,cost:420000,install:60,coolingKw:5200,watts:165000,desc:"Utility-scale evaporative cooling: capital intensive, efficient at large loads."},
-  {id:"drycooler",name:"Closed-loop dry cooler",date:"2020-01-01",minTier:6,maxTier:8,cost:1850000,install:90,coolingKw:22000,watts:760000,desc:"Container and hydro-loop heat rejection with pumps, controls and redundancy."},
-  {id:"coolingtower",name:"Industrial cooling tower",date:"2023-01-01",minTier:7,maxTier:8,cost:7200000,install:120,coolingKw:72000,watts:2400000,desc:"Campus-scale heat rejection for dense liquid-cooled fleets."}
+  {id:"boxfan",name:"Workshop box fan",date:"2009-01-03",minTier:1,maxTier:2,cost:95,install:3,coolingKw:1.6,watts:85,desc:"Moves room air cheaply; useful at home and in a small garage."},
+  {id:"exhaust",name:"Ducted exhaust kit",date:"2010-01-01",minTier:2,maxTier:3,cost:700,install:9,coolingKw:10,watts:420,desc:"Pulls a deliberate hot aisle out of a garage or small industrial unit."},
+  {id:"axial",name:"Industrial axial fan wall",date:"2012-01-01",minTier:3,maxTier:5,cost:5300,install:21,coolingKw:68,watts:2600,desc:"High-volume intake and extraction for rows of air-cooled miners."},
+  {id:"ahu",name:"Filtered air-handling unit",date:"2015-01-01",minTier:4,maxTier:6,cost:54000,install:35,coolingKw:620,watts:22000,desc:"A controlled industrial airflow plant with filtration and economiser logic."},
+  {id:"evap",name:"Evaporative cooling bank",date:"2018-01-01",minTier:5,maxTier:7,cost:478000,install:60,coolingKw:5200,watts:173000,desc:"Utility-scale evaporative cooling: capital intensive, and cheaper to run than any air plant below it."},
+  {id:"drycooler",name:"Closed-loop dry cooler",date:"2020-01-01",minTier:6,maxTier:8,cost:2110000,install:90,coolingKw:22000,watts:688000,desc:"Container and hydro-loop heat rejection with pumps, controls and redundancy. Dearer to install than an evaporative bank, and leaner to run."},
+  {id:"coolingtower",name:"Industrial cooling tower",date:"2023-01-01",minTier:7,maxTier:8,cost:7200000,install:120,coolingKw:72000,watts:2118000,desc:"Campus-scale heat rejection for dense liquid-cooled fleets: the dearest plant to build and the cheapest to run."}
 ];
 const REGIONS=[
   {id:"na",name:"North America",date:"2009-01-03",kwh:.12,rely:.995,netRisk:.008,internet:45,move:0,ambientC:11,seasonalC:12,policy:"Stable, expensive",desc:"Reliable grid access and deep capital markets; middling power prices."},

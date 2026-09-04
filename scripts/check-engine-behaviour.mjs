@@ -280,6 +280,30 @@ rule("a used machine arrives worn but never pre-broken", () => {
   assert(worst < 100, "age does not affect the condition a machine arrives in");
 });
 
+/* ---- COOLING: a ladder where every rung is a trade-off ---- */
+
+rule("no cooling plant is beaten on both cost and efficiency at the same tier", () => {
+  const problems = json(`(()=>{
+    const out=[];
+    for(let tier=1;tier<=FACILITIES.length;tier++){
+      const avail=COOLING_EQUIPMENT.filter(c=>tier>=c.minTier&&tier<=c.maxTier);
+      for(const a of avail)for(const b of avail){
+        if(a===b)continue;
+        const ac=a.cost/a.coolingKw,ae=a.coolingKw/(a.watts/1000);
+        const bc=b.cost/b.coolingKw,be=b.coolingKw/(b.watts/1000);
+        if(bc<=ac&&be>=ae&&(bc<ac||be>ae))out.push("tier "+tier+": "+a.id+" is beaten by "+b.id);
+      }
+    }
+    return [...new Set(out)];})()`);
+  assert(problems.length === 0, `a site can buy strictly better plant for less: ${problems.join("; ")}`);
+});
+
+rule("every facility tier can cool itself", () => {
+  const orphans = json(`FACILITIES.map((f,i)=>i+1)
+    .filter(tier=>!COOLING_EQUIPMENT.some(c=>tier>=c.minTier&&tier<=c.maxTier))`);
+  assert(orphans.length === 0, `facility tiers with no cooling plant available: ${orphans.join(", ")}`);
+});
+
 /* ---- PROGRESSION: a skill the player pays for has to do something ---- */
 
 rule("the treasury branch protects self-held coins", () => {
