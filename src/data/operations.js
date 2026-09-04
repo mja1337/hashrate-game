@@ -35,10 +35,20 @@ const POWER_CONTRACTS=[
   {id:"spot",name:"Spot-market power",mult:.82,desc:"Cheaper in normal conditions; energy shocks pass through in full."},
   {id:"curtail",name:"Curtailment contract",mult:.9,desc:"Discounted flexible load agreement. Strong economics, less operational certainty."}
 ];
+/* The two upgrades protect against an outage in different ways, because in life they do.
+   Diverse business routing makes the fault less likely to happen at all. A pair of cellular
+   modems does nothing to stop a backhoe finding your fibre — it means you are carrying
+   traffic again within the hour instead of waiting days for a splice crew, which is why
+   `failover` shortens the outage rather than preventing it.
+
+   Dual-SIM used to be modelled as a replacement primary that permanently trimmed 1.5% off
+   mining revenue, which made it cost more than fixed broadband AND earn less than it: optimal
+   in none of 56 tier-and-region combinations. It is a backup link. You are on the fixed line
+   almost all of the time, so there is no standing penalty to pay. */
 const CONNECTIVITY_PLANS=[
-  {id:"fixed",name:"Local fixed broadband",mult:1,risk:1,payout:1,desc:"Lowest recurring cost. One local upstream leaves the site exposed to cable, exchange and provider faults."},
-  {id:"sim",name:"Dual-SIM cellular failover",mult:1.55,risk:.6,payout:.985,desc:"Two mobile carriers reduce last-mile outages, but congestion and variable latency trim effective mining revenue by 1.5%."},
-  {id:"fiber",name:"Business fibre + SLA",mult:2.8,risk:.32,payout:1.008,minFacility:2,desc:"Diverse business routing and an SLA sharply reduce incidents; faster propagation adds 0.8% effective mining revenue."}
+  {id:"fixed",name:"Local fixed broadband",mult:1,risk:1,payout:1,failover:1,desc:"Lowest recurring cost. One local upstream leaves the site exposed to cable, exchange and provider faults, and a fault means waiting for the provider."},
+  {id:"sim",name:"Dual-SIM cellular failover",mult:1.55,risk:1,payout:1,failover:.15,desc:"Two mobile carriers cannot stop the last mile being cut, but the site carries traffic again within the hour rather than waiting days for a repair crew."},
+  {id:"fiber",name:"Business fibre + SLA",mult:2.8,risk:.32,payout:1.008,failover:1,minFacility:2,desc:"Diverse business routing and an SLA make the incident far less likely in the first place; faster propagation adds 0.8% effective mining revenue."}
 ];
 const STAFF=[
   {id:"fieldtech",name:"Field technician",salary:1200,desc:"Scalable repair crew. More technicians reduce fleet wear and shorten service outages; up to three can work one hardware type at once."},

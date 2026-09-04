@@ -326,7 +326,14 @@ function advanceOperationalRisks(next){
   if(firmwarePatchDue()&&!firmwareHijacked()&&nextRand()<.07){state.ops.hijackUntil=next+DAY*(10+Math.floor(nextRand()*21));log("ASIC fleet hijacked","35% of hash diverted");showToast("Firmware compromise","Unpatched ASIC firmware is pointing part of your hash rate to an attacker. Patch it now.","bad");}
   const r=region(),outageRisk=connectivityIncidentRisk(),gridRisk=Math.min(.28,Math.max(.004,(1-r.rely)*1.15));
   if(!siteOutage()&&(operating()||nodeHostPowered())&&nextRand()<gridRisk){const days=1+Math.floor(nextRand()*(2+gridRisk*45));state.ops.powerOutageUntil=next+DAY*days;log(`${r.name} grid outage`,`${days} days without power`,`operations`);showToast("Grid outage",`${r.name}'s grid is unavailable at ${facility().name}. Mining, cooling and primary-node services pause for ${days} days.`,"bad","facilities");}
-  else if(!siteOutage()&&(operating()||nodeHostPowered())&&nextRand()<outageRisk){const days=1+Math.floor(nextRand()*(3+outageRisk*90));state.ops.outageUntil=next+DAY*days;log(`${r.name} connectivity outage`,`${days} days offline`,`operations`);showToast("Internet outage",`${connectivityPlan().name} has lost upstream service in ${r.name}. Mining and primary-node services pause for ${days} days.`,"bad","facilities");}
+  else if(!siteOutage()&&(operating()||nodeHostPowered())&&nextRand()<outageRisk){const plan=connectivityPlan(),days=(1+Math.floor(nextRand()*(3+outageRisk*90)))*(plan.failover??1);
+    state.ops.outageUntil=next+DAY*days;
+    // A failover link is measured in hours, not days, so the notice has to say so.
+    const spell=days<1?`${Math.max(1,Math.round(days*24))} hours`:`${Math.round(days)} days`;
+    log(`${r.name} connectivity outage`,`${spell} offline`,`operations`);
+    showToast("Internet outage",days<1
+      ?`${plan.name} lost its fixed upstream in ${r.name} and cut over to cellular. Mining and primary-node services pause for ${spell}.`
+      :`${plan.name} has lost upstream service in ${r.name}. Mining and primary-node services pause for ${spell}.`,"bad","facilities");}
   if(state.backupNode.enabled&&!backupNodeOutage()&&nextRand()<.006){const days=1+Math.floor(nextRand()*3);state.backupNode.outageUntil=next+DAY*days;log("Remote node provider outage",`${days} days offline`);showToast("Backup-node outage",`The remote node site is unavailable for ${days} simulation day${days===1?"":"s"}. The primary node is unaffected.`,"bad","custody");}
   [["bitfinex",.022],["quadriga",.065],["frontier",.04],["exchange",.007]].forEach(([id,risk])=>{if(state.wallets[id]>0&&!venueFrozen(id)&&nextRand()<risk){const days=7+Math.floor(nextRand()*24);state.ops.venueFreezes[id]=next+DAY*days;log(`${walletName(id)} withdrawals frozen`,`${days} days`);showToast("Withdrawal freeze",`${walletName(id)} has paused withdrawals. Move funds only when service resumes.`,"bad");}});
 }

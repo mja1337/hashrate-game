@@ -27,6 +27,7 @@ function close(actual, expected, tolerance, message) {
 /* A standard site, so each rule states only what it is actually varying. */
 const SITE = (overrides = "") => `
   state.started=true;state.skills=[];state.staff=[];state.insured=false;state.overdrive=false;
+  state.ended=false;state.endReason=null;state.endDismissed=true;state.activeEvent=null;state.storyPause=false;
   state.mode="pool";state.pool="foundry";state.connectivity="fixed";state.contract="spot";
   state.node=0;state.cash=1e9;state.debt=0;state.power=true;state.policyLock=null;
   state.hardwareGlut=null;state.marketPressure={usd:0,at:0};
@@ -136,6 +137,78 @@ rule("the credit never turns the operating bill negative", () => {
       worst=Math.min(worst,monthlyCost().total);
     } return worst})()`);
   assert(worst >= 0, `an operating bill went to ${Math.round(worst)}; settlement would pay the player`);
+});
+
+/* ---- CONNECTIVITY: three plans, three different jobs ---- */
+
+rule("every connectivity plan is the best choice somewhere", () => {
+  const winners = json(`(()=>{
+    const seen={},h=HARDWARE.find(x=>x.id==="s21xp");
+    for(const reg of ["na","iceland","sichuan","kazakhstan","texas","iran","kenya","bhutan"]){
+      for(const f of FACILITIES){
+        if(at(f.date)>at("2025-06-01"))continue;
+        const cap=Math.max(0,Math.min(Math.floor(f.kw*1000/h.w),Math.floor(f.space/h.space)));
+        if(!cap)continue;
+        const n=Math.max(1,Math.round(cap*0.77));
+        let best=null;
+        for(const p of CONNECTIVITY_PLANS){
+          ${SITE(``)}
+          state.time=at("2025-06-01");state.facility=f.id;state.region=reg;
+          state.hardware={s21xp:n};state.connectivity=p.id;
+          const fs=fleet();
+          const rev=expectedDailyBtcForHash(fs.hash)*priceAt(state.time)*30.4375;
+          const value=(p.payout-1)*rev-internetMonthlyCost()
+            -rev*(connectivityIncidentRisk()*3*(p.failover??1)/30.4375);
+          if(!best||value>best.v)best={id:p.id,v:value};
+        }
+        seen[best.id]=(seen[best.id]||0)+1;
+      }
+    }
+    return seen;})()`);
+  for (const id of ["fixed", "sim", "fiber"]) {
+    assert(winners[id] > 0, `no site prefers the ${id} plan — it is a dead option (winners: ${JSON.stringify(winners)})`);
+  }
+});
+
+rule("a failover link's outages are measured in hours, not days", () => {
+  // Measured by running the clock, not by reading the plan table: the table can declare a
+  // failover the tick never applies, and a source match cannot see that gap.
+  //
+  // The assertion is on the LENGTH of each outage rather than on total downtime, because the
+  // two arms consume the random stream differently and so do not see the same incidents.
+  // Comparing aggregate downtime made this rule pass with the failover deleted, purely
+  // because one arm drew fewer outages than the other.
+  const measured = json(`(()=>{
+    const out={};
+    for(const plan of ["fixed","sim"]){
+      ${SITE(``)}
+      // Sichuan from 2014 leaves room for 4,000 days inside the campaign, at a 3.5% monthly
+      // fault rate — frequent enough that both arms see several incidents.
+      state.time=at("2014-06-01");state.facility="warehouse";state.region="sichuan";
+      state.hardware={s5:100};state.connectivity=plan;state.seed=12345;state.rng=12345;
+      const spells=[];let days=0;const startedAt=state.time;
+      for(let d=0;d<4000;d++){
+        const before=state.ops.outageUntil;
+        tick();
+        if(state.time>startedAt+days*DAY)days++;
+        if(state.ops.outageUntil&&state.ops.outageUntil!==before&&state.ops.outageUntil>state.time)
+          spells.push((state.ops.outageUntil-state.time)/DAY);
+      }
+      out[plan]={spells,days};
+    }
+    return out;})()`);
+  for (const plan of ["fixed", "sim"]) {
+    assert(measured[plan].days > 3000, `the ${plan} arm only advanced ${measured[plan].days} days, so this rule proves nothing`);
+    assert(measured[plan].spells.length > 1, `the ${plan} arm saw ${measured[plan].spells.length} outages in 4,000 days, so this rule proves nothing`);
+  }
+  const longestFailover = Math.max(...measured.sim.spells);
+  const longestFixed = Math.max(...measured.fixed.spells);
+  assert(longestFailover < 1,
+    `a dual-SIM outage ran ${longestFailover.toFixed(1)} days; a backup link that takes days to carry traffic is not a backup link`);
+  assert(longestFixed >= 1,
+    `a fixed-broadband outage only ran ${longestFixed.toFixed(1)} days, so the comparison proves nothing`);
+  const sim = json(`CONNECTIVITY_PLANS.find(p=>p.id==="sim")`);
+  assert(sim.payout >= 1, "dual-SIM charges a standing revenue penalty for a link the site is not normally using");
 });
 
 /* ---- HARDWARE: newest wins on dear power, cheap-and-old wins on cheap power ---- */
