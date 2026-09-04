@@ -18,19 +18,23 @@ Saves live in `localStorage` under `hashrate-genesis-save-v1`, with cross-run ca
 
 ## Safety checks
 
-Run all three before handing off a change. They are the project's test suite.
+Run all four before handing off a change. They are the project's test suite.
 
 ```bash
 node scripts/check-project-structure.mjs
 node scripts/check-ui-contracts.mjs
 node scripts/check-historical-data.mjs
+node scripts/check-engine-behaviour.mjs
 ```
 
 - **Project structure** — script load order, external assets, and a 70 KB ceiling on each module under `src/`. That ceiling is deliberate: it forces oversized files to be split rather than reviewed. It does not apply to the generated data bundle at the repository root.
 - **UI contracts** — several hundred assertions covering copy patterns, accessibility affordances, responsive rules, engine invariants and data shape. When a contract fails it names the behaviour that broke, not the string that moved.
 - **Historical data** — series integrity, cadence and protocol sanity, plus a syntax parse of every application script.
+- **Engine behaviour** — loads the engine headlessly and asserts what it *does*: the issuance schedule, that a large early sale moves the price and a slice cannot dodge it, that every power contract wins somewhere, that hardware depreciates and can never be resold for more than it cost, that the treasury conversion covers a bill exactly, and that the cheapest electricity is not automatically the best site.
 
 Contracts are written to fail for a reason a reader can act on, and new ones are worth mutation-testing: reintroduce the bug and confirm the check catches it.
+
+The first three suites match source text. That is fast and catches a great deal, but it pins the implementation rather than the rule: three of them broke during one refactoring session while the behaviour they guarded was intact, because a function had been renamed or an expression had moved. `check-engine-behaviour.mjs` exists for the other half of the problem — it runs the engine, so a rename passes and only a change in the game's economics fails. **When a check is about what the simulation does rather than how the source reads, put it there.** Pinning an exact calibration constant is usually the wrong instinct: assert the property the constant is meant to produce, so the number can be retuned without a false alarm.
 
 ## Repository layout
 

@@ -99,8 +99,8 @@ assert(inline.includes("internet:45"), "Starter NA region internet bill is not t
 // the newest machine won on payback, hash-per-dollar and hash-per-watt at every date in every
 // region, and a decade-old machine cost full list to buy but sold for 4% of it.
 assert(inline.includes("function hardwareMarketFactor("), "Hardware price depreciation is missing");
-assert(/HW_PRICE_PLATEAU=\.5,HW_PRICE_HALFLIFE=1\.25,HW_PRICE_FLOOR=\.03/.test(inline),
-  "The hardware depreciation curve has moved off its calibrated values");
+// Depreciation is asserted behaviourally: prices must fall after release, resale must never
+// exceed purchase, the newest machine must win on dear power and an old one on cheap power.
 assert(inline.includes("h.cost*hardwareMarketFactor(h)*(hasSkill(\"procurement\")"),
   "hardwareUnitCost no longer prices against the market, so old hardware costs list price again");
 assert(inline.includes("function incomingConditionFor("),
@@ -119,8 +119,8 @@ assert(inline.includes("method-secondhand"), "Method does not document second-ha
 assert(inline.includes("function curtailmentCreditDaily("), "The demand-response credit is missing");
 assert(inline.includes("function curtailmentIntensityAt("),
   "Curtailment intensity is not a pure function of time, so the tariff desk cannot price an unselected contract");
-assert(/CURTAIL_BASE=\.05,CURTAIL_SLOPE=\.8,CURTAIL_CAP=\.6,CURTAIL_CREDIT=1\.4/.test(inline),
-  "The curtailment shape or credit multiplier has moved off its calibrated values");
+// Curtailment calibration is asserted behaviourally: it must deepen under a shock, must pay
+// for released capacity, and must never drive the operating bill negative.
 assert(inline.includes('state.contract==="curtail"?1-curtailmentIntensity():1'),
   "Curtailment load is a flat duty cycle again rather than tracking the energy shock");
 assert(inline.includes("-curtailmentCreditDaily(minerWatts,next,r)"),
@@ -158,7 +158,9 @@ assert(!/,previousHeight=(app|host)\.offsetHeight;/.test(inline),
 assert(inline.includes("function tradeImpact("), "Order-book depth model is missing");
 assert(inline.includes("function marketCapAt("), "Market capitalisation accessor is missing");
 assert(inline.includes("const CAP=RECORDED.CAP"), "Recorded market cap series is not bound");
-assert(/IMPACT_K\s*=\s*66/.test(inline), "Trade impact constant is not at its calibrated value");
+// Impact calibration is asserted behaviourally in check-engine-behaviour.mjs: a large early
+// sale must move the price, the same order must be invisible in a deep market, and slicing
+// must not dodge it. Those survive a retune; a pinned constant does not.
 assert(inline.includes("function addPressure(") && inline.includes("PRESSURE_HALFLIFE"),
   "Standing market pressure and its decay are missing, so slicing an order would dodge the impact");
 assert(/sellBtc[\s\S]{0,400}tradeImpact\(/.test(inline), "sellBtc does not apply order-book impact");
