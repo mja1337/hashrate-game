@@ -44,8 +44,8 @@ const SKILLS=[
   {id:"partssourcing",branch:"Operations",name:"Parts sourcing",desc:"You know who actually stocks this stuff. Every spare part costs 20% less.",cost:3,req:"benchskills",date:"2010-01-01"},
   {id:"supplychain",branch:"Operations",name:"Supply-chain contacts",desc:"Standing arrangements with suppliers. Spare-part orders arrive 40% sooner, including through a supply shock.",cost:3,req:"partssourcing",date:"2011-01-01"},
   {id:"practisedhands",branch:"Operations",name:"Practised hands",desc:"Work you have done many times before starts completing itself: a growing chance to finish a self-serviced repair with no puzzle at all, rising with every unit of that type you have fixed.",cost:4,req:"benchskills",date:"2011-06-01"},
-  {id:"backups",branch:"Treasury",name:"Key backups",desc:"Self-custody security rises materially.",cost:1},
-  {id:"counterparty",branch:"Treasury",name:"Counterparty radar",desc:"Custody warnings arrive earlier.",cost:2,req:"backups",date:"2010-07-17"},
+  {id:"backups",branch:"Treasury",name:"Key backups",desc:"Redundant seed backups cut the chance of losing self-held coins by 30%.",cost:1},
+  {id:"counterparty",branch:"Treasury",name:"Counterparty radar",desc:"Advance warnings about a venue or a jurisdiction arrive 30 days sooner.",cost:2,req:"backups",date:"2010-07-17"},
   {id:"multisig",branch:"Treasury",name:"Multisig discipline",desc:"Cold-storage transfers cost 20% less.",cost:4,req:"counterparty",date:"2012-01-01"}
 ];
 const LEARNING=[

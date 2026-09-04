@@ -280,6 +280,22 @@ rule("a used machine arrives worn but never pre-broken", () => {
   assert(worst < 100, "age does not affect the condition a machine arrives in");
 });
 
+/* ---- PROGRESSION: a skill the player pays for has to do something ---- */
+
+rule("the treasury branch protects self-held coins", () => {
+  const risks = json(`(()=>{
+    const out={};
+    for(const skills of [[],["backups"],["backups","counterparty","multisig"]]){
+      ${SITE(``)}
+      state.time=at("2014-01-01");state.skills=skills;
+      state.wallets={hot:100,cold:100,mtgox:0,exchange:0,frozen:0,bitfinex:0,quadriga:0,etf:0,frontier:0};
+      out[skills.length?skills.join("+"):"none"]=hotWalletIncidentRisk();
+    }
+    return out;})()`);
+  assert(risks.backups < risks.none, "Key backups does not reduce the risk of losing self-held coins");
+  assert(risks["backups+counterparty+multisig"] < risks.backups, "the full treasury branch adds nothing over its first skill");
+});
+
 /* ---- SETTLEMENT: the month boundary has to behave ---- */
 
 rule("the treasury conversion raises exactly what the bill needs", () => {

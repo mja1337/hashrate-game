@@ -95,6 +95,21 @@ assert((controlsSource.match(/<button/g) || []).length === 1, "A Mine card's uni
 assert(controlsSource.includes("data-hardware-qty") && controlsSource.includes("data-hardware-currency"), "Mine buy control is missing the quantity or currency selector");
 
 assert(inline.includes("internet:45"), "Starter NA region internet bill is not the era-accurate residential figure");
+// DEAD SKILLS — a skill the engine never reads is a point sink whose description lies about
+// what it buys. "Key backups — self-custody security rises materially" and "Counterparty
+// radar — custody warnings arrive earlier" both shipped that way, referenced nowhere but
+// their own definitions and each other's prerequisite. This is a reference check rather than
+// a pinned expression: it asks whether the id is consulted at all, not how.
+{
+  const skillIds = [...inline.matchAll(/\{id:"([a-z]+)",branch:"/g)].map(m => m[1]);
+  assert(skillIds.length > 20, "the skill roster could not be read");
+  const dead = skillIds.filter(id => {
+    const reads = new RegExp(`(hasSkill\\("${id}"\\)|skills\\??\\.includes\\("${id}"\\)|requires==="${id}"|requires:"${id}")`);
+    return !reads.test(inline);
+  });
+  assert(dead.length === 0, `these skills cost points but the engine never reads them: ${dead.join(", ")}`);
+}
+
 // SECOND-HAND HARDWARE — purchase prices used to be flat forever while resale depreciated, so
 // the newest machine won on payback, hash-per-dollar and hash-per-watt at every date in every
 // region, and a decade-old machine cost full list to buy but sold for 4% of it.

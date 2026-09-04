@@ -176,7 +176,8 @@ function fleet(s=state){
   return{hash,w,minerW,coolingW,kw:w/1000,space,value,count,activeCount,cap:expandedCap,potentialKw:potentialW/1000,offline,offlineCount:offline.reduce((a,x)=>a+x.n,0),within:w/1000<=expandedCap&&space<=f.space};
 }
 function controlled(){return state.wallets.hot+state.wallets.cold}
-function hotWalletIncidentRisk(s=state){if(s.time<at("2011-01-01")||(s.wallets?.hot||0)<=0)return 0;const selfHeld=Math.max(1e-12,(s.wallets?.hot||0)+(s.wallets?.cold||0)),hotShare=(s.wallets?.hot||0)/selfHeld,base=.00065+hotShare*.0016;return base*(s.skills?.includes("multisig")?.42:1)}
+const COUNTERPARTY_LEAD_DAYS=30;
+function hotWalletIncidentRisk(s=state){if(s.time<at("2011-01-01")||(s.wallets?.hot||0)<=0)return 0;const selfHeld=Math.max(1e-12,(s.wallets?.hot||0)+(s.wallets?.cold||0)),hotShare=(s.wallets?.hot||0)/selfHeld,base=.00065+hotShare*.0016;return base*(s.skills?.includes("multisig")?.42:1)*(s.skills?.includes("backups")?.7:1)}
 function hotWalletAnnualRisk(s=state){return 1-Math.pow(1-hotWalletIncidentRisk(s),12)}
 /* Arrears give you the rest of the month. The grid is cut at the next bill date if
    the debt is still outstanding, which is when a real supplier stops waiting. */
@@ -424,7 +425,11 @@ function queueAsicReleases(prev,next){
   releases.forEach(h=>{alerts.seen.push(h.id);if(!alerts.queue.includes(h.id)&&alerts.active!==h.id)alerts.queue.push(h.id);log(`New hardware released: ${h.name}`,`${fmtHash(h.hash)} · ${h.w} W · ${fmtJth(hardwareEfficiency(h))} J/TH`,"fleet")});
 }
 function queueExposureWarnings(prev,next){
-  EXPOSURE_WARNINGS.filter(w=>crossedDate(prev,next,at(w.date))&&!state.exposureWarned.includes(w.id)).forEach(w=>{
+  // Counterparty radar is the skill that reads the room before the room catches fire: the
+  // four recorded advance warnings arrive a month sooner, which is the difference between
+  // withdrawing from Mt. Gox in January and reading about it in February.
+  const warningLead=hasSkill("counterparty")?COUNTERPARTY_LEAD_DAYS*DAY:0;
+  EXPOSURE_WARNINGS.filter(w=>crossedDate(prev,next,at(w.date)-warningLead)&&!state.exposureWarned.includes(w.id)).forEach(w=>{
     const exposed=w.wallet?state.wallets[w.wallet]>0:state.region===w.region;
     if(!exposed)return;
     state.exposureWarned.push(w.id);
