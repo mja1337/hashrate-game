@@ -17,6 +17,7 @@ const expectedScripts = [
   "src/engine/nodes.js",
   "src/engine/operator.js",
   "src/engine/simulation.js",
+  "src/engine/settlement.js",
   "src/engine/maintenance.js",
   "src/engine/pools.js",
   "src/engine/actions.js",

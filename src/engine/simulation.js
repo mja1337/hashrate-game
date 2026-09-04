@@ -182,19 +182,6 @@ function hotWalletAnnualRisk(s=state){return 1-Math.pow(1-hotWalletIncidentRisk(
    the debt is still outstanding, which is when a real supplier stops waiting. */
 function gridCutOff(s=state){return s.debt>0&&s.time>=(s.arrearsDue||Infinity)}
 function nextBillDate(t=state.time){const d=new Date(t);return Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,1)}
-function deferSettlement(){
-  const pending=state.pendingSettlement;if(!pending)return;
-  const paid=Math.min(state.cash,pending.due),carried=pending.due-paid;
-  state.cash-=paid;state.debt+=carried;state.arrearsDue=nextBillDate();
-  state.operator.restructures=state.operator.restructures;
-  recordOperatorMonth(pending.snapshot,false);
-  state.bill=0;state.billLedger={energy:0,rent:0,internet:0,staff:0,insurance:0,nodeNetwork:0,other:0};
-  state.lastMonth=pending.month;state.pendingSettlement=null;state.settlementSaleMode=false;
-  log("Operating bill missed",`${fmtUsd(carried)} carried into arrears`,"finance");
-  showToast("Bill missed, grid still on",`${fmtUsd(carried)} is now in arrears. The site keeps running until the next bill on ${dateFmt(state.arrearsDue)}; if the arrears are still owed then, power and internet are cut until they are paid.`,"warning","finance");
-  state.speed=pending.resumeSpeed||state.returnSpeed||0;setTimer();save();render();
-}
-function treasuryPolicy(){return TREASURY_POLICIES.find(x=>x.id===state.treasuryPolicy)||TREASURY_POLICIES[0]}
 function operatorEraAt(t=state.time){return OPERATOR_ERAS.find(era=>t>=era.start&&t<era.end)||OPERATOR_ERAS[OPERATOR_ERAS.length-1]}
 function operatorEraStats(era=operatorEraAt()){return state.operator.eras[era.id]}
 function operatorEraScore(stats){if(!stats||stats.months<=0)return 0;return Math.round(35*stats.solvent/stats.months+30*stats.profitable/stats.months+20*stats.uptime/stats.months+15*stats.competitive/stats.months)}
@@ -343,12 +330,6 @@ function advanceOperationalRisks(next){
   if(state.backupNode.enabled&&!backupNodeOutage()&&nextRand()<.006){const days=1+Math.floor(nextRand()*3);state.backupNode.outageUntil=next+DAY*days;log("Remote node provider outage",`${days} days offline`);showToast("Backup-node outage",`The remote node site is unavailable for ${days} simulation day${days===1?"":"s"}. The primary node is unaffected.`,"bad","custody");}
   [["bitfinex",.022],["quadriga",.065],["frontier",.04],["exchange",.007]].forEach(([id,risk])=>{if(state.wallets[id]>0&&!venueFrozen(id)&&nextRand()<risk){const days=7+Math.floor(nextRand()*24);state.ops.venueFreezes[id]=next+DAY*days;log(`${walletName(id)} withdrawals frozen`,`${days} days`);showToast("Withdrawal freeze",`${walletName(id)} has paused withdrawals. Move funds only when service resumes.`,"bad");}});
 }
-function monthlyCost(){
-  const fs=fleet(),r=region(),f=facility(),nodeW=nodePowerWatts();
-  const rate=powerRate(r,state.time);
-  const projectedWatts=fs.w*contractLoadFactor()+(state.node>=1?nodeW:0),energy=(dailyEnergyCostForWatts(projectedWatts,state.time,r)-curtailmentCreditDaily(fs.w*contractLoadFactor(),state.time,r))*30.4375;
-  const staff=staffMonthlyCost(),insurance=insuranceMonthlyCost(),internet=internetMonthlyCost(),nodeNetwork=totalNodeMonthlyOverhead();return{energy,rent:f.rent,staff,insurance,internet,nodeNetwork,total:energy+f.rent+staff+insurance+internet+nodeNetwork,rate};
-}
 function advanceFleetLifecycle(){
   state.commissioningJobs=state.commissioningJobs.filter(job=>{if(job.due>state.time)return true;const h=HARDWARE.find(item=>item.id===job.id);
     if(h){const incoming=incomingConditionFor(h,job.orderedAt||state.time);
@@ -367,49 +348,12 @@ function advanceFleetLifecycle(){
     log(`Moved into ${destination?.name||upgradeJob.id}`,"Site commissioning complete","operations");showToast("Facility upgrade complete",`The fleet is live at ${destination?.name||upgradeJob.id}.`);renderFullQueued=true
   }
 }
-function blankBillLedger(){return{energy:0,rent:0,internet:0,staff:0,insurance:0,nodeNetwork:0,other:0}}
-function accruedBillBreakdown(){const result=Object.assign(blankBillLedger(),state.billLedger||{}),accounted=Object.values(result).reduce((sum,value)=>sum+value,0);if(state.bill>accounted+1e-8)result.other+=state.bill-accounted;return result}
-function nextSettlementDate(offset=0){const date=new Date(state.time);return Date.UTC(date.getUTCFullYear(),date.getUTCMonth()+1+offset,1)}
-function settlementForecast(){
-  const fs=fleet(),r=region(),f=facility(),nodeW=nodePowerWatts();
-  const rate=powerRate(r,state.time);
-  const minerWatts=state.power&&!gridCutOff()&&!state.policyLock?fs.w*contractLoadFactor():0,nodeWatts=nodeHostPowered()?nodeW:0,energyDaily=dailyEnergyCostForWatts(minerWatts+nodeWatts,state.time,r)-curtailmentCreditDaily(minerWatts,state.time,r),daily={energy:energyDaily,rent:f.rent/30.4375,internet:internetMonthlyCost()/30.4375,staff:staffMonthlyCost()/30.4375,insurance:insuranceMonthlyCost()/30.4375,nodeNetwork:totalNodeMonthlyOverhead()/30.4375,other:0};
-  let cursor=new Date(state.time),days=0,month=cursor.getUTCMonth();do{cursor=new Date(cursor.getTime()+DAY);days++}while(cursor.getUTCMonth()===month);
-  const accrued=accruedBillBreakdown(),breakdown={};Object.keys(accrued).forEach(key=>breakdown[key]=accrued[key]+(daily[key]||0)*days);breakdown.finance=state.projectLoan*(hasStaff("treasurer")?.009:.012);const estimated=Object.values(breakdown).reduce((sum,value)=>sum+value,0),cashAfter=state.cash-estimated,coverage=estimated?Math.max(0,Math.min(100,state.cash/estimated*100)):100;
-  return{days,dueAt:nextSettlementDate(),daily,accrued,breakdown,estimated,cashAfter,coverage,remaining:Math.max(0,estimated-state.bill)};
-}
-function settlementSnapshot(due,month){
-  const days=Math.max(1,state.operator.periodDays||1),uptime=state.operator.periodUptime/days,marketOpen=state.time>=MARKET,revenueUsd=marketOpen?state.operator.periodMined*priceAt(state.time):0,expectedGross=marketOpen?expectedDailyBtcForHash(fleet().hash)*priceAt(state.time)*days:0,competitive=operating()&&(marketOpen?expectedGross>=due*.75:playerNetworkShareAt(state.time,fleet().hash)>=.0001);
-  return{due,month,era:operatorEraAt(Math.max(START,state.time-DAY)).id,mined:state.operator.periodMined,revenueUsd,days,uptime,profitable:marketOpen?uptime>=.25&&revenueUsd>0&&revenueUsd>=due:uptime>=.65,competitive};
-}
 function recordOperatorMonth(snapshot,solvent){
   if(!snapshot)return;const stats=state.operator.eras[snapshot.era]||operatorEraStats();stats.months++;if(solvent)stats.solvent++;if(snapshot.profitable)stats.profitable++;if(snapshot.uptime>=.75)stats.uptime++;if(snapshot.competitive)stats.competitive++;
   state.operator.totalMonths++;if(solvent)state.operator.solventMonths++;if(snapshot.profitable)state.operator.profitableMonths++;if(snapshot.competitive)state.operator.competitiveMonths++;state.operator.lastRevenueUsd=snapshot.revenueUsd;state.operator.periodMined=0;state.operator.periodUptime=0;state.operator.periodDays=0;
 }
 function sellControlledBtc(amount){
   let remaining=Math.max(0,amount),sold=0;for(const bucket of ["hot","cold"]){const take=Math.min(state.wallets[bucket],remaining);state.wallets[bucket]-=take;remaining-=take;sold+=take}return sold;
-}
-function treasurySaleForSettlement(due,silent=false){
-  if(state.time<MARKET)return 0;const policy=treasuryPolicy(),fee=.006,price=priceAt(state.time);let btc=0;
-  if(policy.id!=="cover")return 0;const need=Math.max(0,due-state.cash);btc=need/(price*(1-fee));
-  // The automatic sale is charged the same order-book impact as a manual one, so routing a
-  // large liquidation through the settlement path is not a way around the book. Impact
-  // grows with size and size grows with impact, so the amount needed is solved iteratively.
-  for(let i=0;i<5&&btc>0;i++){const slip=tradeImpact(Math.min(state.wallets.hot,btc)*price,1);btc=need/(price*(1-fee)*(1-slip))}
-  btc=Math.min(state.wallets.hot,btc);if(btc<=0)return 0;const impact=tradeImpact(btc*price,1);if(impact>0)addPressure(btc*price,1);state.wallets.hot-=btc;const proceeds=btc*price*(1-fee)*(1-impact);state.cash+=proceeds;
-  log(`Settlement conversion: ${policy.name}`,`${fmtBtc(btc)} sold · +${fmtUsd(proceeds)}`,"trade");
-  const left=controlled(),drained=btc/Math.max(btc+left,1e-12);
-  if(!silent){
-    const heavy=left<=0||drained>=.5;
-    showToast(heavy?"Treasury nearly emptied to pay the bill":"Bill covered by selling BTC",
-      `${fmtBtc(btc)} was sold at ${fmtUsd(price)} to raise ${fmtUsd(proceeds)} for the operating bill, because liquid cash did not cover it. Your standing instruction is Cover the bill, so it sold the shortfall and nothing more. ${left>0?`${fmtBtc(left)} is still self-held.`:"You now hold no BTC, so the next bill has to come from cash."}`,
-      heavy?"bad":"success","finance");
-  }
-  return proceeds;
-}
-function finishMonthlySettlement(kind="cash",automatic=false){
-  const pending=state.pendingSettlement;if(!pending||state.cash+1e-8<pending.due)return false;const rescueFeedback=settlementRescueFeedback(kind,pending.due,state.cash-pending.due);state.cash-=pending.due;const interest=pending.loanInterest||0;log("Operating bill settled",fmtUsd(pending.due));if(interest>0)log("Project finance interest",fmtUsd(interest));recordOperatorMonth(pending.snapshot,kind==="cash"||kind==="policy");state.bill=0;state.billLedger=blankBillLedger();state.lastMonth=pending.month;state.pendingSettlement=null;state.debt=0;state.power=!state.policyLock;clearTimeout(toastTimer);toast=null;
-  let hardwareOpened=false;if(!state.ended){state.speed=pending.resumeSpeed||state.returnSpeed||0;hardwareOpened=activateNextHardwareAlert();setTimer()}save();if(automatic&&!hardwareOpened){refreshLive();requestAnimationFrame(()=>{refreshDashboardVisuals();refreshMinePricing()})}else render();if(!automatic&&rescueFeedback)setTimeout(()=>showToast(rescueFeedback[0],rescueFeedback[1],"warning","finance"),0);return true;
 }
 function queueMonthlySettlement(due,month,loanInterest,silent=false){
   const snapshot=settlementSnapshot(due,month),resumeSpeed=state.speed||state.returnSpeed||0;treasurySaleForSettlement(due,silent);state.pendingSettlement={due,month,loanInterest,snapshot,resumeSpeed};
@@ -435,10 +379,6 @@ function liquidateForSettlement(){
 }
 function takeBridgeFinance(){
   const p=state.pendingSettlement;if(!p||state.time<MARKET)return;const short=Math.max(0,p.due-state.cash),principal=short*1.15;state.projectLoan+=principal;state.cash+=short;state.operator.bridgeLoans++;log("Emergency bridge finance",`${fmtUsd(principal)} principal for ${fmtUsd(short)} liquidity`);finishMonthlySettlement("bridge");
-}
-function enterReceivership(){
-  const p=state.pendingSettlement;if(!p)return;state.operator.restructures++;const haircut=Math.min(.25,.1+(state.operator.restructures-1)*.05),btcSeized=controlled()*haircut;sellControlledBtc(btcSeized);let machines=0;HARDWARE.filter(h=>!h.permanent).forEach(h=>{const qty=Math.ceil((state.hardware[h.id]||0)*.25);state.hardware[h.id]=Math.max(0,(state.hardware[h.id]||0)-qty);machines+=qty});recordOperatorMonth(p.snapshot,false);state.bill=0;state.billLedger=blankBillLedger();state.debt=0;state.cash=0;state.lastMonth=p.month;state.pendingSettlement=null;state.power=false;clearTimeout(toastTimer);toast=null;log("Receivership",`${Math.round(haircut*100)}% of self-held BTC and ${machines} miners seized`);
-  if(state.operator.restructures>=3){state.ended=true;state.endReason="receivership";state.speed=0;log("Scored campaign ended","third receivership");recordCareerRun()}else state.speed=p.resumeSpeed||state.returnSpeed||0;setTimer();save();render();if(state.operator.restructures<3)setTimeout(()=>showToast("Receivership kept the run alive",`${fmtBtc(btcSeized)} and ${machines} miner${machines===1?" was":"s were"} seized. Mining remains off; this is strike ${state.operator.restructures} of 3.`,"warning","finance"),0);
 }
 function strategySecurity(id){return STRATEGY_SECURITIES.find(x=>x.id===id)}
 function strategyPrice(id,t=state.time){const s=strategySecurity(id);if(!s||t<at(s.date))return 0;const ratio=priceAt(t)/priceAt(at(s.date));return Math.max(1,s.base*(1+s.btcBeta*(ratio-1)))}
