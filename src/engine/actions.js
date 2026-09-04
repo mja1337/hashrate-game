@@ -77,11 +77,13 @@ function sellHardwareBtc(id,requested=1){
   const qty=Math.min(Math.max(1,Math.floor(Number(requested)||1)),owned),value=resaleHardwareValue(h)*qty,btc=value/priceAt(state.time);
   state.decommissionedHardware[id]-=qty;state.wallets.hot+=btc;log(`Sold ${qty} × ${h.name}`,`+${fmtBtc(btc)} · ${fmtUsd(value)} resale value`,"fleet");showToast("Miner sale complete",`${qty} × ${h.name} left the operation and ${fmtBtc(btc)} is now in the hot wallet.`,"info","mine");save();renderMineContent();
 }
-function resaleHardwareValue(h){
-  const age=Math.max(0,(state.time-at(h.date))/DAY/365),halfLife=h.era==="HYDRO ASIC"?4:h.era==="ASIC"?3:h.era==="FPGA"?2:1.5;
-  const retained=Math.max(.025,.45*Math.pow(.5,age/halfLife)),reference=priceAt(Math.max(MARKET,state.time-DAY*365)),market=Math.max(.7,Math.min(1.3,priceAt(state.time)/reference)),glut=state.hardwareGlut&&state.time<state.hardwareGlut.until?1-state.hardwareGlut.discount:1;
-  return h.cost*retained*market*glut;
-}
+/* What a machine fetches is what it is worth on the market, less the spread you give up
+   selling it. It used to depreciate on its own curve, independent of the purchase price;
+   once purchase prices started depreciating too, the two curves crossed at about three and a
+   half years and a decade-old machine could be bought and instantly resold for 2.4x what it
+   cost. Pricing the sale off the same market factor makes that impossible by construction. */
+const RESALE_HAIRCUT=.65;
+function resaleHardwareValue(h){return h.cost*hardwareMarketFactor(h)*RESALE_HAIRCUT}
 function facilityReserve(f){
   const r=region(),fs=fleet(),nodeW=nodePowerWatts();
   const rate=powerRate(r,state.time);

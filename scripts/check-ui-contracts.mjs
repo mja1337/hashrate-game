@@ -95,6 +95,24 @@ assert((controlsSource.match(/<button/g) || []).length === 1, "A Mine card's uni
 assert(controlsSource.includes("data-hardware-qty") && controlsSource.includes("data-hardware-currency"), "Mine buy control is missing the quantity or currency selector");
 
 assert(inline.includes("internet:45"), "Starter NA region internet bill is not the era-accurate residential figure");
+// SECOND-HAND HARDWARE — purchase prices used to be flat forever while resale depreciated, so
+// the newest machine won on payback, hash-per-dollar and hash-per-watt at every date in every
+// region, and a decade-old machine cost full list to buy but sold for 4% of it.
+assert(inline.includes("function hardwareMarketFactor("), "Hardware price depreciation is missing");
+assert(/HW_PRICE_PLATEAU=\.5,HW_PRICE_HALFLIFE=1\.25,HW_PRICE_FLOOR=\.03/.test(inline),
+  "The hardware depreciation curve has moved off its calibrated values");
+assert(inline.includes("h.cost*hardwareMarketFactor(h)*(hasSkill(\"procurement\")"),
+  "hardwareUnitCost no longer prices against the market, so old hardware costs list price again");
+assert(inline.includes("function incomingConditionFor("),
+  "Used hardware arrives in mint condition, which a years-old machine is not");
+assert(/incomingConditionFor[\s\S]{0,200}Math\.max\(70/.test(inline),
+  "Incoming condition is not floored above the 65% threshold that takes a type offline");
+assert(inline.includes("const RESALE_HAIRCUT=.65") && inline.includes("h.cost*hardwareMarketFactor(h)*RESALE_HAIRCUT"),
+  "Resale is priced independently of purchase again, which allows buying a machine and reselling it for more");
+assert(inline.includes("state.hardwareGlut&&t<state.hardwareGlut.until?1-state.hardwareGlut.discount:1"),
+  "A liquidation glut no longer reaches the purchase price, so it only ever punishes the player");
+assert(inline.includes("method-secondhand"), "Method does not document second-hand hardware pricing");
+
 // DEMAND RESPONSE — a curtailment contract is paid for the capacity it releases. Without the
 // credit the contract was strictly worse than every other in every month of the campaign, and
 // the game shipped a chapter about an operation whose economics are exactly this payment.
@@ -283,7 +301,11 @@ assert(inline.includes("state.milestoneLog.push({id:m.id,time:state.time})") && 
 assert(inline.includes('toast-${kind}') && inline.includes('milestone:"Milestone reached"') && css.includes(".toast.toast-milestone{"), "Milestone toasts do not get distinct styling and language from bad-event toasts");
 assert(inline.includes("(state.milestones?.length||0)/MILESTONES.length*80"), "Milestone score component still divides by a hardcoded count instead of the roster length");
 assert(inline.includes('e.fx==="computenorthx"') && inline.includes('e.fx==="corescix"') && inline.includes('e.fx==="riotx"'), "Rival lifecycle events are not wired into applyEvent");
-assert(inline.includes("state.hardwareGlut&&state.time<state.hardwareGlut.until?1-state.hardwareGlut.discount:1") && inline.includes("h.cost*retained*market*glut"), "Hardware resale value does not react to a rival bankruptcy glut");
+// The glut now reaches BOTH sides of the market through hardwareMarketFactor: it softens what
+// you can sell for and what you must pay, which is what a liquidation actually does.
+assert(inline.includes("state.hardwareGlut&&t<state.hardwareGlut.until?1-state.hardwareGlut.discount:1")
+  && inline.includes("h.cost*hardwareMarketFactor(h)*RESALE_HAIRCUT"),
+  "Hardware resale value does not react to a rival bankruptcy glut");
 assert(inline.includes('const CAREER_KEY="hashrate-career-v1"') && inline.includes("function recordCareerRun()") && inline.includes("function loadCareer()"), "Cross-run career persistence is missing");
 assert(inline.includes("function runRecap()") && inline.includes('class="run-recap"') && inline.includes("${runRecap()}${careerSummaryHtml(\"end\")}"), "End-of-run narrative recap is missing from the end screen");
 assert(inline.includes('${careerSummaryHtml("intro")}'), "Career summary is missing from the campaign-start screen");

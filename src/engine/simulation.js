@@ -269,7 +269,38 @@ function powerContract(){return POWER_CONTRACTS.find(x=>x.id===state.contract)||
 function powerRate(r,t=state.time){const c=powerContract(),shock=c.id==="fixed"?1:energyShock(t);return r.kwh*c.mult*shock*energyEfficiencyFactor()*rateMultiplier()*energyLoadFactor()}
 function dailyEnergyCostForWatts(watts,t=state.time,r=region()){return Math.max(0,watts)/1000*24*powerRate(r,t)*(hasSkill("heat")?.96:1)}
 function hasStaff(id){return state.staff.includes(id)}
-function hardwareUnitCost(h){return h.cost*(hasSkill("procurement")?.94:1)*(hasStaff("procurementlead")?.95:1)}
+/* HARDWARE PRICES DO NOT HOLD. A machine sold at list while it was the current thing and then
+   fell away fast: an S9 listed near $2,100 in 2016 and traded at $100-300 by 2019. The game
+   used to charge list price forever, which made the newest machine the right buy on payback,
+   hash per dollar AND hash per watt at every date and in every region — an eighteen-machine
+   catalog with one answer. Resale already depreciated, so you could sell a decade-old S9 for
+   4% of list while buying one cost 100%: there was no second-hand market on the buy side, and
+   the second-hand market is where old ASICs actually went.
+
+   Depreciation runs on the same shape resale uses, against the same BTC-momentum factor,
+   because hardware prices collapsed hardest in bear markets rather than merely with age. It
+   does not make old hardware good — the newest machine still wins wherever power is
+   expensive. It makes old hardware CHEAP, which is a different and true thing, and it is why
+   worn S9s ended up running on sub-$0.04 power long after they stopped being worth buying new. */
+const HW_PRICE_PLATEAU=.5,HW_PRICE_HALFLIFE=1.25,HW_PRICE_FLOOR=.03;
+function hardwareMarketFactor(h,t=state.time){
+  const age=Math.max(0,(t-at(h.date))/DAY/365);
+  const depreciation=age<=HW_PRICE_PLATEAU?1:Math.max(HW_PRICE_FLOOR,Math.pow(.5,(age-HW_PRICE_PLATEAU)/HW_PRICE_HALFLIFE));
+  const reference=priceAt(Math.max(MARKET,t-DAY*365)),momentum=t<MARKET?1:Math.max(.7,Math.min(1.3,priceAt(t)/reference));
+  // A liquidation glut softens secondary prices. That is bad if you are selling and good if
+  // you are buying, and the game only ever modelled the first half.
+  const glut=state.hardwareGlut&&t<state.hardwareGlut.until?1-state.hardwareGlut.discount:1;
+  return depreciation*momentum*glut;
+}
+/* A machine bought years after release is a used machine, and arrives with the wear that
+   implies. Floored above the 65% threshold that takes a hardware type offline, so a
+   second-hand purchase is a worse machine rather than an immediate brick. */
+function incomingConditionFor(h,t=state.time){
+  const age=Math.max(0,(t-at(h.date))/DAY/365);
+  if(age<=HW_PRICE_PLATEAU)return 100;
+  return Math.max(70,Math.round(100-(age-HW_PRICE_PLATEAU)*7));
+}
+function hardwareUnitCost(h){return h.cost*hardwareMarketFactor(h)*(hasSkill("procurement")?.94:1)*(hasStaff("procurementlead")?.95:1)}
 function staffMonthlyCost(){return state.staff.reduce((sum,id)=>sum+(STAFF.find(x=>x.id===id)?.salary||0),0)}
 function insuranceMonthlyCost(){return state.insured?fleet().value*.0015:0}
 function facilityMoveRisk(id){
@@ -319,7 +350,11 @@ function monthlyCost(){
   const staff=staffMonthlyCost(),insurance=insuranceMonthlyCost(),internet=internetMonthlyCost(),nodeNetwork=totalNodeMonthlyOverhead();return{energy,rent:f.rent,staff,insurance,internet,nodeNetwork,total:energy+f.rent+staff+insurance+internet+nodeNetwork,rate};
 }
 function advanceFleetLifecycle(){
-  state.commissioningJobs=state.commissioningJobs.filter(job=>{if(job.due>state.time)return true;const h=HARDWARE.find(item=>item.id===job.id);state.hardware[job.id]=(state.hardware[job.id]||0)+job.qty;awardXp((6+3*Math.log2(1+(h?.hash||0)/1e9))*Math.log2(1+job.qty),"deploy");log(`Commissioned ${job.qty} × ${h?.name||job.id}`,"Racked, configured and hashing","fleet");showToast("Commissioning complete",`${job.qty} × ${h?.name||"miner"} is now connected to the fleet.`);renderFullQueued=true;return false});
+  state.commissioningJobs=state.commissioningJobs.filter(job=>{if(job.due>state.time)return true;const h=HARDWARE.find(item=>item.id===job.id);
+    if(h){const incoming=incomingConditionFor(h,job.orderedAt||state.time);
+      if(incoming<100){const existing=state.hardware[job.id]||0,prior=maintenanceCondition(h),total=existing+job.qty;
+        if(total>0)state.maintenance.condition[job.id]=(existing*prior+job.qty*incoming)/total}}
+    state.hardware[job.id]=(state.hardware[job.id]||0)+job.qty;awardXp((6+3*Math.log2(1+(h?.hash||0)/1e9))*Math.log2(1+job.qty),"deploy");log(`Commissioned ${job.qty} × ${h?.name||job.id}`,"Racked, configured and hashing","fleet");showToast("Commissioning complete",`${job.qty} × ${h?.name||"miner"} is now connected to the fleet.`);renderFullQueued=true;return false});
   const job=state.relocationJob;if(job&&job.due<=state.time){const destination=REGIONS.find(r=>r.id===job.id);state.region=job.id;state.relocationJob=null;state.policyLock=null;state.power=state.debt<=0;log(`Fleet arrived in ${destination?.name||job.id}`,"Site commissioning complete","operations");showToast("Relocation complete",`The fleet is live at ${destination?.name||job.id}.`);renderFullQueued=true}
   const upgradeJob=state.facilityUpgradeJob;if(upgradeJob&&upgradeJob.due<=state.time){
     const destination=FACILITIES.find(x=>x.id===upgradeJob.id);state.facility=upgradeJob.id;state.facilityUpgradeJob=null;state.power=state.debt<=0;
