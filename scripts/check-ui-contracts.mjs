@@ -95,6 +95,21 @@ assert((controlsSource.match(/<button/g) || []).length === 1, "A Mine card's uni
 assert(controlsSource.includes("data-hardware-qty") && controlsSource.includes("data-hardware-currency"), "Mine buy control is missing the quantity or currency selector");
 
 assert(inline.includes("internet:45"), "Starter NA region internet bill is not the era-accurate residential figure");
+// FLOOR SPRITES — every sprite used to carry its own copy of its machine's drawing: 146KB of
+// the floor's 162KB at the largest sites, the same few pictures repeated 182 times. One
+// <symbol> per owned type plus a <use> per sprite says it once. The symbols must stay inside
+// the floor markup: renderMineContent() replaces .content alone, and a <use> must never
+// outlive the <symbol> it points at.
+assert(inline.includes("function floorSpriteSymbols("), "The floor sprite <symbol> block is missing");
+assert(inline.includes("function minerArt("), "minerArt is missing, so the drawing cannot be shared by reference");
+assert(/<use href="#ma-\$\{id\}"\/>/.test(inline), "Floor sprites do not reference the shared symbol");
+assert(inline.includes("${floorSprite(h.id)}${badge}"),
+  "The floor renders inline drawings again instead of referencing the shared symbol");
+assert(inline.includes("floorSpriteSymbols(owned)+owned.map("),
+  "The symbol block is not emitted alongside the sprites that reference it");
+assert(inline.includes("`<svg class=\"miner-icon\" viewBox=\"0 0 64 46\" aria-label=\"${id} mining hardware illustration\">${minerArt(id)}${minerStatusSvg(id)}</svg>`"),
+  "minerSvg no longer inlines the drawing, which its non-floor callers rely on");
+
 // FORCED LAYOUT — reading offsetHeight mid-render forces a synchronous layout of the DOM the
 // previous render wrote. Both sites use the value only to pin min-height while the scroll
 // position is restored, so reading it when keepPosition is false is pure dead work.
@@ -303,7 +318,9 @@ assert(inline.includes("function normalizeXp(raw)") && inline.includes("state.xp
 assert(inline.includes('id="live-xp-fill"') && inline.includes('set("live-xp-level"') && css.includes(".xp-meter{") && css.includes(".xp-track i{"), "The header XP bar is missing, or no longer updates on the live tick");
 assert(/@media\(max-width:900px\)\{\.topbar\{position:relative\}\.xp-meter\{position:absolute/.test(css), "The narrow-screen XP bar must collapse to a hairline strip under the topbar, or it squeezes the brand and clock into each other");
 assert(inline.includes('class="xp-breakdown"') && inline.includes("Best-share records"), "The dashboard XP source breakdown is missing");
-const minerArtBody = (inline.match(/function minerSvg\(id\)\{[\s\S]*?\n  return/) || [""])[0];
+// The drawings live in minerArt() so the floor can share them by reference; this guards the
+// behaviour (one distinct drawing per machine) rather than which function holds it.
+const minerArtBody = (inline.match(/function minerArt\(id\)\{[\s\S]*?\n\}/) || [""])[0];
 assert(minerArtBody && !/\(\s*id===\"[^\"]+\"\s*\|\|\s*id===\"[^\"]+\"/.test(minerArtBody), "Two hardware ids share one miner drawing — every machine needs its own art (this is how the Radeon HD 5870 and the six-GPU open rig ended up identical)");
 assert(minerArtBody.includes('id==="gpurig"?'), "The six-GPU open rig no longer has its own drawing");
 // Payout schemes were invented at particular moments. A pool must never be
