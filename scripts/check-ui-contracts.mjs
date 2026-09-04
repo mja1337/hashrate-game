@@ -95,6 +95,22 @@ assert((controlsSource.match(/<button/g) || []).length === 1, "A Mine card's uni
 assert(controlsSource.includes("data-hardware-qty") && controlsSource.includes("data-hardware-currency"), "Mine buy control is missing the quantity or currency selector");
 
 assert(inline.includes("internet:45"), "Starter NA region internet bill is not the era-accurate residential figure");
+// DEMAND RESPONSE — a curtailment contract is paid for the capacity it releases. Without the
+// credit the contract was strictly worse than every other in every month of the campaign, and
+// the game shipped a chapter about an operation whose economics are exactly this payment.
+assert(inline.includes("function curtailmentCreditDaily("), "The demand-response credit is missing");
+assert(inline.includes("function curtailmentIntensityAt("),
+  "Curtailment intensity is not a pure function of time, so the tariff desk cannot price an unselected contract");
+assert(/CURTAIL_BASE=\.05,CURTAIL_SLOPE=\.8,CURTAIL_CAP=\.6,CURTAIL_CREDIT=1\.4/.test(inline),
+  "The curtailment shape or credit multiplier has moved off its calibrated values");
+assert(inline.includes('state.contract==="curtail"?1-curtailmentIntensity():1'),
+  "Curtailment load is a flat duty cycle again rather than tracking the energy shock");
+assert(inline.includes("-curtailmentCreditDaily(minerWatts,next,r)"),
+  "The daily operating bill does not receive the demand-response credit");
+assert(inline.includes("creditFor=c=>c.id===\"curtail\""),
+  "The energy tariff desk quotes curtailment without its credit, so contracts cannot be compared");
+assert(inline.includes("method-demand-response"), "Method does not document demand response");
+
 // FLOOR SPRITES — every sprite used to carry its own copy of its machine's drawing: 146KB of
 // the floor's 162KB at the largest sites, the same few pictures repeated 182 times. One
 // <symbol> per owned type plus a <use> per sprite says it once. The symbols must stay inside

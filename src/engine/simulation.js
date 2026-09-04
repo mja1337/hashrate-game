@@ -234,8 +234,35 @@ function venueFrozen(id){return state.time<(state.ops?.venueFreezes?.[id]||0)}
 function rateMultiplier(){return state.powerRateShock&&state.time<state.powerRateShock.until?state.powerRateShock.multiplier:1}
 const ANNOUNCE_WINDOW=DAY*120;
 function announced(item,t=state.time){return !item?.date||at(item.date)<=t+ANNOUNCE_WINDOW}
-function contractLoadFactor(){return state.contract==="curtail"?.78:1}
-function contractUptimeFactor(){return state.contract==="curtail"?.78:state.contract==="spot"&&energyShock(state.time)>1?.9:1}
+/* DEMAND RESPONSE — a curtailment contract does not merely use less power, it is PAID for the
+   load it gives back, and that payment is the entire reason an operator signs one. Riot's
+   Rockdale site earned more from ERCOT power credits than from mining in some months of 2023;
+   that is the operation this game's own "A Texas miner grows grid-sized" chapter is about.
+   The contract used to model the giving-up without the getting-paid, which left it strictly
+   worse than every other contract in every month of the campaign — a dead option.
+
+   It is also not a flat duty cycle. Demand response is CALLED when the grid is short, so
+   curtailment tracks the same recorded energy shock that raises everyone else's tariff: a
+   light standing obligation in calm months, deep curtailment during a crisis, paid at the
+   scarcity value of the capacity released. That is what makes the contract a real decision —
+   during a shock a comfortable operation buys a fixed PPA and keeps hashing, while a
+   squeezed one curtails and takes the credit. */
+const CURTAIL_BASE=.05,CURTAIL_SLOPE=.8,CURTAIL_CAP=.6,CURTAIL_CREDIT=1.4;
+function curtailmentIntensityAt(t=state.time){return Math.min(CURTAIL_CAP,CURTAIL_BASE+Math.max(0,energyShock(t)-1)*CURTAIL_SLOPE)}
+function curtailmentIntensity(t=state.time){return state.contract==="curtail"?curtailmentIntensityAt(t):0}
+function curtailmentCreditDaily(watts,t=state.time,r=region()){
+  const intensity=curtailmentIntensity(t);
+  if(!intensity||watts<=0)return 0;
+  // `watts` is the load actually drawn after curtailment; recover the load given back.
+  const released=watts/(1-intensity)*intensity;
+  const credit=released/1000*24*r.kwh*energyShock(t)*CURTAIL_CREDIT;
+  // Capped at the power it would have bought. Free electricity during a crisis is a large
+  // enough prize; letting the credit run past it turns a big site into a subsidy farm and
+  // can drive the whole operating bill negative, which the settlement path never expects.
+  return Math.min(credit,dailyEnergyCostForWatts(watts,t,r));
+}
+function contractLoadFactor(){return state.contract==="curtail"?1-curtailmentIntensity():1}
+function contractUptimeFactor(){return state.contract==="curtail"?1-curtailmentIntensity():state.contract==="spot"&&energyShock(state.time)>1?.9:1}
 function energyLoadFactor(){const fs=fleet(),load=fs.cap?fs.kw/fs.cap:0;return 1+Math.pow(Math.max(0,load-.55),2)*1.8}
 function energyEfficiencyFactor(){return (hasSkill("metering")?.96:1)*(hasSkill("curtailment")?.96:1)}
 function powerContract(){return POWER_CONTRACTS.find(x=>x.id===state.contract)||POWER_CONTRACTS[0]}
@@ -288,7 +315,7 @@ function advanceOperationalRisks(next){
 function monthlyCost(){
   const fs=fleet(),r=region(),f=facility(),nodeW=nodePowerWatts();
   const rate=powerRate(r,state.time);
-  const projectedWatts=fs.w*contractLoadFactor()+(state.node>=1?nodeW:0),energy=dailyEnergyCostForWatts(projectedWatts,state.time,r)*30.4375;
+  const projectedWatts=fs.w*contractLoadFactor()+(state.node>=1?nodeW:0),energy=(dailyEnergyCostForWatts(projectedWatts,state.time,r)-curtailmentCreditDaily(fs.w*contractLoadFactor(),state.time,r))*30.4375;
   const staff=staffMonthlyCost(),insurance=insuranceMonthlyCost(),internet=internetMonthlyCost(),nodeNetwork=totalNodeMonthlyOverhead();return{energy,rent:f.rent,staff,insurance,internet,nodeNetwork,total:energy+f.rent+staff+insurance+internet+nodeNetwork,rate};
 }
 function advanceFleetLifecycle(){
@@ -311,7 +338,7 @@ function nextSettlementDate(offset=0){const date=new Date(state.time);return Dat
 function settlementForecast(){
   const fs=fleet(),r=region(),f=facility(),nodeW=nodePowerWatts();
   const rate=powerRate(r,state.time);
-  const minerWatts=state.power&&!gridCutOff()&&!state.policyLock?fs.w*contractLoadFactor():0,nodeWatts=nodeHostPowered()?nodeW:0,energyDaily=dailyEnergyCostForWatts(minerWatts+nodeWatts,state.time,r),daily={energy:energyDaily,rent:f.rent/30.4375,internet:internetMonthlyCost()/30.4375,staff:staffMonthlyCost()/30.4375,insurance:insuranceMonthlyCost()/30.4375,nodeNetwork:totalNodeMonthlyOverhead()/30.4375,other:0};
+  const minerWatts=state.power&&!gridCutOff()&&!state.policyLock?fs.w*contractLoadFactor():0,nodeWatts=nodeHostPowered()?nodeW:0,energyDaily=dailyEnergyCostForWatts(minerWatts+nodeWatts,state.time,r)-curtailmentCreditDaily(minerWatts,state.time,r),daily={energy:energyDaily,rent:f.rent/30.4375,internet:internetMonthlyCost()/30.4375,staff:staffMonthlyCost()/30.4375,insurance:insuranceMonthlyCost()/30.4375,nodeNetwork:totalNodeMonthlyOverhead()/30.4375,other:0};
   let cursor=new Date(state.time),days=0,month=cursor.getUTCMonth();do{cursor=new Date(cursor.getTime()+DAY);days++}while(cursor.getUTCMonth()===month);
   const accrued=accruedBillBreakdown(),breakdown={};Object.keys(accrued).forEach(key=>breakdown[key]=accrued[key]+(daily[key]||0)*days);breakdown.finance=state.projectLoan*(hasStaff("treasurer")?.009:.012);const estimated=Object.values(breakdown).reduce((sum,value)=>sum+value,0),cashAfter=state.cash-estimated,coverage=estimated?Math.max(0,Math.min(100,state.cash/estimated*100)):100;
   return{days,dueAt:nextSettlementDate(),daily,accrued,breakdown,estimated,cashAfter,coverage,remaining:Math.max(0,estimated-state.bill)};
@@ -456,7 +483,7 @@ function tick(silent=false){
   advanceNodeSync(silent);
   if(!silent&&!faucet&&faucetActive(next)&&nextRand()<.05)triggerFaucet(next);
   const fs=fleet(),r=region(),f=facility(),nodeW=nodePowerWatts();state.operator.periodDays++;
-  const rate=powerRate(r,next),minerWatts=state.power&&state.debt<=0&&!state.policyLock&&!fleetGrounded()?fs.w*contractLoadFactor():0,nodeWatts=nodeHostPowered()?nodeW:0,dailyCosts={energy:dailyEnergyCostForWatts(minerWatts+nodeWatts,next,r),rent:f.rent/30.4375,internet:internetMonthlyCost()/30.4375,staff:staffMonthlyCost()/30.4375,insurance:insuranceMonthlyCost()/30.4375,nodeNetwork:totalNodeMonthlyOverhead()/30.4375},daily=Object.values(dailyCosts).reduce((sum,value)=>sum+value,0);
+  const rate=powerRate(r,next),minerWatts=state.power&&state.debt<=0&&!state.policyLock&&!fleetGrounded()?fs.w*contractLoadFactor():0,nodeWatts=nodeHostPowered()?nodeW:0,dailyCosts={energy:dailyEnergyCostForWatts(minerWatts+nodeWatts,next,r)-curtailmentCreditDaily(minerWatts,next,r),rent:f.rent/30.4375,internet:internetMonthlyCost()/30.4375,staff:staffMonthlyCost()/30.4375,insurance:insuranceMonthlyCost()/30.4375,nodeNetwork:totalNodeMonthlyOverhead()/30.4375},daily=Object.values(dailyCosts).reduce((sum,value)=>sum+value,0);
   Object.entries(dailyCosts).forEach(([key,value])=>state.billLedger[key]=(state.billLedger[key]||0)+value);state.bill+=daily;state.powerSpent+=daily;
   if(state.mode==="pool"&&!poolClosed(state.pool)&&!poolEligible()){const lostPool=poolData();state.mode="solo";log(`${lostPool.name} no longer available`,`Requires ${SKILLS.find(x=>x.id===lostPool.requires)?.name||lostPool.requires} · failed over to solo mining`,"operations");if(!silent)showToast("Pool unavailable",`${lostPool.name} needs ${SKILLS.find(x=>x.id===lostPool.requires)?.name||lostPool.requires}. Your fleet has failed over to solo mining rather than quietly mining solo while the tab still said pool.`,"bad","pools")}
   if(state.mode==="pool"&&poolClosed(state.pool)){const closedPool=poolData();state.mode="solo";log(`${closedPool.name} shut down`,"Failed over to solo mining","operations");if(!silent)showToast("Pool shut down",`${closedPool.name} has ceased operating. Your fleet has failed over to solo mining.`,"bad","pools")}
