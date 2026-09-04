@@ -280,6 +280,48 @@ rule("a used machine arrives worn but never pre-broken", () => {
   assert(worst < 100, "age does not affect the condition a machine arrives in");
 });
 
+/* ---- SECURITIES: the instruments must behave as advertised ---- */
+
+rule("each security's price tracks the BTC sensitivity it advertises", () => {
+  const rows = json(`STRATEGY_SECURITIES.map(s=>{
+    const t0=at(s.date),t1=Math.min(END,t0+300*DAY);
+    state.time=t0;const p0=strategyPrice(s.id);
+    state.time=t1;const p1=strategyPrice(s.id);
+    const btc=priceAt(t1)/priceAt(t0)-1;
+    return {ticker:s.ticker,declared:s.btcBeta,implied:btc?((p1/p0-1)/btc):null};
+  })`);
+  for (const row of rows) {
+    assert(row.implied !== null, `${row.ticker} has no tradable window to price against`);
+    close(row.implied, row.declared, .02, `${row.ticker} moves at beta ${row.implied.toFixed(2)} against a declared ${row.declared}`);
+  }
+});
+
+rule("each security pays the yield it advertises", () => {
+  const rows = json(`(()=>{
+    const out=[];
+    for(const sec of STRATEGY_SECURITIES){
+      ${SITE(``)}
+      // Held at a home site with no fleet and deep cash, so the run cannot end early and
+      // drag the measurement down — an earlier version of this went bankrupt at day 172
+      // and reported a 10% instrument paying 4.7%.
+      state.time=at(sec.date)+DAY;state.facility="home";state.region="na";
+      state.hardware={};state.cash=1e9;
+      state.strategy={mstr:0,strk:0,strf:0,strd:0,strc:0,yieldEarned:0};
+      state.strategy[sec.id]=1000;
+      const notional=1000*strategyPrice(sec.id);
+      let days=0;
+      for(let d=0;d<365;d++){const before=state.time;tick();if(state.time>before)days++}
+      out.push({ticker:sec.ticker,declared:sec.yield*100,
+        effective:100*state.strategy.yieldEarned/notional,days,ended:!!state.ended});
+    }
+    return out;})()`);
+  for (const row of rows) {
+    assert(row.days === 365 && !row.ended, `the ${row.ticker} measurement only ran ${row.days} days, so it proves nothing`);
+    // Accrual is on the live price, so a year of drift moves the realised rate a little.
+    close(row.effective, row.declared, 1.5, `${row.ticker} advertises ${row.declared}% and paid ${row.effective.toFixed(2)}%`);
+  }
+});
+
 /* ---- COOLING: a ladder where every rung is a trade-off ---- */
 
 rule("no cooling plant is beaten on both cost and efficiency at the same tier", () => {
