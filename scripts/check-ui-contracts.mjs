@@ -95,6 +95,16 @@ assert((controlsSource.match(/<button/g) || []).length === 1, "A Mine card's uni
 assert(controlsSource.includes("data-hardware-qty") && controlsSource.includes("data-hardware-currency"), "Mine buy control is missing the quantity or currency selector");
 
 assert(inline.includes("internet:45"), "Starter NA region internet bill is not the era-accurate residential figure");
+// FORCED LAYOUT — reading offsetHeight mid-render forces a synchronous layout of the DOM the
+// previous render wrote. Both sites use the value only to pin min-height while the scroll
+// position is restored, so reading it when keepPosition is false is pure dead work.
+assert(inline.includes("keepPosition?app.offsetHeight:0"),
+  "render() reads offsetHeight unconditionally, forcing a layout whose result it discards");
+assert(inline.includes("keepPosition?host.offsetHeight:0"),
+  "renderMineContent() reads offsetHeight unconditionally, forcing a layout whose result it discards");
+assert(!/,previousHeight=(app|host)\.offsetHeight;/.test(inline),
+  "An unconditional offsetHeight read has come back into a render path");
+
 // ORDER-BOOK DEPTH — the constraint that stops an early fortune being a free one.
 assert(inline.includes("function tradeImpact("), "Order-book depth model is missing");
 assert(inline.includes("function marketCapAt("), "Market capitalisation accessor is missing");
