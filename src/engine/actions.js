@@ -296,7 +296,9 @@ function payDebt(){
   state.cash-=state.debt;log("Grid service restored",fmtUsd(state.debt),"finance");state.debt=0;state.arrearsDue=0;state.gridCutAnnounced=false;state.power=!state.policyLock;showToast("Arrears cleared","Power and internet are restored. The next operating bill is due at the month boundary as usual.","success","dashboard");save();render();
 }
 function setContract(id){if(!POWER_CONTRACTS.some(x=>x.id===id)||id===state.contract)return;state.contract=id;log("Power contract changed",powerContract().name);save();render()}
-function setConnectivityPlan(id){const plan=CONNECTIVITY_PLANS.find(x=>x.id===id);if(!plan||id===state.connectivity)return;if(plan.minFacility&&facilityTier()<plan.minFacility)return showToast("Connectivity unavailable",`${plan.name} requires a tier ${plan.minFacility} facility or larger.`);state.connectivity=id;log("Connectivity plan changed",`${plan.name} · ${fmtUsd(internetMonthlyCost())}/month`);save();render()}
+function setConnectivityPlan(id){const plan=CONNECTIVITY_PLANS.find(x=>x.id===id);if(!plan||id===state.connectivity)return;
+  // One availability rule, read by both the chooser and this switch, so they cannot disagree.
+  if(!connectivityAvailable(plan))return showToast("Connectivity unavailable",`${plan.name}: ${connectivityUnavailableReason(plan)}.`);state.connectivity=id;log("Connectivity plan changed",`${plan.name} · ${fmtUsd(internetMonthlyCost())}/month`);save();render()}
 function setTreasuryPolicy(id){if(!TREASURY_POLICIES.some(x=>x.id===id)||id===state.treasuryPolicy)return;state.treasuryPolicy=id;log("Settlement conversion changed",treasuryPolicy().name,"operations");save();render()}
 function hireStaff(id){const s=STAFF.find(x=>x.id===id);if(!s||(id!=="fieldtech"&&hasStaff(id)))return;if(!staffHiringAvailable())return showToast("Staffing unavailable","Move into the tier 3 Light industrial unit or a larger facility before building an internal team.");state.staff.push(id);const count=fieldTechnicianCount();log(`Hired ${s.name}`,id==="fieldtech"?`${count} technicians · ${fmtUsd(s.salary*count)}/month total`:`${fmtUsd(s.salary)}/month`);save();render()}
 function dismissStaff(id){

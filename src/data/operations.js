@@ -67,9 +67,33 @@ const POWER_CONTRACTS=[
    mining revenue, which made it cost more than fixed broadband AND earn less than it: optimal
    in none of 56 tier-and-region combinations. It is a backup link. You are on the fixed line
    almost all of the time, so there is no standing penalty to pay. */
+/* MINING IS NOT A BANDWIDTH BUSINESS. A Stratum connection is a few kilobits per second per
+   machine, so a hundred thousand miners still fit down a line that would struggle with one
+   office's video calls. What actually grows with a site is the wish for a second route, an
+   SLA, and someone to shout at — not throughput. The cost ladder used to multiply the
+   regional rate by six hundred at megacampus, which put business fibre at $75,600 a month
+   for a service whose real job is carrying block templates. */
 const CONNECTIVITY_PLANS=[
   {id:"fixed",name:"Local fixed broadband",mult:1,risk:1,payout:1,failover:1,desc:"Lowest recurring cost. One local upstream leaves the site exposed to cable, exchange and provider faults, and a fault means waiting for the provider."},
-  {id:"sim",name:"Dual-SIM cellular failover",mult:1.55,risk:1,payout:1,failover:.15,desc:"Two mobile carriers cannot stop the last mile being cut, but the site carries traffic again within the hour rather than waiting days for a repair crew."},
+  /* Starlink's value to a miner is not speed, it is that the last mile stops mattering: a
+     terminal works at a flare stack or a container yard with no trench to dig and no incumbent
+     to negotiate with. So its price is roughly global rather than a multiple of the local
+     rate, its reliability does not depend on local infrastructure either, and it barely scales
+     with site size because the answer to more site is more terminals.
+
+     Dated to 2021, when service moved beyond the invitation-only beta that opened in late
+     2020. It is deliberately unavailable in Sichuan and Iran: the service was not lawfully
+     offered in either, and pretending otherwise would be the kind of convenience this game
+     avoids elsewhere. */
+  {id:"starlink",name:"Starlink terminals",date:"2021-01-01",mult:1,flatBase:240,flatRisk:.02,scaleDamp:.35,payout:1,failover:.2,risk:1,
+    unavailableIn:["sichuan","iran"],
+    desc:"A satellite terminal ignores the local last mile entirely: no trenching, no incumbent, and the same price and reliability almost anywhere. Weather and obstructions drop it more often than a fixed line, but it returns in minutes rather than days."},
+  /* Two SIMs on a business data plan, not a second circuit — it was priced at 1.55x a fixed
+     line, which is what a whole extra service costs rather than what two modems cost. And the
+     switchover is automatic and near-instant: the point of cellular failover is that nobody
+     drives anywhere. Starlink arriving made this a dead option at the old numbers, which is
+     the contract catching a real mispricing rather than a design conflict. */
+  {id:"sim",name:"Dual-SIM cellular failover",mult:1.25,risk:1,payout:1,failover:.08,desc:"Two mobile carriers cannot stop the last mile being cut, but the modems switch over automatically: the site is carrying traffic again in minutes rather than waiting days for a splice crew."},
   {id:"fiber",name:"Business fibre + SLA",mult:2.8,risk:.32,payout:1.008,failover:1,minFacility:2,desc:"Diverse business routing and an SLA make the incident far less likely in the first place; faster propagation adds 0.8% effective mining revenue."}
 ];
 const STAFF=[

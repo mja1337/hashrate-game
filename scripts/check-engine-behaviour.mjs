@@ -167,6 +167,8 @@ rule("every connectivity plan is the best choice somewhere", () => {
           ${SITE(``)}
           state.time=at("2025-06-01");state.facility=f.id;state.region=reg;
           state.hardware={s21xp:n};state.connectivity=p.id;
+          // A plan you cannot buy here is not a choice available here.
+          if(!connectivityAvailable(p))continue;
           const fs=fleet();
           const rev=expectedDailyBtcForHash(fs.hash)*priceAt(state.time)*30.4375;
           const value=(p.payout-1)*rev-internetMonthlyCost()
@@ -1242,6 +1244,88 @@ rule("a second-hand machine arrives worn, within a band the player was shown", (
   assert(r.distinct > 3, `forty draws produced ${r.distinct} distinct conditions, so it is not really a draw`);
   assert(r.band.high <= 100 && r.band.low >= 55, "the condition band leaves the plausible range");
   assert(r.freshBand.spread === 0, "a machine still sold new arrives with second-hand uncertainty");
+});
+
+
+/* ---- CONNECTIVITY: a miner's internet bill is not a telco account ---- */
+
+/* Mining is not a bandwidth business. A Stratum connection is a few kilobits per second per
+   machine, so what a bigger site buys is redundancy and an SLA, not throughput. The ladder
+   used to multiply the regional rate by six hundred at megacampus, which billed a farm
+   $75,600 a month to carry block templates. */
+rule("the internet bill grows with the site gently, not exponentially", () => {
+  const r = json(`(()=>{
+    const read=(fac,plan)=>{${SITE(`state.time=at("2024-06-01");state.region="na";`)}
+      state.facility=fac;state.connectivity=plan;
+      return{cost:internetMonthlyCost(),scale:connectivityScale()};};
+    return{homeFixed:read("home","fixed"),megaFixed:read("megacampus","fixed"),
+      megaFibre:read("megacampus","fiber")};})()`);
+  const growth = r.megaFixed.cost / r.homeFixed.cost;
+  assert(growth > 3, `the largest site pays only ${growth.toFixed(1)}x the smallest, which is not scaling at all`);
+  assert(growth < 20, `the largest site pays ${growth.toFixed(0)}x the smallest for a service carrying block templates`);
+  assert(r.megaFibre.cost < 5000, `business fibre at megacampus bills ${Math.round(r.megaFibre.cost)} a month`);
+});
+
+/* A satellite terminal is the same hardware and the same monthly fee wherever it points, so
+   its price does not follow the local rate and its reliability does not follow the local
+   infrastructure. That is the whole proposition, and it makes the plan a bad deal where the
+   ground network is good and a transformative one where it is not. */
+rule("a satellite link is priced and rated globally, not locally", () => {
+  const r = json(`(()=>{
+    const read=(region,plan)=>{${SITE(`state.time=at("2024-06-01");`)}
+      state.region=region;state.facility="warehouse";state.connectivity=plan;
+      return{cost:Math.round(internetMonthlyCost()),risk:connectivityIncidentRisk()};};
+    return{naSat:read("na","starlink"),kenyaSat:read("kenya","starlink"),
+      naFixed:read("na","fixed"),kenyaFixed:read("kenya","fixed")};})()`);
+  assert(r.naSat.cost === r.kenyaSat.cost, `the terminal costs ${r.naSat.cost} in one region and ${r.kenyaSat.cost} in another`);
+  close(r.naSat.risk, r.kenyaSat.risk, 1e-9, "satellite incident risk moved with the region");
+  // Where the ground network is good it should lose; where it is bad it should win.
+  assert(r.naSat.cost > r.naFixed.cost && r.naSat.risk > r.naFixed.risk,
+    "satellite beats a good fixed line on both price and reliability, which makes the choice free");
+  assert(r.kenyaSat.cost < r.kenyaFixed.cost && r.kenyaSat.risk < r.kenyaFixed.risk,
+    "satellite does not beat a poorly served fixed line, so it solves nothing where it should");
+});
+
+rule("a satellite link cannot be bought before it existed or where it was not offered", () => {
+  const r = json(`(()=>{
+    const plan=CONNECTIVITY_PLANS.find(p=>p.id==="starlink");
+    const read=(when,region)=>{${SITE(``)}state.time=at(when);state.region=region;state.facility="warehouse";
+      return{ok:connectivityAvailable(plan),why:connectivityUnavailableReason(plan)};};
+    return{early:read("2016-01-01","na"),now:read("2024-06-01","na"),
+      blocked:read("2024-06-01","iran"),date:plan.date};})()`);
+  assert(r.date >= "2020-10-01", `the terminal is dated ${r.date}, before the service existed at all`);
+  assert(!r.early.ok && /not available until/i.test(r.early.why), `a 2016 site could buy it: "${r.early.why}"`);
+  assert(r.now.ok, "the terminal is unavailable even after launch");
+  assert(!r.blocked.ok && /not offered/i.test(r.blocked.why), `a sanctioned jurisdiction could buy it: "${r.blocked.why}"`);
+});
+
+/* Adding terminals is close to a flat cost, so the plan should not inherit the full ladder. */
+/* A plan does not travel with the fleet. Relocating to a jurisdiction that never offered the
+   service used to leave the site on it, billed and rated as though nothing had changed. */
+rule("relocating away from a plan's coverage falls the site back to a local line", () => {
+  const r = json(`(()=>{
+    ${SITE(`state.time=at("2024-06-01");`)}
+    state.region="na";state.facility="warehouse";state.connectivity="starlink";
+    const before=state.connectivity;
+    state.region="iran";
+    const changed=enforceConnectivityAvailability();
+    return{before,changed,after:state.connectivity,
+      stillAvailable:connectivityAvailable(connectivityPlan())};})()`);
+  assert(r.before === "starlink", "the test never got onto the plan it means to test");
+  assert(r.changed, "moving into a region without coverage changed nothing");
+  assert(r.after === "fixed", `the site fell back to ${r.after}`);
+  assert(r.stillAvailable, "the fallback plan is not itself available");
+});
+
+rule("satellite scales by adding terminals rather than by buying a bigger circuit", () => {
+  const r = json(`(()=>{
+    const read=(fac,plan)=>{${SITE(`state.time=at("2024-06-01");state.region="na";`)}
+      state.facility=fac;state.connectivity=plan;return internetMonthlyCost();};
+    return{satHome:read("home","starlink"),satMega:read("megacampus","starlink"),
+      fixedHome:read("home","fixed"),fixedMega:read("megacampus","fixed")};})()`);
+  const sat = r.satMega / r.satHome, fixed = r.fixedMega / r.fixedHome;
+  assert(sat < fixed, `satellite scales ${sat.toFixed(1)}x against a fixed line's ${fixed.toFixed(1)}x`);
+  assert(sat > 1, "satellite does not scale with the site at all, so a megacampus runs on one dish");
 });
 
 if (failures.length) {

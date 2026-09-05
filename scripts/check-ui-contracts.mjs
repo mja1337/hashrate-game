@@ -681,6 +681,12 @@ assert(inline.includes("function firmwareStatusHtml()") && inline.includes("${fi
 assert(/firmware-status[^"]*\$\{tone\}|firmware-status \$\{tone\}/.test(inline) && inline.includes('data-action="patch-firmware"'),
   "The Mine firmware panel no longer offers the patch action itself");
 
+/* The behavioural rule calls enforceConnectivityAvailability directly, so it cannot notice if
+   the relocation stops calling it. A plan that does not travel is only useful if something
+   checks on arrival. */
+assert(/state\.region=job\.id;\s*\n?\s*enforceConnectivityAvailability\(\);/.test(inline),
+  "Completing a relocation no longer re-checks connectivity availability, so a site can keep a plan its new jurisdiction never offered");
+
 const mineTabSource = await readFile(new URL("src/ui/tabs/mine.js", root), "utf8");
 /* hardwarePurchaseStatusHtml existed, was maintained, and was called by nothing — so the
    panel explaining WHY an order is capped, and now which market you are buying in, never
