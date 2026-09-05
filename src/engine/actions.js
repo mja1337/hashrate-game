@@ -300,7 +300,16 @@ function setConnectivityPlan(id){const plan=CONNECTIVITY_PLANS.find(x=>x.id===id
   // One availability rule, read by both the chooser and this switch, so they cannot disagree.
   if(!connectivityAvailable(plan))return showToast("Connectivity unavailable",`${plan.name}: ${connectivityUnavailableReason(plan)}.`);state.connectivity=id;log("Connectivity plan changed",`${plan.name} · ${fmtUsd(internetMonthlyCost())}/month`);save();render()}
 function setTreasuryPolicy(id){if(!TREASURY_POLICIES.some(x=>x.id===id)||id===state.treasuryPolicy)return;state.treasuryPolicy=id;log("Settlement conversion changed",treasuryPolicy().name,"operations");save();render()}
-function hireStaff(id){const s=STAFF.find(x=>x.id===id);if(!s||(id!=="fieldtech"&&hasStaff(id)))return;if(!staffHiringAvailable())return showToast("Staffing unavailable","Move into the tier 3 Light industrial unit or a larger facility before building an internal team.");state.staff.push(id);const count=fieldTechnicianCount();log(`Hired ${s.name}`,id==="fieldtech"?`${count} technicians · ${fmtUsd(s.salary*count)}/month total`:`${fmtUsd(s.salary)}/month`);save();render()}
+function hireStaff(id){const s=STAFF.find(x=>x.id===id);if(!s||(id!=="fieldtech"&&hasStaff(id)))return;
+  /* Two tiers of the same job are one job. Hiring up replaces the junior post rather than
+     stacking two salaries for overlapping work; hiring down while the senior is in post is
+     refused, because it would be paying twice for less. */
+  if(s.supersededBy&&hasStaff(s.supersededBy))return showToast("Already covered",`${STAFF.find(x=>x.id===s.supersededBy)?.name||"A senior post"} already plans materials for this site.`);
+  if(s.supersedes&&hasStaff(s.supersedes)){
+    const junior=STAFF.find(x=>x.id===s.supersedes);
+    state.staff=state.staff.filter(x=>x!==s.supersedes);
+    log(`${junior?.name||s.supersedes} role absorbed`,`${s.name} takes over materials planning`,"operations");
+  }if(!staffHiringAvailable())return showToast("Staffing unavailable","Move into the tier 3 Light industrial unit or a larger facility before building an internal team.");state.staff.push(id);const count=fieldTechnicianCount();log(`Hired ${s.name}`,id==="fieldtech"?`${count} technicians · ${fmtUsd(s.salary*count)}/month total`:`${fmtUsd(s.salary)}/month`);save();render()}
 function dismissStaff(id){
   const role=STAFF.find(x=>x.id===id);if(!role||!hasStaff(id))return;
   if(id==="fieldtech"){

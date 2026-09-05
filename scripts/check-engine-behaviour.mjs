@@ -1328,6 +1328,118 @@ rule("satellite scales by adding terminals rather than by buying a bigger circui
   assert(sat > 1, "satellite does not scale with the site at all, so a megacampus runs on one dish");
 });
 
+
+/* ---- MATERIALS PLANNING: paying somebody to watch the shelf ---- */
+
+/* `staff` is a raw JS expression evaluated inside the sandbox, not a value to stringify — an
+   earlier version stringified it, so passing the variable name set state.staff to the string
+   "staff" and every planner in the suite quietly did nothing. */
+const PLANNER_SITE = (staffExpr, cash = 1e6, bill = 0) => `
+  ${SITE(`state.time=at("2021-06-01");state.facility="warehouse";state.power=true;`)}
+  state.hardware={s19:200,s9:60};state.staff=${staffExpr};
+  state.cash=${cash};state.bill=${bill};state.debt=0;
+  state.maintenance.condition={s19:70,s9:58};
+  state.maintenance.faultsByPart={s19:{hashboardmodern:14,asicfan:9},s9:{powerPcb:5}};
+  state.maintenance.inventory={};SPARE_PARTS.forEach(p=>state.maintenance.inventory[p.id]=0);
+  state.maintenance.orders=[];state.planning={month:""};`;
+
+rule("a materials planner orders what the fleet is short of, and nobody else does", () => {
+  const r = json(`(()=>{
+    const run=staff=>{${PLANNER_SITE("staff")}
+      advanceMaterialsPlanning(state.time);
+      return state.maintenance.orders.map(o=>o.type);};
+    return{none:run([]),controller:run(["inventorycontroller"]),lead:run(["mrplead"])};})()`);
+  assert(r.none.length === 0, `an unstaffed site ordered ${r.none.length} lines by itself`);
+  assert(r.controller.length > 0, "an inventory controller ordered nothing at all");
+  assert(r.lead.length > r.controller.length, `the lead raised ${r.lead.length} lines against the controller's ${r.controller.length}`);
+});
+
+/* The two tiers are different jobs, not the same job at two prices: the junior post covers
+   the parts a fleet gets through constantly, the senior one plans the whole bill. */
+rule("the junior post covers consumables and the senior post covers everything", () => {
+  const r = json(`(()=>{
+    const run=staff=>{${PLANNER_SITE("staff")}
+      advanceMaterialsPlanning(state.time);
+      return [...new Set(state.maintenance.orders.map(o=>o.type))];};
+    return{controller:run(["inventorycontroller"]),lead:run(["mrplead"]),
+      consumables:PLANNER_CONSUMABLES};})()`);
+  const boards = id => /hashboard|powerPcb|coolant|Manifold/i.test(id);
+  assert(r.controller.every(id => r.consumables.includes(id)),
+    `the controller ordered something that is not a consumable: ${r.controller.join(", ")}`);
+  assert(r.lead.some(boards), `the lead ordered no capital parts at all: ${r.lead.join(", ")}`);
+});
+
+rule("the senior post orders ahead of the shortfall rather than exactly to it", () => {
+  const r = json(`(()=>{
+    const run=staff=>{${PLANNER_SITE("staff")}
+      const need=partsOutlook().short.find(x=>x.id==="asicfan");
+      advanceMaterialsPlanning(state.time);
+      const line=state.maintenance.orders.find(o=>o.type==="asicfan");
+      return{missing:need?need.missing:0,ordered:line?line.qty:0};};
+    return{controller:run(["inventorycontroller"]),lead:run(["mrplead"])};})()`);
+  assert(r.controller.ordered === r.controller.missing,
+    `the controller ordered ${r.controller.ordered} against a shortfall of ${r.controller.missing}`);
+  assert(r.lead.ordered > r.lead.missing,
+    `the lead ordered ${r.lead.ordered} against a shortfall of ${r.lead.missing}, so it is not planning ahead`);
+});
+
+/* A shelf kept full is not worth losing the grid over. */
+rule("a planner never spends the money owed on this month's bill", () => {
+  const r = json(`(()=>{
+    ${PLANNER_SITE('["mrplead"]', 9000, 8000)}
+    advanceMaterialsPlanning(state.time);
+    return{cash:state.cash,bill:state.bill,orders:state.maintenance.orders.length};})()`);
+  assert(r.cash >= r.bill, `the planner left ${Math.round(r.cash)} against a bill of ${r.bill}`);
+});
+
+rule("hiring the senior planner replaces the junior one rather than paying both", () => {
+  const r = json(`(()=>{
+    ${PLANNER_SITE("[]")}
+    hireStaff("inventorycontroller");const junior=[...state.staff];
+    hireStaff("mrplead");const senior=[...state.staff];
+    hireStaff("inventorycontroller");const down=[...state.staff];
+    return{junior,senior,down,payroll:staffMonthlyCost()};})()`);
+  assert(r.junior.includes("inventorycontroller"), "the junior post was never hired");
+  assert(r.senior.includes("mrplead") && !r.senior.includes("inventorycontroller"),
+    `both posts are on the payroll: ${r.senior.join(", ")}`);
+  assert(!r.down.includes("inventorycontroller"), "hiring down re-added a post the senior already covers");
+});
+
+/* Purchase orders are raised on a cycle. Reordering every simulated day would bury the ledger
+   and buy in uselessly small lots. */
+/* Two separate properties, and an earlier single rule conflated them: it asserted a cycle but
+   only ever proved idempotence, so deleting the month guard passed. Ordering is idempotent
+   BECAUSE it counts what is already inbound, which would hide a planner running daily. */
+rule("a planner does not re-order what is already on its way", () => {
+  const r = json(`(()=>{
+    ${PLANNER_SITE('["mrplead"]')}
+    advanceMaterialsPlanning(state.time);
+    const first=state.maintenance.orders.length;
+    state.planning={month:""};                 // force another cycle with the same shortfall
+    advanceMaterialsPlanning(state.time);
+    return{first,after:state.maintenance.orders.length};})()`);
+  assert(r.first > 0, "the planner ordered nothing to begin with");
+  assert(r.after === r.first, `a second cycle raised ${r.after - r.first} duplicate lines for stock already inbound`);
+});
+
+rule("purchase orders are raised on a monthly cycle, not on every tick", () => {
+  const r = json(`(()=>{
+    ${PLANNER_SITE('["mrplead"]')}
+    // A fresh shortfall every time, so only the cycle guard can stop a second run.
+    const clear=()=>{state.maintenance.orders=[];SPARE_PARTS.forEach(p=>state.maintenance.inventory[p.id]=0);};
+    advanceMaterialsPlanning(state.time);
+    const first=state.maintenance.orders.length;
+    clear();
+    state.time+=DAY;advanceMaterialsPlanning(state.time);
+    const sameMonth=state.maintenance.orders.length;
+    clear();
+    state.time+=40*DAY;advanceMaterialsPlanning(state.time);
+    return{first,sameMonth,nextMonth:state.maintenance.orders.length};})()`);
+  assert(r.first > 0, "the planner ordered nothing to begin with");
+  assert(r.sameMonth === 0, `the planner raised ${r.sameMonth} more lines the very next day`);
+  assert(r.nextMonth > 0, "the planner never ran again in the following month");
+});
+
 if (failures.length) {
   console.error(`Engine behaviour: ${failures.length} of ${checked} rules failed\n`);
   for (const failure of failures) console.error(`  ✗ ${failure}`);

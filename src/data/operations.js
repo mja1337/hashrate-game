@@ -100,5 +100,17 @@ const STAFF=[
   {id:"fieldtech",name:"Field technician",salary:1200,desc:"Scalable repair crew. More technicians reduce fleet wear and shorten service outages; up to three can work one hardware type at once."},
   {id:"logistics",name:"Logistics lead",salary:2200,desc:"Cuts relocation costs and migration incident risk by 20%."},
   {id:"procurementlead",name:"Procurement lead",salary:1800,desc:"Reduces new hardware purchase costs by 5%."},
+  /* Materials planning, at two levels. The job is the one thing on this site that is pure
+     administration and pure tedium: working out what the fleet will need, when, and raising
+     the orders before the bench is standing idle waiting for a $12 tube.
+
+     The controller handles consumables — the parts you get through constantly and should
+     never run out of. The MRP lead plans the whole bill of materials, orders to a buffer
+     rather than to today's shortfall, and consolidates purchase orders into fewer, larger
+     ones, which is where the discount comes from. Hiring one replaces the other. */
+  {id:"inventorycontroller",name:"Inventory controller",salary:1500,supersededBy:"mrplead",
+    desc:"Keeps consumables stocked without being asked: fans and thermal paste are reordered as soon as the fleet's faults call for more than the shelf holds."},
+  {id:"mrplead",name:"MRP lead",salary:3200,supersedes:"inventorycontroller",
+    desc:"Plans the whole bill of materials, orders to a buffer ahead of the shortfall rather than after it, and consolidates purchase orders for 8% off every spare part."},
   {id:"treasurer",name:"Treasury manager",salary:2600,desc:"Reduces project-loan interest by 25%."}
 ];

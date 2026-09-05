@@ -221,6 +221,50 @@ function advanceMaintenance(){
     }
   });
 }
+/* Moved here from the Mine tab when a materials planner needed the same figures. Two
+   descriptions of "what is this fleet short of" would drift the way the purchase limits did,
+   and the one that drifts is always the one nobody is looking at. */
+/* WHAT THE BENCH IS WAITING FOR.
+
+   The fleet view told you a part was missing only at the moment you tried to use it: the
+   fault row swapped its Replace button for an Order button and said nothing about how short
+   you were, whether a delivery was already coming, or when. So an operator with three faults
+   and two inbound orders had to open the parts catalogue and do the arithmetic by hand.
+
+   This gathers both halves — what the current faults will consume, and what is already on
+   its way — and states them once, at the top, with the shortfall as a number. */
+function partsOutlook(){
+  const need={};
+  HARDWARE.filter(h=>(state.hardware[h.id]||0)>0).forEach(h=>{
+    const n=state.hardware[h.id],breakdown=hardwareFaultBreakdown(h);
+    Object.entries(breakdown).forEach(([part,count])=>{
+      if(count>0)need[part]=(need[part]||0)+Math.max(1,Math.ceil(count/7));
+    });
+    // A machine under the offline threshold needs the whole refurbishment kit, not one part.
+    if(maintenanceCondition(h)<65){
+      const required=serviceRequirements(h,n);
+      Object.entries(required).forEach(([part,qty])=>{need[part]=Math.max(need[part]||0,qty)});
+    }
+  });
+  /* Reseating a hashboard consumes interface compound, so a fleet with board faults and no
+     thermal paste is short of something it does not yet know it needs. */
+  if(Object.keys(need).some(id=>REPASTE_PARTS.includes(id)))need.thermalpaste=Math.max(need.thermalpaste||0,1);
+  const orders={};
+  for(const order of (state.maintenance.orders||[])){
+    const id=order.type||"fan";
+    if(!orders[id])orders[id]={qty:0,due:Infinity};
+    orders[id].qty+=Number(order.qty)||0;
+    orders[id].due=Math.min(orders[id].due,order.due);
+  }
+  const short=[],inbound=[];
+  for(const part of SPARE_PARTS){
+    const have=state.maintenance.inventory[part.id]||0,want=need[part.id]||0,order=orders[part.id];
+    if(want>have)short.push({id:part.id,name:part.name,need:want,have,missing:want-have,
+      onOrder:order?order.qty:0,due:order?order.due:null,covered:order?order.qty>=want-have:false});
+    if(order)inbound.push({id:part.id,name:part.name,qty:order.qty,due:order.due});
+  }
+  return{short,inbound};
+}
 function orderParts(type,qty=1){
   const part=sparePart(type);if(!part)return;qty=Math.max(1,Math.floor(Number(qty)||1));const unit=sparePartCost(part),cost=qty*unit,lead=partsLeadDays();
   if(state.cash<cost)return showToast("Not enough cash",`${qty} ${part.name}${qty===1?"":"s"} cost ${fmtUsd(cost)}.`);
@@ -340,7 +384,68 @@ function dryFitFailureFactor(h,s=state){
   // Knowing how to seat a heatsink does not make old compound good, but it helps.
   return s.skills?.includes("thermalwork")?1.4:DRY_FIT_FAILURE;
 }
-function sparePartCost(part){const def=typeof part==="string"?sparePart(part):part;return (def?.cost||0)*(covidPartsMarket()?2.25:1)*(hasSkill("partssourcing")?.8:1)}
+function sparePartCost(part){const def=typeof part==="string"?sparePart(part):part;return (def?.cost||0)*(covidPartsMarket()?2.25:1)*(hasSkill("partssourcing")?.8:1)*(hasStaff("mrplead")?.92:1)}
+
+/* MATERIALS PLANNING.
+
+   Keeping a shelf stocked is the one job on this site that is pure administration: work out
+   what the fleet will need, check what is already coming, raise the difference. It is also
+   the job most likely to be forgotten until a repair is standing idle waiting for a twelve
+   dollar tube of paste, which is exactly the kind of tedium worth paying somebody to carry.
+
+   The controller covers consumables — the parts a fleet gets through constantly. The lead
+   plans the whole bill of materials and orders to a buffer, so stock arrives before the
+   shortfall rather than after it.
+
+   Runs monthly, not daily: a planner raises purchase orders on a cycle, and reordering every
+   simulated day would bury the ledger and buy in uselessly small lots. */
+const PLANNER_CONSUMABLES=["thermalpaste","laptopfan","fan","asicfan"];
+function materialsPlannerTier(s=state){
+  if(hasStaff("mrplead"))return "full";
+  if(hasStaff("inventorycontroller"))return "consumables";
+  return null;
+}
+/* What the planner will raise this cycle: the shortfall, less what is already inbound, plus
+   a buffer if somebody is paid to think a month ahead. */
+function plannedPartOrders(){
+  const tier=materialsPlannerTier();
+  if(!tier)return [];
+  const {short}=partsOutlook();
+  const orders=[];
+  for(const row of short){
+    if(tier==="consumables"&&!PLANNER_CONSUMABLES.includes(row.id))continue;
+    const buffer=tier==="full"?Math.ceil(row.need*.5):0;
+    const qty=Math.max(0,row.missing+buffer-row.onOrder);
+    if(qty>0)orders.push({id:row.id,qty});
+  }
+  return orders;
+}
+function advanceMaterialsPlanning(t=state.time){
+  const tier=materialsPlannerTier();
+  if(!tier)return;
+  const store=state.planning||(state.planning={month:""});
+  const month=new Date(t).toISOString().slice(0,7);
+  if(store.month===month)return;
+  store.month=month;
+  const orders=plannedPartOrders();
+  if(!orders.length)return;
+  let spent=0,lines=0;
+  /* A planner does not spend the money earmarked for the electricity bill. Whatever has
+     already accrued toward this month's settlement is off limits, so a well-stocked shelf can
+     never be the reason the grid gets cut. */
+  const reserved=Math.max(0,Number(state.bill)||0)+Math.max(0,Number(state.debt)||0);
+  for(const order of orders){
+    const unit=sparePartCost(order.id),cost=unit*order.qty;
+    if(cost>state.cash-reserved)continue;
+    state.cash-=cost;spent+=cost;lines++;
+    state.maintenance.orders.push({type:order.id,qty:order.qty,due:t+partsLeadDays()*DAY});
+  }
+  if(!lines)return;
+  const who=tier==="full"?"MRP lead":"Inventory controller";
+  log(`${who} raised ${lines} purchase order${lines===1?"":"s"}`,
+    `${orders.slice(0,3).map(o=>`${o.qty}× ${sparePart(o.id)?.name||o.id}`).join(" · ")}${orders.length>3?` · +${orders.length-3} more`:""} · ${fmtUsd(spent)}`,"fleet");
+  renderFullQueued=true;
+}
 function partsLeadDays(){return Math.max(3,Math.round((covidPartsMarket()?42:14)*(hasSkill("supplychain")?.6:1)))}
 function selfRepairExperience(id){return Math.max(0,Math.floor(Number(state.maintenance.selfRepairs?.[id])||0))}
 function selfDamageChance(h){if(!h)return 0;return Math.max(.02,.4*Math.pow(.72,selfRepairExperience(h.id))*(hasSkill("benchskills")?.4:1))}

@@ -136,47 +136,6 @@ function selfServiceBench(owned){
   const missing=[["benchskills","Bench repair skills","cuts the chance of damaging a machine"],["partssourcing","Parts sourcing","20% off every spare part"],["supplychain","Supply-chain contacts","parts arrive 40% sooner"],["practisedhands","Practised hands","familiar repairs finish with no puzzle"]].filter(entry=>!hasSkill(entry[0]));
   return `<div class="self-service-bench"><div class="bench-head"><div><b>Your own bench</b><span>${fieldTechnicianCount()?"Every technician is committed to another job, so the next repair is yours to run by hand. ":""}Labour is free while you do the work yourself. Every unit type you finish makes you better at it — fewer fumbles, and eventually repairs that complete on their own.</span></div><button class="action small" data-action="tab" data-value="tech">Open Tech tree</button></div><div class="bench-list">${rows}</div>${missing.length?`<p class="modal-note">Still to unlock with skill points: ${missing.map(entry=>`<strong>${entry[1]}</strong> (${entry[2]})`).join(" · ")}.</p>`:`<p class="modal-note">Every hardware self-help skill is unlocked.</p>`}</div>`;
 }
-/* WHAT THE BENCH IS WAITING FOR.
-
-   The fleet view told you a part was missing only at the moment you tried to use it: the
-   fault row swapped its Replace button for an Order button and said nothing about how short
-   you were, whether a delivery was already coming, or when. So an operator with three faults
-   and two inbound orders had to open the parts catalogue and do the arithmetic by hand.
-
-   This gathers both halves — what the current faults will consume, and what is already on
-   its way — and states them once, at the top, with the shortfall as a number. */
-function partsOutlook(){
-  const need={};
-  HARDWARE.filter(h=>(state.hardware[h.id]||0)>0).forEach(h=>{
-    const n=state.hardware[h.id],breakdown=hardwareFaultBreakdown(h);
-    Object.entries(breakdown).forEach(([part,count])=>{
-      if(count>0)need[part]=(need[part]||0)+Math.max(1,Math.ceil(count/7));
-    });
-    // A machine under the offline threshold needs the whole refurbishment kit, not one part.
-    if(maintenanceCondition(h)<65){
-      const required=serviceRequirements(h,n);
-      Object.entries(required).forEach(([part,qty])=>{need[part]=Math.max(need[part]||0,qty)});
-    }
-  });
-  /* Reseating a hashboard consumes interface compound, so a fleet with board faults and no
-     thermal paste is short of something it does not yet know it needs. */
-  if(Object.keys(need).some(id=>REPASTE_PARTS.includes(id)))need.thermalpaste=Math.max(need.thermalpaste||0,1);
-  const orders={};
-  for(const order of (state.maintenance.orders||[])){
-    const id=order.type||"fan";
-    if(!orders[id])orders[id]={qty:0,due:Infinity};
-    orders[id].qty+=Number(order.qty)||0;
-    orders[id].due=Math.min(orders[id].due,order.due);
-  }
-  const short=[],inbound=[];
-  for(const part of SPARE_PARTS){
-    const have=state.maintenance.inventory[part.id]||0,want=need[part.id]||0,order=orders[part.id];
-    if(want>have)short.push({id:part.id,name:part.name,need:want,have,missing:want-have,
-      onOrder:order?order.qty:0,due:order?order.due:null,covered:order?order.qty>=want-have:false});
-    if(order)inbound.push({id:part.id,name:part.name,qty:order.qty,due:order.due});
-  }
-  return{short,inbound};
-}
 function partsStatusStrip(){
   const {short,inbound}=partsOutlook();
   if(!short.length&&!inbound.length)return"";
