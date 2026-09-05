@@ -280,6 +280,38 @@ rule("a used machine arrives worn but never pre-broken", () => {
   assert(worst < 100, "age does not affect the condition a machine arrives in");
 });
 
+/* ---- CUSTODY: where coins sit has to matter ---- */
+
+rule("cold storage is safe and a hot wallet is not", () => {
+  const risks = json(`(()=>{
+    const out={};
+    for(const [label,hot,cold] of [["allHot",100,0],["half",50,50],["allCold",0,100]]){
+      ${SITE(``)}
+      state.time=at("2014-01-01");
+      state.wallets={hot,cold,mtgox:0,exchange:0,frozen:0,bitfinex:0,quadriga:0,etf:0,frontier:0};
+      out[label]={monthly:hotWalletIncidentRisk(),annual:hotWalletAnnualRisk()};
+    }
+    return out;})()`);
+  assert(risks.allCold.monthly === 0, "cold storage carries a key-compromise risk, which is not what cold storage means");
+  assert(risks.allHot.monthly > 0, "a fully hot wallet carries no risk at all, so custody placement is free");
+  assert(risks.half.monthly < risks.allHot.monthly, "moving coins to cold storage does not reduce the risk");
+  // The roll is gated to one per calendar month, so the annual figure must compound 12 times
+  // rather than 365. A daily roll of a monthly rate would be thirty times too punishing.
+  close(risks.allHot.annual, 1 - Math.pow(1 - risks.allHot.monthly, 12), 1e-9,
+    "the annual risk does not compound as a monthly roll");
+});
+
+rule("the venues that failed can still take coins off you", () => {
+  const wired = json(`["mtgox","bitfinexhack","quadriga","ftx"].map(id=>{
+    const e=EVENTS.find(x=>x.id===id);
+    return {id,found:!!e,fx:e?e.fx||null:null};
+  })`);
+  for (const row of wired) {
+    assert(row.found, `the ${row.id} collapse is missing from the timeline`);
+    assert(row.fx, `${row.id} has no effect wired to it, so holding a balance there is free`);
+  }
+});
+
 /* ---- SECURITIES: the instruments must behave as advertised ---- */
 
 rule("each security's price tracks the BTC sensitivity it advertises", () => {
