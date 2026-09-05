@@ -16,7 +16,8 @@ const FloorScenery=(()=>{
     const {p,h}=FloorModel.definitions(s),large=FloorModel.presets.indexOf(p)>=3,w=p.width,d=p.depth;
     const items=[{type:'workbench',name:'Service bay',x:-w/2+1.4,z:d/2-2,w:2.1,d:1.1},
       {type:'shelves',name:'Spares',x:-w/2+1.25,z:-d/2+2.2,w:1.5,d:1.2}];
-    if(p.id==='home')items.push({type:'office',name:'Desk & records',x:w/2-1.2,z:-d/2+1.6,w:1.5,d:1.2});
+    /* No desk at home: the laptop draws its own, and a spare room with a second desk
+       carrying a monitor plugged into nothing reads as scenery placed for its own sake. */
     if(p.id!=='home')items.push({type:'pallets',name:'Deliveries',x:w/2-1.8,z:d/2-1.7,w:1.6,d:1.1});
     if(FloorModel.presets.indexOf(p)>=2)items.push({type:'forklift',name:'Loading bay',x:w/2-1.8,z:-d/2+2.3,w:1.4,d:2});
     if(large){
@@ -120,9 +121,10 @@ const FloorScenery=(()=>{
         for(const dx of [-.85,.85])for(const dz of [-1.15,1.15]){cylinder([.59,.08,.59],[x+dx,1.54,z+dz],C.dark);part('torus',[.56,.56,.56],[x+dx,1.59,z+dz],C.edge,[Math.PI/2,0,0]);}
         for(let k=0;k<7;k++)B([3.1,.045,.07],[0,.39+k*.14,2.13],C.steel);
       }else if(item.type==='office'){
-        const outdoor=site.large;
-        if(outdoor){B([3.6,2.1,3.2],[0,1.14,0],0x91a6a9);B([3.9,.12,3.5],[0,2.25,0],darkRoof);for(const dx of [-.9,.15])B([.85,.7,.025],[dx,1.55,1.62],0x284b5d);B([.6,1.6,.03],[1.27,.95,1.63],C.steel);}
-        else{B([1.6,.09,.9],[0,.81,0],C.wood);B([.7,.42,.06],[0,1.13,-.21],C.dark);B([.59,.31,.02],[0,1.13,-.17],0x32667a);for(const dx of [-.65,.65])B([.06,.76,.65],[dx,.43,0],C.steel);}
+        // Only ever the operations building on a large site now, so there is one shape.
+        B([3.6,2.1,3.2],[0,1.14,0],0x91a6a9);B([3.9,.12,3.5],[0,2.25,0],darkRoof);
+        for(const dx of [-.9,.15])B([.85,.7,.025],[dx,1.55,1.62],0x284b5d);
+        B([.6,1.6,.03],[1.27,.95,1.63],C.steel);
       }else if(item.type==='generator'){
         B([5,1.8,2.7],[0,1,0],0x557062);for(let k=0;k<10;k++)B([.22,1.25,.035],[-2.1+k*.43,1,1.37],C.dark);
         cylinder([.12,1,.12],[x+1.4,2.34,z],C.steel);B([1.1,.1,1.1],[-1.2,1.95,0],C.steel);
