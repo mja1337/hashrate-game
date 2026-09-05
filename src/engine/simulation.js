@@ -620,6 +620,18 @@ function queueRender(full=false){
   // Align the DOM write with the display refresh so it never lands mid-paint.
   setTimeout(()=>requestAnimationFrame(paint),delay);
 }
-function setTimer(){clearInterval(timer);if(state.speed>0)timer=setInterval(tick,Math.max(70,2000/state.speed))}
+/* THE CATCH-UP AFTER A MODAL.
+
+   The visibility handler makes up simulated time from how long the clock has been left alone,
+   measured as now minus state.lastReal — and lastReal is only stamped by a tick. A major event
+   pauses the clock, so a minute spent reading the modal is a minute of ticks nobody ran, and
+   the moment the tab was next brought forward the handler tried to run all of them. At 16x
+   that is nearly five hundred ticks in one burst, which is the lurch after clearing an event.
+
+   Restarting the clock is the moment to say "we are current from here". */
+function setTimer(){
+  clearInterval(timer);
+  if(state.speed>0){state.lastReal=Date.now();timer=setInterval(tick,Math.max(70,2000/state.speed))}
+}
 function startMempoolTimer(){clearInterval(mempoolTimer);mempoolTimer=setInterval(()=>{if(activeTab==="dashboard"&&state.speed>0)refreshDashboardVisuals()},1200)}
 function save(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(state))}catch(e){}}

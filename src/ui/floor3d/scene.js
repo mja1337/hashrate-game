@@ -16,10 +16,24 @@
 const FloorScene=(()=>{
   const T=FloorThree,C={slab:0x17262d,floor:0x516267,wall:0x768588,steel:0x283b43,edge:0x9aafb2,dark:0x111b22,orange:0xf7a13d,green:0x75e3b2,blue:0x68bafa,red:0xff705d,wood:0x916f4b};
   const colors={online:C.green,fault:C.red,repair:C.blue,off:0x52636c};
+  /* Racks fill the room they are in. The container yard used to space its rows on a fixed
+     4.4m pitch counted from an arbitrary origin, so once a site carried more batches than the
+     yard had rows for, the last ones marched out through the fence and stood on the grass.
+     Row pitch is now derived from the depth available in every layout, so a floor with two
+     hundred batches packs tighter rather than overflowing. */
   function layout(s){
-    const {p}=FloorModel.definitions(s),bs=FloorModel.batches(s),cols=Math.min(p.cols,bs.length),rows=Math.ceil(bs.length/cols);
-    const dx=(p.width-(p.width>=18?7:3.8))/p.cols,dz=Math.min(2.15,(p.depth-(p.width>=18?6:3.6))/Math.max(rows,1));
-    return bs.map((b,i)=>({...b,x:(i%cols-(cols-1)/2)*dx,z:p.id==='container'?(Math.floor(Math.floor(i/cols)/2)-1)*4.4+(Math.floor(i/cols)%2?1:-1)*.8:(Math.floor(i/cols)-(rows-1)/2)*dz-.3}));
+    const {p}=FloorModel.definitions(s),bs=FloorModel.batches(s);
+    const cols=Math.max(1,Math.min(p.cols,bs.length)),rows=Math.ceil(bs.length/cols);
+    const usableW=p.width-(p.width>=18?7:3.8),usableD=p.depth-(p.width>=18?6:3.6);
+    const dx=usableW/p.cols;
+    const dz=Math.min(p.id==='container'?4.4:2.15,usableD/Math.max(1,rows));
+    return bs.map((b,i)=>{
+      const col=i%cols,row=Math.floor(i/cols);
+      // Container modules stagger their rows either side of the aisle; the offset shrinks
+      // with the pitch so a packed yard does not overlap itself.
+      const stagger=p.id==='container'?(row%2?1:-1)*Math.min(.8,dz*.18):0;
+      return{...b,x:(col-(cols-1)/2)*dx,z:(row-(rows-1)/2)*dz+stagger-.3};
+    });
   }
   function build(s,opts={}){
     const root=new T.Group(),{h}=FloorModel.definitions(s),stats=FloorModel.metrics(s),rows=layout(s),buckets=new Map(),fanMeshes=[],textures=[],materials=[],signs=[];

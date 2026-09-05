@@ -31,49 +31,72 @@ const FloorMiners=(()=>{
     laptop:{type:'laptop'},cpu:{type:'cpu'},'5870':{type:'gpu'},gpurig:{type:'rig'},fpga:{type:'fpga'},
     avalon:{type:'avalon',color:0xc6bbaa},
     s1:{type:'openasic',color:0x788f83,boards:2},
-    s3:{type:'asic',color:0x849298,w:.93,h:.36,d:.73,fan:.15,fins:4,levels:2},
+    s3:{type:'asic',color:0x849298,w:.93,h:.36,d:.73,fan:.15,fins:4},
     s5:{type:'openasic',color:0xc2b8a3,boards:3},
-    s7:{type:'asic',color:0xaaa998,w:.6,h:.43,d:.94,fan:.18,fins:5,levels:3},
-    s9:{type:'asic',color:0xb7b8ae,w:.55,h:.43,d:1.08,fan:.18,fins:8,levels:3,psu:true},
-    s17:{type:'asic',color:0x9cabb1,w:.9,h:.61,d:.73,fan:.21,fins:4,levels:2,dual:true},
-    s19:{type:'asic',color:0xbac0be,w:.98,h:.55,d:.78,fan:.21,fins:7,levels:2,dual:true,psu:true},
-    s19xp:{type:'asic',color:0xc5c9c1,w:.98,h:.55,d:.8,fan:.21,fins:10,levels:2,dual:true,psu:true,trim:0x65b7a5},
-    s19hydro:{type:'hydro',color:0x8faeb6,w:1.08,h:.47,d:.85,levels:3,pipes:2},
-    s21:{type:'asic',color:0xd2d3ca,w:1.16,h:.6,d:.84,fan:.23,fins:8,levels:2,dual:true,psu:true,trim:0xe4a14d},
-    s21hydro:{type:'hydro',color:0xc6d0d0,w:1.22,h:.51,d:.95,levels:3,pipes:3},
-    s21xp:{type:'asic',color:0xb0bdc2,w:1.16,h:.6,d:.87,fan:.23,fins:12,levels:2,dual:true,psu:true,trim:0x70c7dd}
+    s7:{type:'asic',color:0xaaa998,w:.6,h:.43,d:.94,fan:.18,fins:5},
+    s9:{type:'asic',color:0xb7b8ae,w:.55,h:.43,d:1.08,fan:.18,fins:8,psu:true},
+    s17:{type:'asic',color:0x9cabb1,w:.9,h:.61,d:.73,fan:.21,fins:4,dual:true},
+    s19:{type:'asic',color:0xbac0be,w:.98,h:.55,d:.78,fan:.21,fins:7,dual:true,psu:true},
+    s19xp:{type:'asic',color:0xc5c9c1,w:.98,h:.55,d:.8,fan:.21,fins:10,dual:true,psu:true,trim:0x65b7a5},
+    s19hydro:{type:'hydro',color:0x8faeb6,w:1.08,h:.47,d:.85,pipes:2},
+    s21:{type:'asic',color:0xd2d3ca,w:1.16,h:.6,d:.84,fan:.23,fins:8,dual:true,psu:true,trim:0xe4a14d},
+    s21hydro:{type:'hydro',color:0xc6d0d0,w:1.22,h:.51,d:.95,pipes:3},
+    s21xp:{type:'asic',color:0xb0bdc2,w:1.16,h:.6,d:.87,fan:.23,fins:12,dual:true,psu:true,trim:0x70c7dd}
   };
   function render(h,b,api){
     const {box,part,fan,C}=api,p=profiles[h.id];if(!p)throw Error('Missing visual: '+h.id);
     const {x,z}=b,id=b.id,accent=api.accent,on=b.status==='online';
-    const B=(size,pos,color)=>box(size,[x+pos[0],pos[1],z+pos[2]],color,id);
-    const M=(size,pos,color,rot=[0,0,0])=>api.metal(size,[x+pos[0],pos[1],z+pos[2]],color,id,rot);
-    const T=(size,pos,color,rot=[0,0,0],shiny=false)=>api.tube(size,[x+pos[0],pos[1],z+pos[2]],color,rot,id,shiny);
-    const F=(dx,y,dz,r,facing=1)=>fan(x+dx,y,z+dz,r,id,on,facing);
+    /* Machines sit side by side on a shelf when the frame is wide enough for them, so every
+       piece of a given unit shifts together. Held here rather than threaded through forty
+       call sites, which is how the offsets would end up disagreeing. */
+    let laneX=0;
+    const B=(size,pos,color)=>box(size,[x+laneX+pos[0],pos[1],z+pos[2]],color,id);
+    const M=(size,pos,color,rot=[0,0,0])=>api.metal(size,[x+laneX+pos[0],pos[1],z+pos[2]],color,id,rot);
+    const T=(size,pos,color,rot=[0,0,0],shiny=false)=>api.tube(size,[x+laneX+pos[0],pos[1],z+pos[2]],color,rot,id,shiny);
+    const F=(dx,y,dz,r,facing=1)=>fan(x+laneX+dx,y,z+dz,r,id,on,facing);
     /* Status lights are lamps, not coloured squares: a bright core with an additive halo.
        Wide strips get a tighter spread, because a halo scaled off a 1.3-wide strip would be
        a bar of fog rather than a light. */
-    const led=(dx,y,dz,w=.05,spread=w>.4?1.5:2.8)=>api.lamp([w,.035,.024],[x+dx,y,z+dz],accent,id,spread);
+    const led=(dx,y,dz,w=.05,spread=w>.4?1.5:2.8)=>api.lamp([w,.035,.024],[x+laneX+dx,y,z+dz],accent,id,spread);
     const screen=(size,pos,col,rot=null)=>{
-      if(rot)part('box',size,[x+pos[0],pos[1],z+pos[2]],col,rot,id,true);
-      else api.lamp(size,[x+pos[0],pos[1],z+pos[2]],col,id,1.35);
+      if(rot)part('box',size,[x+laneX+pos[0],pos[1],z+pos[2]],col,rot,id,true);
+      else api.lamp(size,[x+laneX+pos[0],pos[1],z+pos[2]],col,id,1.35);
     };
     const desk=(height=.78)=>{B([1.6,.09,1.1],[0,height,0],C.wood);for(const dx of [-.66,.66])for(const dz of [-.43,.43])M([.08,height,.08],[dx,height/2,dz],C.steel);};
     /* A short length of cable leaving a machine and dropping out of sight. Nothing in a
        working room is unplugged, and the absence of any cabling was half of why the old
        shapes read as models rather than as equipment. */
     const drop=(dx,y,dz,len=.3,col=0x1b2428)=>{T([.022,len,.022],[dx,y-len/2,dz],col);T([.03,.05,.03],[dx,y,dz],C.dark)};
-    const rail=(levels)=>{
-      for(const dx of [-.73,.73])for(const dz of [-.52,.52])M([.05,2.08,.05],[dx,1.1,dz],0x44585f);
-      for(let j=0;j<levels;j++){M([1.54,.04,1.15],[0,.28+j*.66,0],0x5d737a);
-        for(const dz of [-.52,.52])M([1.54,.03,.03],[0,.5+j*.66,dz],0x44585f);}
-      M([1.48,.12,.09],[0,2.13,.53],C.steel);led(0,2.13,.59,1.3);
+    /* HOW MANY MACHINES A RACK SHOWS.
+
+       A batch on the floor stands for many real machines — a four-thousand-miner site draws
+       around a hundred and fifty of these — and the rack used to show at most `levels` of
+       them, which is two for an S19. So a room holding four thousand miners drew three
+       hundred, on shelves that were visibly half empty, and read as a sparse warehouse rather
+       than a full one.
+
+       The rack now grows with what it represents: shelves up to the height a container rack
+       actually reaches, and machines side by side on each shelf where the machine is narrow
+       enough for the frame to take them. It is still a representation — nobody is drawing
+       four thousand — but a full room now looks full. */
+    const RACK_SHELF=.66,RACK_BASE=.28,RACK_MAX_LEVELS=6;
+    const rackPlan=(qty,width)=>{
+      const across=Math.max(1,Math.min(3,Math.floor(1.54/Math.max(.2,width+.06))));
+      const levels=Math.max(1,Math.min(RACK_MAX_LEVELS,Math.ceil(qty/across)));
+      return{across,levels,slots:across*levels,height:RACK_BASE+levels*RACK_SHELF+.24};
+    };
+    const rail=(levels,height)=>{
+      const top=height??(RACK_BASE+levels*RACK_SHELF+.24);
+      for(const dx of [-.73,.73])for(const dz of [-.52,.52])M([.05,top,.05],[dx,top/2,dz],0x44585f);
+      for(let j=0;j<levels;j++){M([1.54,.04,1.15],[0,RACK_BASE+j*RACK_SHELF,0],0x5d737a);
+        for(const dz of [-.52,.52])M([1.54,.03,.03],[0,RACK_BASE+.22+j*RACK_SHELF,dz],0x44585f);}
+      M([1.48,.12,.09],[0,top+.05,.53],C.steel);led(0,top+.05,.59,1.3);
       // Busway down the back of the rack, which is what the machines actually plug into,
       // and a data spine beside it. Orange is power, blue is data, here as everywhere else.
-      M([.12,1.9,.12],[.79,1,-.5],0x30444c);
-      for(let j=0;j<levels;j++)B([.16,.09,.05],[.79,.42+j*.66,-.43],C.orange);
-      M([.07,1.9,.07],[-.79,1,-.5],0x2b4150);
-      for(let j=0;j<levels;j++)B([.11,.06,.04],[-.79,.46+j*.66,-.44],0x4a9fe0);
+      M([.12,top*.92,.12],[.79,top*.48,-.5],0x30444c);
+      for(let j=0;j<levels;j++)B([.16,.09,.05],[.79,RACK_BASE+.14+j*RACK_SHELF,-.43],C.orange);
+      M([.07,top*.92,.07],[-.79,top*.48,-.5],0x2b4150);
+      for(let j=0;j<levels;j++)B([.11,.06,.04],[-.79,RACK_BASE+.18+j*RACK_SHELF,-.44],0x4a9fe0);
     };
     if(p.type==='laptop'){
       desk();
@@ -179,9 +202,12 @@ const FloorMiners=(()=>{
       return;
     }
     if(p.type==='hydro'){
-      const units=Math.min(b.qty,p.levels);rail(units);
+      const plan=rackPlan(b.qty,p.w),units=Math.min(b.qty,plan.slots);
+      laneX=0;rail(plan.levels,plan.height);
       for(let j=0;j<units;j++){
-        const y=.32+j*.66+p.h/2;
+        const level=Math.floor(j/plan.across);
+        laneX=(j%plan.across-(plan.across-1)/2)*(p.w+.06);
+        const y=.32+level*RACK_SHELF+p.h/2;
         M([p.w,p.h,p.d],[0,y,0],p.color);
         // Cold plates and the return header running the length of the case.
         for(let k=0;k<5;k++)M([p.w-.1,.028,.04],[0,y-p.h/2+.07+k*.075,p.d/2+.015],C.edge);
@@ -194,6 +220,7 @@ const FloorMiners=(()=>{
         B([.12,.04,.1],[-.2,y+p.h/2+.03,.2],C.dark);
         led(-p.w/2+.07,y+.1,p.d/2+.03);
       }
+      laneX=0;
       for(const [dx,col] of [[-.65,0x5fb7df],[.65,0xdc8063]])T([.042,2,.042],[dx,1.13,.63],col,[0,0,0],true);
       return;
     }
@@ -201,9 +228,12 @@ const FloorMiners=(()=>{
        with a fan at each end, ribbed flanks, a controller on the roof and a cable to a
        busway. What separates the generations is proportion, rib count and how the PSU is
        carried — bolted on top in the S9 era, integrated alongside from the S19 on. */
-    const units=Math.min(b.qty,p.levels);rail(units);
+    const plan=rackPlan(b.qty,p.w),units=Math.min(b.qty,plan.slots);
+    laneX=0;rail(plan.levels,plan.height);
     for(let j=0;j<units;j++){
-      const y=.32+j*.66+p.h/2,front=p.d/2,back=-p.d/2;
+      const level=Math.floor(j/plan.across);
+      laneX=(j%plan.across-(plan.across-1)/2)*(p.w+.06);
+      const y=.32+level*RACK_SHELF+p.h/2,front=p.d/2,back=-p.d/2;
       M([p.w,p.h,p.d],[0,y,0],p.color);
       // Recessed end panels so the fans sit IN the case rather than on it.
       M([p.w-.03,p.h-.03,.03],[0,y,front+.016],0x2b383e);
