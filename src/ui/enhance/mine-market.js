@@ -67,15 +67,33 @@ function floorSpriteSymbols(owned){
 function floorSprite(id){
   return `<svg class="miner-icon" viewBox="0 0 64 46" aria-label="${id} mining hardware illustration"><use href="#ma-${id}"/>${minerStatusSvg(id)}</svg>`;
 }
-function miningFloorUnits(){
-  const owned=HARDWARE.filter(h=>(state.hardware[h.id]||0)>0),total=owned.reduce((sum,h)=>sum+(state.hardware[h.id]||0),0),tier=facilityTier(),limit=[12,28,72,110,130,150,170,190][tier-1]||110;
-  return floorSpriteSymbols(owned)+owned.map(h=>{
+/* THE FLOOR AS DATA. Which machines stand on the floor, how many real units each one
+   represents, and what state it is in — derived from the fleet once, with no markup in
+   sight. The SVG floor renders this array; anything else that wants to draw the same floor
+   renders the same array rather than working the rules out a second time and drifting from
+   them. The rules are not obvious ones: how many sprites a type gets depends on its share of
+   the fleet and the site's tier, and a batch is faulted, paused or hashing according to how
+   far into the type's repair queue it falls. Deriving that twice would guarantee two floors
+   that disagree. */
+function floorBatches(){
+  const owned=HARDWARE.filter(h=>(state.hardware[h.id]||0)>0),total=owned.reduce((sum,h)=>sum+(state.hardware[h.id]||0),0),tier=facilityTier(),limit=[12,28,72,110,130,150,170,190][tier-1]||110,siteOff=!thermalPowerAvailable();
+  const out=[];
+  for(const h of owned){
     const n=state.hardware[h.id],shown=Math.max(1,Math.min(n,Math.round(limit*n/Math.max(1,total)))),per=Math.max(1,Math.ceil(n/shown)),rs=hardwareRepairState(h),job=activeServiceJob(h.id),dominantPart=job?.part||Object.entries(rs.faultsByPart).sort((a,b)=>b[1]-a[1])[0]?.[0];
-    return Array.from({length:shown},(_,i)=>{
-      const first=i*per,qty=Math.min(per,n-first);if(qty<=0)return"";
-      const siteOff=!thermalPowerAvailable(),status=first<rs.repairing?(rs.servicing?"repair":"broken"):first<rs.repairing+rs.paused||siteOff?"paused":hardwareOfflineReason(h)?"broken":"online",label=status==="online"?"hashing":status==="paused"?(siteOff?"site power off":"manually off"):status==="repair"?`technician repair${job?.part?` · ${sparePart(job.part)?.name||job.part}`:""}${Number.isFinite(job?.stage)&&job.stage<REPAIR_STAGES.length?` · ${REPAIR_STAGES[job.stage].name}`:""}`:`faulted${dominantPart?` · ${PART_FAULT_LABELS[dominantPart]||dominantPart}`:""}`,clickable=status==="broken"||status==="repair",badge=status==="repair"&&job?.part?`<i class="part-badge" data-part="${job.part}">${(sparePart(job.part)?.name||job.part).slice(0,1)}</i>`:"";
-      return `<div class="floor-miner ${status} ${h.id==="laptop"?"laptop-desk":""}" ${clickable?`data-action="focus-service" data-id="${h.id}"`:""} title="${h.name} · ${qty>1?`${qty} units represented · `:""}${label}">${floorSprite(h.id)}${badge}${qty>1?`<b>×${fmtCompactNumber(qty)}</b>`:""}</div>`;
-    }).join("");
+    for(let i=0;i<shown;i++){
+      const first=i*per,qty=Math.min(per,n-first);if(qty<=0)continue;
+      const status=first<rs.repairing?(rs.servicing?"repair":"broken"):first<rs.repairing+rs.paused||siteOff?"paused":hardwareOfflineReason(h)?"broken":"online",label=status==="online"?"hashing":status==="paused"?(siteOff?"site power off":"manually off"):status==="repair"?`technician repair${job?.part?` · ${sparePart(job.part)?.name||job.part}`:""}${Number.isFinite(job?.stage)&&job.stage<REPAIR_STAGES.length?` · ${REPAIR_STAGES[job.stage].name}`:""}`:`faulted${dominantPart?` · ${PART_FAULT_LABELS[dominantPart]||dominantPart}`:""}`;
+      out.push({hardware:h,id:h.id,index:i,qty,status,label,job,part:dominantPart,clickable:status==="broken"||status==="repair"});
+    }
+  }
+  return out;
+}
+function floorOwnedHardware(){return HARDWARE.filter(h=>(state.hardware[h.id]||0)>0)}
+function miningFloorUnits(){
+  return floorSpriteSymbols(floorOwnedHardware())+floorBatches().map(b=>{
+    const h=b.hardware,job=b.job;
+    const badge=b.status==="repair"&&job?.part?`<i class="part-badge" data-part="${job.part}">${(sparePart(job.part)?.name||job.part).slice(0,1)}</i>`:"";
+    return `<div class="floor-miner ${b.status} ${h.id==="laptop"?"laptop-desk":""}" ${b.clickable?`data-action="focus-service" data-id="${h.id}"`:""} title="${h.name} · ${b.qty>1?`${b.qty} units represented · `:""}${b.label}">${floorSprite(h.id)}${badge}${b.qty>1?`<b>×${fmtCompactNumber(b.qty)}</b>`:""}</div>`;
   }).join("");
 }
 function repairWorkPuzzle(h,job){

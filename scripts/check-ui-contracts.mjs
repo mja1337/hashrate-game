@@ -108,7 +108,10 @@ assert(css.includes("#dashboard-mempool{overflow:hidden}") && css.includes(".mp-
 assert(inline.includes('const tickerBtc=value=>fmtBtc(value).replace(/ BTC$/,'), "Ticker BTC values still include a redundant unit suffix");
 assert(css.includes(".tick{min-width:115px;overflow:hidden") && css.includes("text-overflow:ellipsis"), "Ticker values can spill into adjacent cards");
 assert(inline.includes("retired=state.decommissionedHardware?.[id]||0") && inline.includes("retired=state.decommissionedHardware?.[h.id]||0"), "Miner sale controls do not consistently use retired inventory");
-assert(inline.includes("function facilityDeskSvg()") && inline.includes('floor-miner ${status} ${h.id==="laptop"?"laptop-desk":""}'), "Mining facilities no longer retain the laptop desk visual");
+// The laptop stands on a desk rather than a rack. Matched on the class the floor emits
+// rather than the whole expression, which moved when the batch model was extracted.
+assert(inline.includes("function facilityDeskSvg()") && /floor-miner \$\{b?\.?status\}[^`]*laptop-desk/.test(inline),
+  "Mining facilities no longer retain the laptop desk visual");
 assert(css.includes('.tier-1 .floor-units,.tier-2 .floor-units{left:28px') && css.includes('.floor-miner.laptop-desk{position:absolute'), "Home-office miners are not arranged around the laptop desk and shelves");
 
 const optionsStart = inline.indexOf("function hardwareQuantityOptions(");
@@ -177,6 +180,23 @@ assert(inline.includes("creditFor=c=>c.id===\"curtail\""),
   "The energy tariff desk quotes curtailment without its credit, so contracts cannot be compared");
 assert(inline.includes("method-demand-response"), "Method does not document demand response");
 
+// THE FLOOR AS DATA — the batch model exists so a second renderer draws the same floor
+// rather than deriving the rules again. If the SVG floor goes back to computing statuses
+// inline, the two will drift the moment either is touched.
+assert(inline.includes("function floorBatches()"), "The floor batch model is missing");
+assert(!/function miningFloorUnits\(\)\{[\s\S]{0,400}hardwareRepairState\(/.test(inline),
+  "miningFloorUnits derives fleet state itself again instead of rendering the batch model");
+assert(/floorBatches\(\)\.map\(/.test(inline), "The SVG floor no longer renders from the batch model");
+{
+  // The model must stay free of markup: it is the thing a canvas renderer would consume.
+  const modelStart = inline.indexOf("function floorBatches()");
+  const modelEnd = inline.indexOf("function floorOwnedHardware()", modelStart);
+  const model = inline.slice(modelStart, modelEnd);
+  assert(modelStart >= 0 && modelEnd > modelStart, "The floor batch model could not be isolated");
+  assert(!/<div|<svg|class=|data-action/.test(model),
+    "The floor batch model has grown markup, which defeats the point of separating it");
+}
+
 // FLOOR SPRITES — every sprite used to carry its own copy of its machine's drawing: 146KB of
 // the floor's 162KB at the largest sites, the same few pictures repeated 182 times. One
 // <symbol> per owned type plus a <use> per sprite says it once. The symbols must stay inside
@@ -187,7 +207,9 @@ assert(inline.includes("function minerArt("), "minerArt is missing, so the drawi
 assert(/<use href="#ma-\$\{id\}"\/>/.test(inline), "Floor sprites do not reference the shared symbol");
 assert(inline.includes("${floorSprite(h.id)}${badge}"),
   "The floor renders inline drawings again instead of referencing the shared symbol");
-assert(inline.includes("floorSpriteSymbols(owned)+owned.map("),
+// The symbol block must be emitted in the same string as the sprites that reference it,
+// whatever the list of owned hardware is called.
+assert(/floorSpriteSymbols\((owned|floorOwnedHardware\(\))\)\+(owned|floorBatches\(\))\.map\(/.test(inline),
   "The symbol block is not emitted alongside the sprites that reference it");
 assert(inline.includes("`<svg class=\"miner-icon\" viewBox=\"0 0 64 46\" aria-label=\"${id} mining hardware illustration\">${minerArt(id)}${minerStatusSvg(id)}</svg>`"),
   "minerSvg no longer inlines the drawing, which its non-floor callers rely on");
