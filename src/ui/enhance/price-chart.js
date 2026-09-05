@@ -94,6 +94,17 @@ function priceChartSvg(){
     <g class="dates">${dates}</g>
   </svg>`;
 }
+/* Provenance, stated rather than assumed. Everything up to the dataset's cutoff is a
+   recorded observation; past it the continuation is a model, and this game labels the two
+   separately everywhere else. A chart that says RECORDED over modelled prices is exactly the
+   kind of quiet dishonesty the footer promises the reader it avoids. */
+function priceChartProvenance(){
+  const series=priceChartSeries();
+  if(!series.length)return "RECORDED";
+  const first=series[0][0],last=series[series.length-1][0];
+  if(last<=END)return "RECORDED";
+  return first<=END?"RECORDED + MODELLED":"MODELLED";
+}
 function priceChartCard(){
   const series=priceChartSeries();
   const active=priceChartRange().id;
@@ -112,9 +123,9 @@ function priceChartCard(){
       <div><span>Range low</span><strong>${fmtUsd(Math.min(...prices))}</strong></div>
       <div><span>Over the range</span><strong class="${change>=0?"up":"down"}">${changeText}</strong></div>
     </div>`:"";
-  return `<section class="card span-12 price-chart-card"><div class="card-head"><h2>Bitcoin price</h2><div class="meta">RECORDED · LOG SCALE · TO ${dateFmt(state.time,true).toUpperCase()}</div></div>
+  return `<section class="card span-12 price-chart-card"><div class="card-head"><h2>Bitcoin price</h2><div class="meta">${priceChartProvenance()} · LOG SCALE · TO ${dateFmt(state.time,true).toUpperCase()}</div></div>
     <div class="price-chart-controls">${PRICE_CHART_RANGES.map(r=>`<button class="action small ${r.id===active?"primary":""}" data-action="price-range" data-value="${r.id}">${r.label}</button>`).join("")}</div>
     <div class="price-chart-plot">${priceChartSvg()}</div>
     ${stats}
-    <p class="modal-note">Recorded daily observations from the bundled dataset, interpolated the same way every other price in the game is. The series stops at the simulation's current date — this is a historical replay, and what happens next is the question.</p></section>`;
+    <p class="modal-note">${series.length&&series[series.length-1][0]>END?`Recorded daily observations to ${dateFmt(END,true)}, and a model past it — the continuation is not a forecast. `:"Recorded daily observations from the bundled dataset, "}interpolated the same way every other price in the game is. The series stops at the simulation's current date — this is a historical replay, and what happens next is the question.</p></section>`;
 }

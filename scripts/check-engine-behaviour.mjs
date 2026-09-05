@@ -1129,6 +1129,23 @@ rule("the chart shows nothing before bitcoin had a price", () => {
   assert(points === 0, `a 2009 chart plotted ${points} points before any market existed`);
 });
 
+
+/* This game labels recorded, derived and modelled data separately, and says so in its own
+   footer. A price chart captioned RECORDED over a modelled continuation would break that
+   promise quietly, which is the worst way to break it. */
+rule("the price chart says which of its data is recorded and which is modelled", () => {
+  const r = json(`(()=>{
+    const read=when=>{${SITE(``)}state.time=at(when);state.priceChartRange="all";
+      return priceChartProvenance();};
+    const readShort=when=>{${SITE(``)}state.time=at(when);state.priceChartRange="90d";
+      return priceChartProvenance();};
+    return{historic:read("2018-06-01"),spanning:read("2030-01-01"),
+      wellPast:readShort("2060-01-01"),cutoff:END};})()`);
+  assert(r.historic === "RECORDED", `a wholly historic range was labelled ${r.historic}`);
+  assert(/MODELLED/.test(r.spanning), `a range running past the cutoff was labelled ${r.spanning}`);
+  assert(r.wellPast === "MODELLED", `a range entirely past the cutoff was labelled ${r.wellPast}`);
+});
+
 if (failures.length) {
   console.error(`Engine behaviour: ${failures.length} of ${checked} rules failed\n`);
   for (const failure of failures) console.error(`  ✗ ${failure}`);
