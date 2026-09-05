@@ -13,10 +13,17 @@
      const after  = snapshotAll();          // after reload
      snapshotDiff(before, after);           // [] when the DOM is structurally identical
 
-   Determinism: verified stable across repeated captures. The only moving part is the
+   Determinism: every fixture starts from a complete pinned state, so a capture does not
+   depend on how the page was used before it — the same code gives the same hashes on a fresh
+   load, on a load with a save present, and after the live state has been churned. Call
+   snapshotSelfCheck() to prove that rather than trust it. The only moving part is the
    dashboard mempool mosaic, which randomises its own cell classes every frame; those are
    normalised to a single token rather than excluded, so a change in cell COUNT still
-   registers. */
+   registers.
+
+   This was not always true. The harness used to overwrite nine fields on the live state and
+   inherit the rest, and reported 1,909, 1,914 or 1,922 nodes for the Mine tab depending on
+   what had run before it — which nearly had a clean refactor reported as a regression. */
 
 function snapshotSignature(root) {
   const host = root || document.getElementById("app");
@@ -95,15 +102,42 @@ function snapshotFixtures() {
 const SNAPSHOT_TABS = ["dashboard", "mine", "pools", "market", "custody", "facilities",
   "energy", "finance", "learn", "tech", "ledger", "method"];
 
+/* A complete, pinned state for every fixture to start from.
+
+   This used to overwrite nine fields on whatever the live state happened to be and hand the
+   rest through — so a capture depended on how the page had been used before it, and the same
+   code reported 1,909, 1,914 or 1,922 nodes for the Mine tab depending on what had run
+   first. A harness whose whole job is proving a render refactor changed nothing cannot
+   itself change between runs.
+
+   initialState() seeds itself from Math.random(), so the seed is pinned too, and the era
+   table is filled the way resetGame() fills it rather than left half-built. */
+function snapshotBaselineState() {
+  const fresh = initialState();
+  fresh.seed = 1; fresh.rng = 1;
+  if (typeof OPERATOR_ERAS !== "undefined") {
+    OPERATOR_ERAS.forEach(era => {
+      fresh.operator.eras[era.id] = { months: 0, solvent: 0, profitable: 0, uptime: 0, competitive: 0 };
+    });
+  }
+  fresh.started = true; fresh.ended = false; fresh.endReason = null; fresh.endDismissed = true;
+  fresh.activeEvent = null; fresh.storyPause = false; fresh.shoppingPause = false;
+  fresh.walletSetup = { done: true }; fresh.speed = 0; fresh.returnSpeed = 0; fresh.policyLock = null;
+  fresh.skills = []; fresh.staff = []; fresh.seen = []; fresh.guidance = { dismissed: [] };
+  fresh.hardwareAlerts = { active: null, queue: [], resumeSpeed: 0, seen: HARDWARE.map(h => h.id) };
+  fresh.pendingSettlement = null; fresh.settlementSaleMode = false;
+  fresh.ops = { firmwarePatchedUntil: 1e15, hijackUntil: 0, outageUntil: 0, powerOutageUntil: 0,
+    venueFreezes: {}, riskMonth: "" };
+  return fresh;
+}
+
 function snapshotAll() {
   const saved = JSON.parse(JSON.stringify(state));
   const savedTab = activeTab;
   const captured = {};
   try {
     for (const fixture of snapshotFixtures()) {
-      state.started = true; state.ended = false; state.endDismissed = true; state.activeEvent = null;
-      state.walletSetup = { done: true }; state.speed = 0; state.policyLock = null;
-      state.skills = []; state.staff = [];
+      state = snapshotBaselineState();
       fixture.apply();
       for (const tab of SNAPSHOT_TABS) {
         activeTab = tab;
@@ -149,4 +183,21 @@ function snapshotHashes(captured) {
   const out = {};
   for (const key of Object.keys(captured)) out[key] = `${captured[key].length}:${hash(captured[key].join("\n"))}`;
   return out;
+}
+
+/* Proves the property the harness depends on: two captures either side of a deliberately
+   churned live state must agree exactly. Run it before trusting a comparison. */
+function snapshotSelfCheck() {
+  const before = snapshotHashes(snapshotAll());
+  const saved = JSON.parse(JSON.stringify(state));
+  const savedTab = activeTab;
+  state.time = at("2019-01-01"); state.hardware = { s17: 77 }; state.facility = "campus";
+  state.cash = 123456; state.skills = ["undervolt", "firmware"]; state.staff = ["fieldtech"];
+  state.wallets.hot = 9; state.debt = 4321; state.speed = 3; activeTab = "market";
+  const after = snapshotHashes(snapshotAll());
+  state = JSON.parse(JSON.stringify(saved));
+  activeTab = savedTab;
+  render(false);
+  const drifted = Object.keys(before).filter(key => before[key] !== after[key]);
+  return { snapshots: Object.keys(before).length, stable: drifted.length === 0, drifted };
 }
