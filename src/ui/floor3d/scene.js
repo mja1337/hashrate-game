@@ -5,7 +5,12 @@
 
    View only. It reads a description of the floor and returns geometry; it never touches game
    state. Everything is instanced, which is why a megacampus of forty-four thousand miners
-   draws in five calls rather than four thousand. */
+   draws in five calls rather than four thousand.
+
+   ONE EDIT from the prototype: each batch is drawn with its OWN machine rather than with a
+   single hardware type chosen for the whole scene. The prototype only ever showed one model
+   at a time, so a scene-wide silhouette was enough; a real fleet is mixed, and drawing two
+   GPU rigs and a laptop as three identical miners is simply wrong. */
 
 /* View-only Three.js assembler. One persistent renderer, disposable instanced scenes. */
 const FloorScene=(()=>{
@@ -39,7 +44,7 @@ const FloorScene=(()=>{
         for(const dz of [-.72,.72])box([1.8,.025,.055],[x,.11,z+dz],C.orange,b.id,true);
         for(const dx of [-.87,.87])box([.055,.025,1.5],[x+dx,.11,z],C.orange,b.id,true);
       }
-      FloorMiners.render(h,b,{box,part,fan,C,accent});
+      FloorMiners.render(b.hardware||h,b,{box,part,fan,C,accent});
       if(b.status==='fault'||b.status==='repair'){
         box([.36,.25,.1],[x,2.48,z],statusColor,b.id,true);box([.035,.11,.02],[x,2.5,z+.07],C.dark,b.id);
         if(b.status==='fault')box([.035,.025,.02],[x,2.4,z+.07],C.dark,b.id);

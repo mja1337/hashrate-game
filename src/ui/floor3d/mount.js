@@ -165,6 +165,12 @@ function floor3dPulse(time){
 }
 function floor3dAnythingWrong(){return !!(floor3dAlertMap&&floor3dAlertMap.size)}
 
+/* Small vector helpers. The bundled three.js is tree-shaken and does not carry the maths
+   classes, and this is less code than the parts of them that would be needed. */
+function dot(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]}
+function cross(a,b){return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]}
+function norm(a){const l=Math.hypot(a[0],a[1],a[2])||1;return [a[0]/l,a[1]/l,a[2]/l]}
+
 function floor3dStop(){if(floor3dRaf){cancelAnimationFrame(floor3dRaf);floor3dRaf=0}}
 function floor3dDisposeScene(){
   if(floor3dBuilt&&floor3dBuilt.dispose)floor3dBuilt.dispose();
@@ -178,17 +184,92 @@ function floor3dDraw(){
   const width=Math.max(1,host.clientWidth),height=Math.max(1,Math.round(width*.42));
   floor3dRenderer.setPixelRatio(Math.min(2,window.devicePixelRatio||1));
   floor3dRenderer.setSize(width,height,false);
-  /* Framing. The span decides how much empty room sits around the floor; .72 left the site
-     swimming in it. Fitted to the larger of the two footprint axes with a small margin, and
-     divided down when the frame is wide so a letterbox does not push the site away. */
-  const footprint=Math.max(floor3dBuilt.width,floor3dBuilt.depth),aspect=width/height;
-  const span=footprint*.54/Math.max(1,Math.sqrt(aspect/1.6));
-  floor3dCamera.left=-span*aspect;floor3dCamera.right=span*aspect;
-  floor3dCamera.top=span;floor3dCamera.bottom=-span;
-  floor3dCamera.position.set(floor3dBuilt.cx+footprint,footprint*.86,floor3dBuilt.cz+footprint);
-  floor3dCamera.lookAt(floor3dBuilt.cx,0,floor3dBuilt.cz);
+  const bounds=floor3dBounds;
+  if(!bounds)return;
+  /* Fit what the camera will actually SEE, not the size of the thing in world space. A
+     mining room is wide and flat, so seen down an isometric axis it is far shorter than it is
+     broad; sizing both axes from one radius left a third of the frame empty above and below.
+     The eight corners of the bounds are projected onto the camera's own right and up vectors
+     and the frustum is fitted to those extents. */
+  const reach=bounds.radius*4;
+  const eye=[bounds.x+reach,bounds.y+reach*.8,bounds.z+reach];
+  const fwd=norm([bounds.x-eye[0],bounds.y-eye[1],bounds.z-eye[2]]);
+  const right=norm(cross(fwd,[0,1,0]));
+  const up=cross(right,fwd);
+  let halfW=0,halfH=0;
+  for(const cx of [bounds.minX,bounds.maxX])for(const cy of [bounds.minY,bounds.maxY])for(const cz of [bounds.minZ,bounds.maxZ]){
+    const d=[cx-bounds.x,cy-bounds.y,cz-bounds.z];
+    halfW=Math.max(halfW,Math.abs(dot(d,right)));
+    halfH=Math.max(halfH,Math.abs(dot(d,up)));
+  }
+  // A little air so the roofline and the front edge of the floor are not touching the frame.
+  const margin=1.12;
+  halfW=Math.max(halfW*margin,.5);halfH=Math.max(halfH*margin,.5);
+  // Whichever axis does not fit its half of the frame decides the zoom.
+  const fitW=halfW,fitH=halfH,frameAspect=width/height;
+  let viewW=fitW,viewH=fitH;
+  if(fitW/fitH>frameAspect)viewH=fitW/frameAspect; else viewW=fitH*frameAspect;
+  floor3dCamera.left=-viewW;floor3dCamera.right=viewW;
+  floor3dCamera.top=viewH;floor3dCamera.bottom=-viewH;
+  floor3dCamera.position.set(eye[0],eye[1],eye[2]);
+  floor3dCamera.far=reach*4;
+  floor3dCamera.lookAt(bounds.x,bounds.y,bounds.z);
   floor3dCamera.updateProjectionMatrix();
   floor3dRenderer.render(floor3dScene,floor3dCamera);
+}
+
+/* Measuring the scene without Box3.
+
+   The bundled three.js is tree-shaken down to thirty exports and Box3 is not among them, so
+   the bounds are read straight out of the instance matrices. Done once per rebuild and
+   cached, which is where it belonged anyway: the previous attempt rebuilt a bounding box
+   every frame to answer a question that only changes when the floor does.
+
+   The size of an instance is its geometry's own local box put through the instance matrix,
+   NOT the length of the matrix's basis vectors. A basis vector's length is the SCALE, and a
+   BoxGeometry runs from -0.5 to 0.5, so treating scale as a half-extent measured every box
+   at twice its size and left a quarter of the frame empty on all four sides. Cylinders and
+   the fan torus are not unit-sized either, which is the other reason to ask the geometry.
+
+   Framing off the footprint alone was the bug this replaces. It ignored everything standing
+   ON the floor — walls, racks, the service bay — so a short frame clipped the top of the
+   room while leaving a gap beneath it, because the camera was aimed at the ground rather
+   than at the middle of what there was to look at. */
+let floor3dBounds=null;
+function floor3dMeasure(root){
+  let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity,found=false;
+  root.traverse(node=>{
+    if(!node.isInstancedMesh||!node.instanceMatrix)return;
+    const g=node.geometry;
+    if(!g)return;
+    if(!g.boundingBox)g.computeBoundingBox();
+    const bb=g.boundingBox;
+    if(!bb)return;
+    // Local centre and half-extent of whatever shape this mesh instances.
+    const lx=(bb.min.x+bb.max.x)/2,ly=(bb.min.y+bb.max.y)/2,lz=(bb.min.z+bb.max.z)/2,
+          hx=(bb.max.x-bb.min.x)/2,hy=(bb.max.y-bb.min.y)/2,hz=(bb.max.z-bb.min.z)/2;
+    const m=node.instanceMatrix.array;
+    for(let i=0;i<node.count;i++){
+      const o=i*16;
+      // Centre through the matrix, then the standard transformed-AABB half-extent: each
+      // world axis takes a contribution from every local axis it is rotated across.
+      const x=m[o]*lx+m[o+4]*ly+m[o+8]*lz+m[o+12],
+            y=m[o+1]*lx+m[o+5]*ly+m[o+9]*lz+m[o+13],
+            z=m[o+2]*lx+m[o+6]*ly+m[o+10]*lz+m[o+14];
+      if(!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(z))continue;
+      const ex=Math.abs(m[o])*hx+Math.abs(m[o+4])*hy+Math.abs(m[o+8])*hz,
+            ey=Math.abs(m[o+1])*hx+Math.abs(m[o+5])*hy+Math.abs(m[o+9])*hz,
+            ez=Math.abs(m[o+2])*hx+Math.abs(m[o+6])*hy+Math.abs(m[o+10])*hz;
+      minX=Math.min(minX,x-ex);maxX=Math.max(maxX,x+ex);
+      minY=Math.min(minY,y-ey);maxY=Math.max(maxY,y+ey);
+      minZ=Math.min(minZ,z-ez);maxZ=Math.max(maxZ,z+ez);
+      found=true;
+    }
+  });
+  if(!found)return null;
+  const x=(minX+maxX)/2,y=(minY+maxY)/2,z=(minZ+maxZ)/2;
+  const radius=Math.max(maxX-minX,maxY-minY,maxZ-minZ)/2||1;
+  return {x,y,z,radius,minX,minY,minZ,maxX,maxY,maxZ};
 }
 
 let floor3dScene=null;
@@ -203,6 +284,8 @@ function floor3dBuildScene(){
   if(floor3dBuilt){floor3dScene.remove(floor3dBuilt.root);floor3dDisposeScene()}
   floor3dBuilt=FloorScene.build(FloorModel.describe(),{});
   floor3dScene.add(floor3dBuilt.root);
+  floor3dBounds=floor3dMeasure(floor3dBuilt.root)||{x:floor3dBuilt.cx,y:1,z:floor3dBuilt.cz,
+    radius:Math.max(floor3dBuilt.width,floor3dBuilt.depth)/2};
   floor3dPrepareAlerts();
 }
 
