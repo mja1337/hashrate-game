@@ -838,6 +838,67 @@ rule("skipping thermal paste costs condition and comes back, but never strands t
   assert(r.dry.condition > 65, `dry-fitting stranded the type at ${r.dry.condition.toFixed(1)}%, below the 65% offline threshold`);
 });
 
+
+/* ---- REPAIRS: a job that needs you must say so ---- */
+
+/* Puzzle state is prepared when the job is created, so initRepairPuzzle() returns false by
+   the time the job reaches the Work stage. Hanging the Mine-tab repaint off that return
+   value meant arriving at the bench never asked for a redraw: the row sat on a stale earlier
+   stage and the puzzle never appeared, however long the clock ran. */
+rule("a self-serviced repair asks the tab to repaint when it reaches the bench", () => {
+  const r = json(`(()=>{
+    ${SITE(`state.time=at("2009-06-01");state.facility="home";state.staff=[];
+      state.hardware={laptop:1};state.maintenance.condition={laptop:70};
+      state.maintenance.faultsByPart={laptop:{laptopfan:1}};`)}
+    state.maintenance.inventory.laptopfan=5;
+    serviceHardwarePart("laptop","laptopfan");
+    const job=state.maintenance.serviceJobs[0];
+    if(!job)return{error:"no job was created"};
+    if(!job.contracted)return{error:"a technician-free site did not hand the job to the player"};
+    /* Run until the job actually reaches the bench. The stage index changes a tick before
+       the Work branch executes, so waiting on the index alone samples too early. */
+    let repaints=0,handed=false,guard=0;
+    while(!handed&&guard++<200){
+      renderFullQueued=false;
+      state.time+=DAY;advanceMaintenance();
+      const live=state.maintenance.serviceJobs[0];
+      if(!live)break;
+      if(renderFullQueued)repaints++;
+      if(live.handedOver)handed=true;
+    }
+    const live=state.maintenance.serviceJobs[0];
+    return{reached:handed,repaints,handedOver:!!(live&&live.handedOver),
+      selfAuto:!!(live&&live.selfAuto),puzzleType:live&&live.puzzleType};})()`);
+  assert(!r.error, r.error);
+  assert(r.reached, "the repair never reached the Work stage and was handed to the player");
+  assert(r.puzzleType !== undefined, "the job reached the bench with no puzzle prepared");
+  assert(r.handedOver, "arriving at the bench did not mark the job as handed to the player");
+  assert(r.repaints > 0, "reaching the Work stage never asked the Mine tab to repaint, so the puzzle cannot appear");
+});
+
+/* The repaint is a transition, not a state: asking for one on every tick while the job waits
+   would repaint the tab forever behind a player who has walked away. */
+rule("a repair waiting at the bench does not repaint the tab on every tick", () => {
+  const r = json(`(()=>{
+    ${SITE(`state.time=at("2009-06-01");state.facility="home";state.staff=[];
+      state.hardware={laptop:1};state.maintenance.condition={laptop:70};
+      state.maintenance.faultsByPart={laptop:{laptopfan:1}};`)}
+    state.maintenance.inventory.laptopfan=5;
+    serviceHardwarePart("laptop","laptopfan");
+    let guard=0;
+    while(guard++<200){
+      state.time+=DAY;advanceMaintenance();
+      const live=state.maintenance.serviceJobs[0];
+      if(!live)return{skipped:true};
+      if(live.handedOver)break;
+    }
+    let extra=0;
+    for(let i=0;i<10;i++){renderFullQueued=false;state.time+=DAY;advanceMaintenance();if(renderFullQueued)extra++;}
+    return{extra,skipped:false};})()`);
+  assert(r.skipped !== true, "the job finished on its own, so the waiting behaviour was never exercised");
+  assert(r.extra === 0, `a job idling at the bench asked for ${r.extra} further repaints in ten days`);
+});
+
 if (failures.length) {
   console.error(`Engine behaviour: ${failures.length} of ${checked} rules failed\n`);
   for (const failure of failures) console.error(`  ✗ ${failure}`);

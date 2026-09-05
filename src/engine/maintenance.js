@@ -117,7 +117,20 @@ function advanceMaintenance(){
         const stage=REPAIR_STAGES[job.stage];
         if(stage.id==="work"&&!job.auto&&job.contracted&&!job.workDone){
           if(job.selfAuto){completeRepairWork(job,"Finished from practised familiarity — no set-up needed",true);continue}
-          if(initRepairPuzzle(job))renderFullQueued=true;
+          initRepairPuzzle(job);
+          /* The repaint has to be asked for on ARRIVAL at the bench, not on whether the
+             puzzle needed setting up here. Puzzle state is prepared when the job is created,
+             so initRepairPuzzle() returns false by the time the job reaches this stage — and
+             hanging the repaint off that return value meant the Mine tab was never told to
+             redraw. The row sat on a stale "Power down · 1d left" and the puzzle never
+             appeared, however long the clock ran. Once, on the transition, not every tick. */
+          if(!job.handedOver){
+            job.handedOver=true;
+            renderFullQueued=true;
+            const h2=HARDWARE.find(x=>x.id===job.id),what=job.part?sparePart(job.part)?.name||job.part:"refurbishment";
+            log(`${h2?.name||job.id} is on your bench`,`${what} · the Work stage is waiting for you`,"fleet");
+            showToast("The repair is waiting for you",`${h2?.name||job.id} has reached the Work stage. Open the Mine floor and finish the ${String(what).toLowerCase()} by hand — the clock will not move this job on without you.`,"info","mine");
+          }
           break;
         }
         const complicationChance=Math.min(.6,.10*(job.contracted?1.3:1)*(hasSkill("fieldservice")?.5:1));

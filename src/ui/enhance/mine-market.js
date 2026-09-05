@@ -136,6 +136,60 @@ function selfServiceBench(owned){
   const missing=[["benchskills","Bench repair skills","cuts the chance of damaging a machine"],["partssourcing","Parts sourcing","20% off every spare part"],["supplychain","Supply-chain contacts","parts arrive 40% sooner"],["practisedhands","Practised hands","familiar repairs finish with no puzzle"]].filter(entry=>!hasSkill(entry[0]));
   return `<div class="self-service-bench"><div class="bench-head"><div><b>Your own bench</b><span>${fieldTechnicianCount()?"Every technician is committed to another job, so the next repair is yours to run by hand. ":""}Labour is free while you do the work yourself. Every unit type you finish makes you better at it — fewer fumbles, and eventually repairs that complete on their own.</span></div><button class="action small" data-action="tab" data-value="tech">Open Tech tree</button></div><div class="bench-list">${rows}</div>${missing.length?`<p class="modal-note">Still to unlock with skill points: ${missing.map(entry=>`<strong>${entry[1]}</strong> (${entry[2]})`).join(" · ")}.</p>`:`<p class="modal-note">Every hardware self-help skill is unlocked.</p>`}</div>`;
 }
+/* WHAT THE BENCH IS WAITING FOR.
+
+   The fleet view told you a part was missing only at the moment you tried to use it: the
+   fault row swapped its Replace button for an Order button and said nothing about how short
+   you were, whether a delivery was already coming, or when. So an operator with three faults
+   and two inbound orders had to open the parts catalogue and do the arithmetic by hand.
+
+   This gathers both halves — what the current faults will consume, and what is already on
+   its way — and states them once, at the top, with the shortfall as a number. */
+function partsOutlook(){
+  const need={};
+  HARDWARE.filter(h=>(state.hardware[h.id]||0)>0).forEach(h=>{
+    const n=state.hardware[h.id],breakdown=hardwareFaultBreakdown(h);
+    Object.entries(breakdown).forEach(([part,count])=>{
+      if(count>0)need[part]=(need[part]||0)+Math.max(1,Math.ceil(count/7));
+    });
+    // A machine under the offline threshold needs the whole refurbishment kit, not one part.
+    if(maintenanceCondition(h)<65){
+      const required=serviceRequirements(h,n);
+      Object.entries(required).forEach(([part,qty])=>{need[part]=Math.max(need[part]||0,qty)});
+    }
+  });
+  /* Reseating a hashboard consumes interface compound, so a fleet with board faults and no
+     thermal paste is short of something it does not yet know it needs. */
+  if(Object.keys(need).some(id=>REPASTE_PARTS.includes(id)))need.thermalpaste=Math.max(need.thermalpaste||0,1);
+  const orders={};
+  for(const order of (state.maintenance.orders||[])){
+    const id=order.type||"fan";
+    if(!orders[id])orders[id]={qty:0,due:Infinity};
+    orders[id].qty+=Number(order.qty)||0;
+    orders[id].due=Math.min(orders[id].due,order.due);
+  }
+  const short=[],inbound=[];
+  for(const part of SPARE_PARTS){
+    const have=state.maintenance.inventory[part.id]||0,want=need[part.id]||0,order=orders[part.id];
+    if(want>have)short.push({id:part.id,name:part.name,need:want,have,missing:want-have,
+      onOrder:order?order.qty:0,due:order?order.due:null,covered:order?order.qty>=want-have:false});
+    if(order)inbound.push({id:part.id,name:part.name,qty:order.qty,due:order.due});
+  }
+  return{short,inbound};
+}
+function partsStatusStrip(){
+  const {short,inbound}=partsOutlook();
+  if(!short.length&&!inbound.length)return"";
+  const shortRows=short.map(s=>{
+    const cost=sparePartCost(s.id)*s.missing;
+    return `<li><div class="parts-status-text"><b>${s.missing}× ${s.name}</b><span>${s.have} in stock, ${s.need} needed${s.onOrder?` · ${s.onOrder} on order, ${s.covered?"which covers it":"still short"}, due ${dateFmt(s.due)}`:" · nothing on order"}</span></div><button class="action small ${s.covered?"":"primary"}" data-action="order-parts" data-id="${s.id}" data-value="${s.missing}" ${state.cash<cost?"disabled":""} title="${state.cash<cost?"Not enough cash":`${fmtUsd(cost)} · ${partsLeadDays()}-day lead`}">Order ${s.missing}</button></li>`;
+  }).join("");
+  const inboundRows=inbound.map(o=>{
+    const days=Math.max(0,Math.ceil((o.due-state.time)/DAY));
+    return `<li><div class="parts-status-text"><b>${o.qty}× ${o.name}</b><span>arriving ${dateFmt(o.due)} · ${days} day${days===1?"":"s"} away</span></div></li>`;
+  }).join("");
+  return `<div class="parts-status">${short.length?`<div class="parts-status-block short"><h4>Short of ${short.length} part${short.length===1?"":"s"} the current faults need</h4><ul>${shortRows}</ul></div>`:""}${inbound.length?`<div class="parts-status-block inbound"><h4>${inbound.length} part${inbound.length===1?"":"s"} on the way</h4><ul>${inboundRows}</ul></div>`:""}</div>`;
+}
 function fleetServicingVisual(){
   const covid=covidPartsMarket(),multiplier=covid?2.25:1,technicians=fieldTechnicianCount(),owned=HARDWARE.filter(h=>(state.hardware[h.id]||0)>0);
   const needsHelp=owned.some(h=>hardwareFaultCount(h)>0||maintenanceCondition(h)<65);
@@ -143,18 +197,26 @@ function fleetServicingVisual(){
   const rows=owned.map(h=>{
     const n=state.hardware[h.id],health=maintenanceCondition(h),breakdown=hardwareFaultBreakdown(h),faults=Object.values(breakdown).reduce((sum,c)=>sum+c,0),faultedFraction=n?faults/n:0,job=activeServiceJob(h.id),refurbCount=health<65?n:Math.max(faults,Math.ceil(n*.15)),refurbRequirements=serviceRequirements(h,refurbCount),refurbPlan=servicePlan(h,refurbCount),refurbNeeded=health<95||faults>0,daysLeft=job?Math.max(0,Math.ceil((job.due-state.time)/DAY)):0;
     const stageIdx=job&&Number.isFinite(job.stage)?Math.min(job.stage,REPAIR_STAGES.length-1):null,stageName=stageIdx!==null?REPAIR_STAGES[stageIdx].name:null,awaitingInput=!!(job&&!job.auto&&job.contracted&&REPAIR_STAGES[job.stage]?.id==="work"&&!job.workDone);
-    const status=job?(job.part?`Replacing ${sparePart(job.part)?.name||job.part}${stageName?` · ${stageName}`:""} · ${awaitingInput?"awaiting you":`${daysLeft}d left`}`:`Full refurbishment in progress${stageName?` · ${stageName}`:""} · ${awaitingInput?"awaiting you":`${daysLeft}d left`}`):hardwareOfflineReason(h)||(faults?`${faults} unit${faults===1?"":"s"} faulted`:"Operating");
+    /* A pending settlement stops the clock, so a repair started under one cannot progress. It
+       used to keep advertising "1d left" against a day that could never arrive. */
+    const clockHeld=!!state.pendingSettlement,progress=awaitingInput?"awaiting you":clockHeld?"paused · settle the bill first":`${daysLeft}d left`;
+    const status=job?(job.part?`Replacing ${sparePart(job.part)?.name||job.part}${stageName?` · ${stageName}`:""} · ${progress}`:`Full refurbishment in progress${stageName?` · ${stageName}`:""} · ${progress}`):hardwareOfflineReason(h)||(faults?`${faults} unit${faults===1?"":"s"} faulted`:"Operating");
     const stageTrack=stageIdx!==null?`<div class="repair-stage-track">${REPAIR_STAGES.map((s,i)=>`<i class="${i<stageIdx?"done":i===stageIdx?"active":""}" title="${s.name}"></i>`).join("")}</div>`:"";
     const workPuzzle=job&&!job.auto&&job.contracted&&REPAIR_STAGES[job.stage]?.id==="work"&&!job.workDone?repairWorkPuzzle(h,job):"";
     const partRows=Object.entries(breakdown).filter(([,count])=>count>0).map(([part,count])=>{
       const partDef=sparePart(part),qty=Math.max(1,Math.ceil(count/7)),have=hasServiceParts({[part]:qty}),cost=sparePartCost(partDef)*qty;
-      return `<div class="part-fault-row"><span>${PART_FAULT_LABELS[part]||partDef?.name||part} <b>×${count}</b></span>${have?`<button class="action small primary" data-action="service-part" data-id="${h.id}" data-part="${part}" ${job?"disabled":""} title="${job?"A repair job is already running for this hardware type":""}">Replace ${qty} ${partDef?.name||part}${qty===1?"":"s"}</button>`:`<button class="action small" data-action="order-parts" data-id="${part}" data-value="${qty}" ${state.cash<cost?"disabled":""} title="${state.cash<cost?"Not enough cash":""}">Order ${qty} ${partDef?.name||part}${qty===1?"":"s"} · ${fmtUsd(cost)}</button>`}</div>`;
+      const stock=state.maintenance.inventory[part]||0,missing=Math.max(1,qty-stock);
+      const mine=(state.maintenance.orders||[]).filter(o=>(o.type||"fan")===part);
+      const inboundQty=mine.reduce((sum,o)=>sum+(Number(o.qty)||0),0),inboundDue=mine.map(o=>o.due).sort((a,b)=>a-b)[0];
+      const shortNote=have?"":`<em class="part-short">${stock} in stock of ${qty} needed${inboundQty?` · ${inboundQty} arriving ${dateFmt(inboundDue)}`:" · none on order"}</em>`;
+      const orderCost=sparePartCost(partDef)*missing;
+      return `<div class="part-fault-row"><span>${PART_FAULT_LABELS[part]||partDef?.name||part} <b>×${count}</b></span>${shortNote}${have?`<button class="action small primary" data-action="service-part" data-id="${h.id}" data-part="${part}" ${job?"disabled":""} title="${job?"A repair job is already running for this hardware type":""}">Replace ${qty} ${partDef?.name||part}${qty===1?"":"s"}</button>`:`<button class="action small ${inboundQty>=missing?"":"primary"}" data-action="order-parts" data-id="${part}" data-value="${missing}" ${state.cash<orderCost?"disabled":""} title="${state.cash<orderCost?"Not enough cash":inboundQty>=missing?`${inboundQty} are already on the way — this orders ${missing} more`:`Order the ${missing} missing`}">Order ${missing} ${partDef?.name||part}${missing===1?"":"s"} · ${fmtUsd(orderCost)}</button>`}</div>`;
     }).join("")||`<div class="part-fault-row empty">No part-specific faults reported</div>`;
     return `<div class="maintenance-row" data-service-row="${h.id}"><div class="balance-name">${h.name}<small>${n} units · ${status}</small>${stageTrack}${workPuzzle}<div class="bar" style="--w:${health}%;--bar:${health<65||faultedFraction>.05?"var(--red)":health<80||faultedFraction>.01?"var(--orange)":"var(--green)"}"><i></i></div></div><div class="maintenance-row-actions">${partRows}<button class="action small ${health<65?"primary":""}" data-action="service-hw" data-id="${h.id}" ${job||!refurbNeeded||!hasServiceParts(refurbRequirements)?"disabled":""} title="${job?"A repair job is already running for this hardware type":!refurbNeeded?"Condition is high enough that a refurbishment isn't needed":!hasServiceParts(refurbRequirements)?"Not enough spare parts in stock":""}">Refurbish ${refurbCount}${Number.isFinite(refurbPlan.days)?` · ${refurbPlan.days}d`:" · no crew free"}</button></div></div>`;
   }).join("")||`<div class="empty-story">No serviceable mining hardware is installed.</div>`;
-  const spares=SPARE_PARTS.map(part=>{const fit=partFitSummary(part.id),onOrder=state.maintenance.orders.filter(order=>(order.type||"fan")===part.id).reduce((sum,order)=>sum+order.qty,0),unit=sparePartCost(part),list=part.cost*(covid?2.25:1);return `<article class="venue">${sparePartSvg(part.id)}<div class="risk low">${state.maintenance.inventory[part.id]||0} IN STOCK</div><h3>${part.name}</h3><p>${part.desc}</p><div class="part-fit ${fit.fits?"":"unused"}">${fit.text}</div><div class="trade-sub">${onOrder} on order · ${fmtUsd(unit)} each${unit<list-1e-9?` (was ${fmtUsd(list)})`:""} · ${partsLeadDays()}-day lead</div><div class="actions"><button class="action small primary" data-action="order-parts" data-id="${part.id}" data-value="1" ${state.cash<unit?"disabled":""} title="${state.cash<unit?"Not enough cash":""}">Order 1</button><button class="action small" data-action="order-parts" data-id="${part.id}" data-value="5" ${state.cash<unit*5?"disabled":""} title="${state.cash<unit*5?"Not enough cash":""}">Order 5</button><button class="action small" data-action="order-parts" data-id="${part.id}" data-value="50" ${state.cash<unit*50?"disabled":""} title="${state.cash<unit*50?"Not enough cash":""}">Order 50</button></div></article>`}).join("");
+  const spares=SPARE_PARTS.map(part=>{const fit=partFitSummary(part.id),onOrder=state.maintenance.orders.filter(order=>(order.type||"fan")===part.id).reduce((sum,order)=>sum+order.qty,0),unit=sparePartCost(part),list=part.cost*(covid?2.25:1);return `<article class="venue">${sparePartSvg(part.id)}<div class="risk low">${state.maintenance.inventory[part.id]||0} IN STOCK</div><h3>${part.name}</h3><p>${part.desc}</p><div class="part-fit ${fit.fits?"":"unused"}">${fit.text}</div><div class="trade-sub">${onOrder?`${onOrder} on order, due ${dateFmt(state.maintenance.orders.filter(o=>(o.type||"fan")===part.id).map(o=>o.due).sort((a,b)=>a-b)[0])}`:"none on order"} · ${fmtUsd(unit)} each${unit<list-1e-9?` (was ${fmtUsd(list)})`:""} · ${partsLeadDays()}-day lead</div><div class="actions"><button class="action small primary" data-action="order-parts" data-id="${part.id}" data-value="1" ${state.cash<unit?"disabled":""} title="${state.cash<unit?"Not enough cash":""}">Order 1</button><button class="action small" data-action="order-parts" data-id="${part.id}" data-value="5" ${state.cash<unit*5?"disabled":""} title="${state.cash<unit*5?"Not enough cash":""}">Order 5</button><button class="action small" data-action="order-parts" data-id="${part.id}" data-value="50" ${state.cash<unit*50?"disabled":""} title="${state.cash<unit*50?"Not enough cash":""}">Order 50</button></div></article>`}).join("");
   const autoRepairToggle=`<div class="auto-repair-toggle ${state.autoRepair?"on":""}"><div><b>Auto-repair</b><span>${technicians>0?"Your technician crew works continuously on any faulted unit while parts are in stock.":"Hire a field technician to enable continuous automatic repairs."}</span></div><button class="action small ${state.autoRepair?"danger":"primary"}" data-action="toggle-auto-repair" ${technicians<1?"disabled":""}>${state.autoRepair?"Disable":"Enable"} auto-repair</button></div>`;
-  return `<section class="card span-12 fleet-servicing"><div class="card-head"><h2>Fleet servicing</h2><div class="meta">${covid?"COVID SUPPLY SHOCK":"NORMAL PARTS MARKET"} · ${partsLeadDays()}-DAY LEAD TIMES</div></div><div class="card-pad">${hireNudge}${selfServiceRelevant()?selfServiceBench(owned):""}${autoRepairToggle}<div class="venue-grid">${spares}</div><div class="cooling-shop"><div class="cooling-shop-head"><div><span class="hero-kicker">Fiat infrastructure</span><h3>Balance cooling against hash rate.</h3></div><p>Stopping a miner removes its heat, energy draw and wear immediately. Room-level cooling equipment lets more machines run safely, but consumes electrical headroom and cash.</p></div><div class="cooling-options">${coolingEquipmentHtml()}</div></div>${immersionPanelHtml()}<div class="balance-list" style="margin-top:10px">${rows}</div><p class="modal-note">Random faults are now attributed to a specific part — hashboard, power PCB, fan or hydro coolant hardware — and each can be swapped independently once parts are in stock. Condition still falls with wear and use; below 65% the whole type needs a full refurbishment. <button class="action small" data-action="tab" data-value="method" data-anchor="method-maintenance">How this works →</button></p></div></section>`;
+  return `<section class="card span-12 fleet-servicing"><div class="card-head"><h2>Fleet servicing</h2><div class="meta">${covid?"COVID SUPPLY SHOCK":"NORMAL PARTS MARKET"} · ${partsLeadDays()}-DAY LEAD TIMES</div></div><div class="card-pad">${hireNudge}${partsStatusStrip()}${selfServiceRelevant()?selfServiceBench(owned):""}${autoRepairToggle}<div class="venue-grid">${spares}</div><div class="cooling-shop"><div class="cooling-shop-head"><div><span class="hero-kicker">Fiat infrastructure</span><h3>Balance cooling against hash rate.</h3></div><p>Stopping a miner removes its heat, energy draw and wear immediately. Room-level cooling equipment lets more machines run safely, but consumes electrical headroom and cash.</p></div><div class="cooling-options">${coolingEquipmentHtml()}</div></div>${immersionPanelHtml()}<div class="balance-list" style="margin-top:10px">${rows}</div><p class="modal-note">Random faults are now attributed to a specific part — hashboard, power PCB, fan or hydro coolant hardware — and each can be swapped independently once parts are in stock. Condition still falls with wear and use; below 65% the whole type needs a full refurbishment. <button class="action small" data-action="tab" data-value="method" data-anchor="method-maintenance">How this works →</button></p></div></section>`;
 }
 const COOLING_ITEM_ART={
   boxfan:`<rect x="14" y="4" width="36" height="36" rx="2" fill="url(#mgm)" stroke="#93a5a0"/><circle cx="32" cy="22" r="14" fill="url(#mgw)" stroke="#5c706c"/><g fill="url(#mgg)"><path d="M32 22 32 10a12 12 0 0 1 10 6z"/><path d="M32 22 42 16a12 12 0 0 1 0 12z"/><path d="M32 22 42 28a12 12 0 0 1-10 6z"/><path d="M32 22 22 28a12 12 0 0 1 0-12z"/></g><path d="M24 40h16v4H24z" fill="#5c706c"/>`,
