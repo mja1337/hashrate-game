@@ -16,7 +16,7 @@ const initialState=()=>{const seed=Math.floor(Math.random()*4294967296);return{
   treasuryPolicy:"cover",pendingSettlement:null,endReason:null,arrearsDue:0,gridCutAnnounced:false,marketPressure:{usd:0,at:0},
   operator:{eras:{},periodMined:0,periodUptime:0,periodDays:0,lastRevenueUsd:0,totalMonths:0,solventMonths:0,profitableMonths:0,competitiveMonths:0,bridgeLoans:0,restructures:0},
   xp:{total:0,level:1,peakLevel:1,bestDifficulty:0,shares:0,sources:{shares:0,record:0,deploy:0,repair:0}},
-  knowledge:0,nextKnowledge:5,learning:null,completedLearning:[],maintenance:{condition:{},faults:{},faultsByPart:{},selfRepairs:{},parts:0,inventory:{fan:0,hashboard:0,powerPcb:0,coolantPump:0,coolingManifold:0,laptopfan:0,asicfan:0,hashboardearly:0,hashboardmodern:0},inventoryMigrated:true,orders:[],serviceJobs:[]},procurementOrders:[],inactiveHardware:{},commissioningJobs:[],decommissionedHardware:{},relocationJob:null,facilityUpgradeJob:null,ops:{firmwarePatchedUntil:0,hijackUntil:0,outageUntil:0,powerOutageUntil:0,venueFreezes:{},riskMonth:""},strategy:{mstr:0,strk:0,strf:0,strd:0,strc:0,yieldEarned:0},sandbox:false,contract:"standard",staff:[],projectLoan:0,insured:false,milestones:[],milestoneLog:[],walletSetup:{done:false,step:0,rolls:[],keyHex:""},guidance:{dismissed:[]},walletSoftware:0,donations:[],
+  knowledge:0,nextKnowledge:5,learning:null,completedLearning:[],custody:{devices:[],keys:[],policy:"single",assigned:[],configBackedUp:false,orders:[],parts:{},builds:[],exposure:[],seq:0,lastScare:0},maintenance:{condition:{},faults:{},faultsByPart:{},selfRepairs:{},parts:0,inventory:{fan:0,hashboard:0,powerPcb:0,coolantPump:0,coolingManifold:0,laptopfan:0,asicfan:0,hashboardearly:0,hashboardmodern:0},inventoryMigrated:true,orders:[],serviceJobs:[]},procurementOrders:[],inactiveHardware:{},commissioningJobs:[],decommissionedHardware:{},relocationJob:null,facilityUpgradeJob:null,ops:{firmwarePatchedUntil:0,hijackUntil:0,outageUntil:0,powerOutageUntil:0,venueFreezes:{},riskMonth:""},strategy:{mstr:0,strk:0,strf:0,strd:0,strc:0,yieldEarned:0},sandbox:false,contract:"standard",staff:[],projectLoan:0,insured:false,milestones:[],milestoneLog:[],walletSetup:{done:false,step:0,rolls:[],keyHex:""},guidance:{dismissed:[]},walletSoftware:0,donations:[],
   blocks:0,mined:0,nodeDays:0,uptimeDays:0,powerSpent:0,nextMilestone:1000,
   connectivity:"fixed",history:[],activity:[],activitySeq:0,log:[{time:START,text:"Client synced to the network tip",amount:"~block "+approxHeight(START)}]
 }};
@@ -92,6 +92,19 @@ state.nodeSync=Object.assign({primaryLag:0,primaryPeak:0,backupLag:0,backupPeak:
 ["primaryLag","primaryPeak","backupLag","backupPeak"].forEach(k=>state.nodeSync[k]=Math.max(0,Number(state.nodeSync[k])||0));
 state.backupNode=Object.assign({enabled:false,outageUntil:0},state.backupNode||{});state.backupNode.enabled=!!state.backupNode.enabled;state.backupNode.outageUntil=Math.max(0,Number(state.backupNode.outageUntil)||0);
 state.strategy=Object.assign({mstr:0,strk:0,strf:0,strd:0,strc:0,yieldEarned:0},state.strategy||{});
+/* Custody arrived after these saves were written. Balances and skills are untouched: a run
+   loading into the new model keeps every coin exactly where it was and simply has no devices
+   yet, which reads correctly — it never bought any. */
+state.custody=Object.assign({devices:[],keys:[],policy:"single",assigned:[],configBackedUp:false,
+  orders:[],parts:{},builds:[],exposure:[],seq:0,lastScare:0},state.custody||{});
+for(const field of ["devices","keys","assigned","orders","builds","exposure"])
+  if(!Array.isArray(state.custody[field]))state.custody[field]=[];
+if(!state.custody.parts||typeof state.custody.parts!=="object")state.custody.parts={};
+state.custody.policy=CUSTODY_POLICIES.some(x=>x.id===state.custody.policy)?state.custody.policy:"single";
+state.custody.devices=state.custody.devices.filter(d=>d&&CUSTODY_PRODUCTS.some(p=>p.id===d.product));
+state.custody.keys=state.custody.keys.filter(k=>k&&k.id);
+state.custody.assigned=state.custody.assigned.filter(id=>state.custody.keys.some(k=>k.id===id));
+state.custody.seq=Math.max(Number(state.custody.seq)||0,state.custody.devices.length+state.custody.keys.length);
 Object.keys(state.strategy).forEach(k=>{if(!Number.isFinite(Number(state.strategy[k])))state.strategy[k]=0;else state.strategy[k]=Number(state.strategy[k])});
 state.nodeStorage=Math.max(50,Number(state.nodeStorage)||50);state.nodePruned=!!state.nodePruned;state.nodeMode=NODE_MODES.some(x=>x.id===state.nodeMode)?state.nodeMode:(state.nodePruned?"pruned":"archival");state.nodePruned=state.nodeMode==="pruned";
 state.staff=Array.isArray(state.staff)?state.staff:[];state.contract=POWER_CONTRACTS.some(x=>x.id===state.contract)?state.contract:"standard";state.connectivity=CONNECTIVITY_PLANS.some(x=>x.id===state.connectivity)?state.connectivity:"fixed";state.projectLoan=Math.max(0,Number(state.projectLoan)||0);state.milestones=Array.isArray(state.milestones)?state.milestones:[];
@@ -177,7 +190,7 @@ function fleet(s=state){
 }
 function controlled(){return state.wallets.hot+state.wallets.cold}
 const COUNTERPARTY_LEAD_DAYS=30;
-function hotWalletIncidentRisk(s=state){if(s.time<at("2011-01-01")||(s.wallets?.hot||0)<=0)return 0;const selfHeld=Math.max(1e-12,(s.wallets?.hot||0)+(s.wallets?.cold||0)),hotShare=(s.wallets?.hot||0)/selfHeld,base=.00065+hotShare*.0016;return base*(s.skills?.includes("multisig")?.42:1)*(s.skills?.includes("backups")?.7:1)}
+function hotWalletIncidentRisk(s=state){if(s.time<at("2011-01-01")||(s.wallets?.hot||0)<=0)return 0;const selfHeld=Math.max(1e-12,(s.wallets?.hot||0)+(s.wallets?.cold||0)),hotShare=(s.wallets?.hot||0)/selfHeld,base=.00065+hotShare*.0016;return base*custodyCompromiseFactor(s)*(s.skills?.includes("backups")?.7:1)}
 function hotWalletAnnualRisk(s=state){return 1-Math.pow(1-hotWalletIncidentRisk(s),12)}
 /* Arrears give you the rest of the month. The grid is cut at the next bill date if
    the debt is still outstanding, which is when a real supplier stops waiting. */
@@ -323,6 +336,7 @@ function advanceOperationalRisks(next){
   if(state.ops.outageUntil&&next>=state.ops.outageUntil){state.ops.outageUntil=0;log("Connectivity restored",`${region().name} upstream service resumed`,`operations`);showToast("Internet restored",`${connectivityPlan().name} service is back. Mining and primary-node connectivity can resume.`,"info","facilities")}
   if(state.ops.powerOutageUntil&&next>=state.ops.powerOutageUntil){state.ops.powerOutageUntil=0;log("Grid power restored",`${region().name} site energized`,`operations`);showToast("Grid restored",`Power is back at ${facility().name}. The fleet can resume hashing.`,"info","facilities")}
   const month=new Date(next).toISOString().slice(0,7);if(state.ops.riskMonth===month)return;state.ops.riskMonth=month;
+  advanceCustodyRisks(next);
   const hotRisk=hotWalletIncidentRisk();if(hotRisk>0&&nextRand()<hotRisk){const lost=state.wallets.hot*(.12+nextRand()*.28);state.wallets.hot=Math.max(0,state.wallets.hot-lost);log("Hot-wallet key compromise",`-${fmtBtc(lost)} · cold storage unaffected`,"custody");showToast("Hot wallet compromised",`${fmtBtc(lost)} was lost from the online wallet. Cold storage and custodial venues were unaffected.`,"bad","custody");renderFullQueued=true}
   if(firmwarePatchDue()&&!firmwareHijacked()&&nextRand()<.07){state.ops.hijackUntil=next+DAY*(10+Math.floor(nextRand()*21));log("ASIC fleet hijacked","35% of hash diverted");showToast("Firmware compromise","Unpatched ASIC firmware is pointing part of your hash rate to an attacker. Patch it now.","bad");}
   const r=region(),outageRisk=connectivityIncidentRisk(),gridRisk=Math.min(.28,Math.max(.004,(1-r.rely)*1.15));
@@ -339,6 +353,7 @@ function advanceOperationalRisks(next){
   [["bitfinex",.022],["quadriga",.065],["frontier",.04],["exchange",.007]].forEach(([id,risk])=>{if(state.wallets[id]>0&&!venueFrozen(id)&&nextRand()<risk){const days=7+Math.floor(nextRand()*24);state.ops.venueFreezes[id]=next+DAY*days;log(`${walletName(id)} withdrawals frozen`,`${days} days`);showToast("Withdrawal freeze",`${walletName(id)} has paused withdrawals. Move funds only when service resumes.`,"bad");}});
 }
 function advanceFleetLifecycle(){
+  advanceCustodyOrders(state.time);
   state.commissioningJobs=state.commissioningJobs.filter(job=>{if(job.due>state.time)return true;const h=HARDWARE.find(item=>item.id===job.id);
     if(h){const incoming=incomingConditionFor(h,job.orderedAt||state.time);
       if(incoming<100){const existing=state.hardware[job.id]||0,prior=maintenanceCondition(h),total=existing+job.qty;
@@ -400,7 +415,18 @@ function expectedDailyBtcForHash(hash,t=state.time){
   return blocks*reward*uptime*contractUptimeFactor()*connectivityMiningFactor()*nodeMiningFactor()*(state.mode==="pool"?(1-poolFee())*poolRewardFactorAt(t):1)*(firmwareHijacked() ? .65 : 1);
 }
 function expectedDay(){return expectedDailyBtcForHash(fleet().hash,state.time)}
+/* A vendor losing its customer list is a privacy event with a date and a scope. It reaches
+   the people who bought from that vendor inside the window the disclosure describes, and it
+   keeps reaching them: a leaked record cannot be un-leaked by buying a different device.
+   What it never does is move coins by itself, or prove the device was compromised. */
 function applyEvent(e){
+  if(e.fx==="ledgerleak"){
+    state.custody.exposure.push({supplier:"ledger",at:state.time,from:"2016-06-01",to:"2020-06-30",
+      source:e.source||"vendor disclosure"});
+    const hit=custodyExposedPurchases();
+    if(hit.length)log("Your purchase is in the leaked records",
+      `${hit.length} device order${hit.length===1?"":"s"} bought from Ledger in the affected window`,"custody");
+  }
   if(e.fx==="mtgox"&&state.wallets.mtgox>0){const lost=state.wallets.mtgox*.8,claim=state.wallets.mtgox*.2;state.wallets.mtgox=0;state.wallets.frozen+=claim;log("Mt. Gox failure",`-${fmtBtc(lost)}`)}
   if(e.fx==="bitfinex"&&state.wallets.bitfinex>0){const lost=state.wallets.bitfinex*.36;state.wallets.bitfinex-=lost;log("Bitfinex security loss",`-${fmtBtc(lost)}`)}
   if(e.fx==="quadriga"&&state.wallets.quadriga>0){const lost=state.wallets.quadriga*.8,claim=state.wallets.quadriga*.2;state.wallets.quadriga=0;state.wallets.frozen+=claim;log("QuadrigaCX collapse",`-${fmtBtc(lost)}`)}

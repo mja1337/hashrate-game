@@ -413,7 +413,9 @@ assert(inline.includes('control.setAttribute("aria-describedby",id)') && inline.
 assert(inline.includes('data-value="method" data-anchor="${help.anchor}"') && inline.includes('else if(a==="tab"){activeTab=v') && inline.includes("setTimeout(()=>revealMethodAnchor(anchor),60)"), "Contextual help cannot deep-link to the relevant Method chapter");
 assert(inline.includes("function revealMethodAnchor(id)") && inline.includes('if(node.tagName==="DETAILS")node.open=true'), "A deep link into a collapsed Method chapter cannot scroll to a target the browser is still hiding");
 assert(!inline.includes("ensureMethodAnchors"), "Method anchors are written into the markup now; the runtime heading-text matcher must not come back");
-const methodSource = await readFile(new URL("src/ui/tabs/method.js", root), "utf8");
+// The chapter prose moved to its own module when method.js reached the size ceiling; the
+// renderer stayed behind. This check is about the chapters, so it follows them.
+const methodSource = await readFile(new URL("src/ui/tabs/method-chapters.js", root), "utf8");
 const methodChapterIds = [...methodSource.matchAll(/\{id:"(method-[a-z]+)",title:/g)].map(match => match[1]);
 assert(methodChapterIds.length === 8, `Method should open as eight named chapters, not ${methodChapterIds.length}`);
 assert(methodChapterIds[0] === "method-start" && methodChapterIds[7] === "method-sandbox", "Method must open on Start here and close on the procedural sandbox");

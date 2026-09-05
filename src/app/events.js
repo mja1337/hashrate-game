@@ -40,6 +40,20 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(a==="repair-nudge")repairNudgeDial(id,b.dataset.delta);
   else if(a==="focus-service"){const row=document.querySelector(`[data-service-row="${id}"]`);if(row){row.scrollIntoView({behavior:"smooth",block:"center"});row.classList.add("focus-flash");setTimeout(()=>row.classList.remove("focus-flash"),1600)}}
   else if(a==="buy-cooling")buyCooling(id);
+  else if(a==="custody-buy")orderCustodyProduct(id,1);
+  else if(a==="custody-assemble")assembleCustodyBuild(id);
+  else if(a==="custody-genkey")generateCustodyKey(id);
+  else if(a==="custody-restore"){
+    // Restoring the newest seed onto a spare device, which is the common real mistake:
+    // it looks like adding a signer and adds no key at all.
+    const spare=state.custody.keys[state.custody.keys.length-1];
+    if(spare)restoreCustodyKey(id,spare.id);
+  }
+  else if(a==="custody-backup")backupCustodyKey(id,v);
+  else if(a==="custody-assign")assignCustodyKey(id);
+  else if(a==="custody-unassign")unassignCustodyKey(id);
+  else if(a==="custody-policy")setCustodyPolicy(id);
+  else if(a==="custody-config")backupCustodyConfig();
   else if(a==="custody-lesson"){custodyLesson=v;render()}
   else if(a==="select-venue"){selectedVenue=v;render()}
   else if(a==="patch-firmware")patchFirmware();

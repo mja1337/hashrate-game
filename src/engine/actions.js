@@ -282,7 +282,7 @@ function sellBtc(bucket,fraction){
 function transfer(from,to,fraction){
   if(venueFrozen(from))return showToast("Withdrawals frozen",`${walletName(from)} has paused withdrawals until ${dateFmt(state.ops.venueFreezes[from])}.`);
   fraction=clamp(Number(fraction)||0,0.01,1);const gross=state.wallets[from]*fraction;if(gross<=0)return;
-  const baseFee=nodeOnline()&&state.nodeMode==="relay"?0.000035:nodeOnline()&&state.nodeMode!=="pruned"?0.00005:0.0002,fee=baseFee*(hasSkill("multisig")?.8:1);if(gross<=fee)return showToast("Transfer too small",`The selected ${formatPercent(fraction*100)}% is not enough to cover the ${fmtBtc(fee)} network fee.`);const btc=gross-fee;
+  const baseFee=nodeOnline()&&state.nodeMode==="relay"?0.000035:nodeOnline()&&state.nodeMode!=="pruned"?0.00005:0.0002,fee=baseFee*(custodySetup().policy.threshold>1?1.35:1);if(gross<=fee)return showToast("Transfer too small",`The selected ${formatPercent(fraction*100)}% is not enough to cover the ${fmtBtc(fee)} network fee.`);const btc=gross-fee;
   state.wallets[from]-=gross;state.wallets[to]+=btc;log(`Moved BTC: ${walletName(from)} → ${walletName(to)}`,`${fmtBtc(gross)} sent · -${fmtBtc(fee)} fee`);showToast("BTC transfer complete",`${fmtBtc(btc)} reached ${walletName(to)} after a ${fmtBtc(fee)} network fee.`,"info","custody");save();render();
 }
 const CONFIRMABLE_ACTIONS=new Set(["buy-btc","sell-btc","buy-hw","buy-hw-btc","sell-hw","sell-hw-btc","buy-strategy","sell-strategy","buy-node","buy-backup-node"]);
