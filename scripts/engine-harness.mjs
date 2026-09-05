@@ -46,9 +46,14 @@ const FILES = [
   "src/engine/actions.js",
 ];
 
-export function loadEngine() {
+/* `seedSave` writes a save into the shimmed localStorage BEFORE the scripts run, so the
+   load-time migration executes against it exactly as it would in the browser — including the
+   part of it that only runs for old save shapes, which is where a load-order bug can hide
+   until a real player opens a real save. */
+export function loadEngine(seedSave = null) {
   const noop = () => {};
   const store = {};
+  if (seedSave) store["hashrate-genesis-save-v1"] = JSON.stringify(seedSave);
   const sandbox = {
     console,
     Math, Date, JSON, Number, String, Object, Array, Boolean, Map, Set, WeakMap,

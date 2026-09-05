@@ -24,6 +24,19 @@ const HARDWARE=[
    maintenance.js because simulation.js migrates saves against them at load time,
    and maintenance.js is parsed after simulation.js. */
 function fanTierFor(h){return h.fan||(h.era==="ASIC"||h.era==="HYDRO ASIC"?"asicfan":"fan")}
+/* Moved here from maintenance.js for the same reason as its two neighbours: the save
+   migration in simulation.js calls it at load time, and maintenance.js is parsed later. Left
+   where it was, a save carrying legacy fault counts threw a ReferenceError partway through
+   the migration, which aborted the rest of simulation.js and left every const declared below
+   that point uninitialised — the whole app dead on load, not just the faults. */
+function partFaultWeights(h){
+  const fanTier=fanTierFor(h),boardTier=hashboardTierFor(h);
+  if(h.era==="HYDRO ASIC")return{[boardTier]:.30,powerPcb:.25,[fanTier]:.15,coolantPump:.15,coolingManifold:.15};
+  if(h.era==="ASIC")return{[boardTier]:.45,powerPcb:.35,[fanTier]:.20};
+  if(h.era==="FPGA")return{powerPcb:.55,[fanTier]:.45};
+  if(h.era==="GPU")return{[fanTier]:.55,powerPcb:.45};
+  return{[fanTier]:1};
+}
 function hashboardTierFor(h){if(h.era==="HYDRO ASIC")return"hashboardmodern";if(h.era!=="ASIC")return null;if(at(h.date)<at("2016-01-01"))return"hashboardearly";if(at(h.date)<at("2020-01-01"))return"hashboard";return"hashboardmodern"}
 
 const SPARE_PARTS=[

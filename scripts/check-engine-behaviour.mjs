@@ -9,6 +9,17 @@
 
 import { loadEngine, makeEval } from "./engine-harness.mjs";
 
+/* Loading a save runs the migration in simulation.js, which is parsed before maintenance.js.
+   Anything that migration calls therefore has to be declared in a file that loads earlier —
+   a rule that is invisible until someone opens a save old enough to take the branch. A save
+   carrying legacy fault counts did exactly that: the migration called partFaultWeights(),
+   which lived in maintenance.js, and the ReferenceError aborted the rest of simulation.js,
+   leaving every const below that point uninitialised and the whole app dead on load. */
+function loadWithSave(save) {
+  try { return { ok: true, sandbox: loadEngine(save) }; }
+  catch (error) { return { ok: false, message: error.message }; }
+}
+
 const ev = makeEval(loadEngine());
 const run = expr => ev(expr);
 const json = expr => JSON.parse(ev(`JSON.stringify(${expr})`));
@@ -897,6 +908,28 @@ rule("a repair waiting at the bench does not repaint the tab on every tick", () 
     return{extra,skipped:false};})()`);
   assert(r.skipped !== true, "the job finished on its own, so the waiting behaviour was never exercised");
   assert(r.extra === 0, `a job idling at the bench asked for ${r.extra} further repaints in ten days`);
+});
+
+
+/* ---- SAVES: an old one must still open ---- */
+
+rule("a save carrying legacy fault counts still loads", () => {
+  const legacy = {
+    started: true, time: Date.UTC(2016, 5, 1), cash: 5000,
+    hardware: { s9: 12 },
+    // The pre-split shape: a bare count per machine, with no per-part breakdown to migrate
+    // from. This is the branch that reaches for the fault weights.
+    maintenance: { condition: { s9: 70 }, faults: { s9: 4 }, parts: 3, inventory: {}, orders: [], serviceJobs: [] }
+  };
+  const loaded = loadWithSave(legacy);
+  assert(loaded.ok, `an old save could not be opened at all: ${loaded.message}`);
+  const read = makeEval(loaded.sandbox);
+  // Everything declared after the migration must still exist: a throw part-way through
+  // simulation.js leaves the rest of the file uninitialised rather than merely skipped.
+  assert(read(`typeof ANNOUNCE_WINDOW`) === "number", "simulation.js stopped executing part-way through the save migration");
+  const migrated = JSON.parse(read(`JSON.stringify(state.maintenance.faultsByPart.s9||{})`));
+  const total = Object.values(migrated).reduce((sum, n) => sum + n, 0);
+  assert(total === 4, `four legacy faults became ${total} attributed faults`);
 });
 
 if (failures.length) {

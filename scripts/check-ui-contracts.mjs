@@ -125,7 +125,10 @@ for (const [maximum, expected] of [[0, [1]], [1, [1]], [2, [1, 2]], [5, [1, 2, 5
   assert(new Set(actual).size === actual.length, `Mine purchase quantities contain duplicates for a maximum of ${maximum}`);
 }
 const controlsStart = inline.indexOf("function hardwareBuyControls(");
-const controlsEnd = inline.indexOf("\nfunction mine(", controlsStart);
+// Bounded by the next top-level function rather than by `mine()` specifically: this is meant
+// to read hardwareBuyControls alone, and naming the neighbour made it silently swallow
+// anything later inserted between the two.
+const controlsEnd = inline.indexOf("\nfunction ", controlsStart + 1);
 const controlsSource = inline.slice(controlsStart, controlsEnd);
 assert((controlsSource.match(/<button/g) || []).length === 1, "A Mine card's unified buy control should render exactly one button");
 assert(controlsSource.includes("data-hardware-qty") && controlsSource.includes("data-hardware-currency"), "Mine buy control is missing the quantity or currency selector");

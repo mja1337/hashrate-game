@@ -34,6 +34,7 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(a==="order-parts")orderParts(id,Number(v));
   else if(a==="service-hw")serviceHardware(id);
   else if(a==="service-part")serviceHardwarePart(id,part);
+  else if(a==="mine-section"){state.mineSection=v;save();renderMineContent();window.scrollTo({top:0,behavior:"smooth"})}
   else if(a==="convert-immersion")convertToImmersion(id,Number(v));
   else if(a==="drain-immersion")revertFromImmersion(id,Number(v));
   else if(a==="repair-remove-old")repairRemoveOldPart(id);

@@ -41,14 +41,6 @@ function partFitSummary(partId){
   const eras=[...new Set(all.map(h=>h.era))].join(", ");
   return{fits:false,text:`Nothing in your fleet uses this — it fits ${eras} hardware such as ${all[all.length-1].name}`};
 }
-function partFaultWeights(h){
-  const fanTier=fanTierFor(h),boardTier=hashboardTierFor(h);
-  if(h.era==="HYDRO ASIC")return{[boardTier]:.30,powerPcb:.25,[fanTier]:.15,coolantPump:.15,coolingManifold:.15};
-  if(h.era==="ASIC")return{[boardTier]:.45,powerPcb:.35,[fanTier]:.20};
-  if(h.era==="FPGA")return{powerPcb:.55,[fanTier]:.45};
-  if(h.era==="GPU")return{[fanTier]:.55,powerPcb:.45};
-  return{[fanTier]:1};
-}
 function pickWeightedPart(weights){
   const entries=Object.entries(weights),total=entries.reduce((sum,[,w])=>sum+w,0)||1;
   let roll=nextRand()*total;

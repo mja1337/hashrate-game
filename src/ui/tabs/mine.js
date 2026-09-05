@@ -20,8 +20,30 @@ function hardwareBuyControls(h,cost,maxBuy,maxBtcQty,available,marketOpen,select
   const unitBtc=marketOpen?cost/Math.max(1e-9,priceAt(state.time)):0,costLabel=selectedCurrency==="btc"?fmtCompactBtc(unitBtc*selected.qty):fmtCompactUsd(cost*selected.qty),buyAction=selectedCurrency==="btc"?"buy-hw-btc":"buy-hw";
   return `<div class="actions hardware-buy-controls" data-id="${h.id}" data-max-fiat="${maxBuy}" data-max-btc="${maxBtcQty}"><select data-hardware-qty aria-label="Purchase quantity for ${h.name}" ${disabled?"disabled":""}>${options.map(option=>`<option value="${option.qty}" ${option.qty===selected.qty?"selected":""}>${option.label}</option>`).join("")}</select><select data-hardware-currency aria-label="Purchase currency for ${h.name}" ${disabled?"disabled":""}><option value="usd" ${selectedCurrency==="usd"?"selected":""}>USD</option><option value="btc" ${selectedCurrency==="btc"?"selected":""} ${marketOpen?"":"disabled"}>BTC</option></select><button class="action small primary" data-action="${buyAction}" data-id="${h.id}" data-value="${selected.qty}" ${disabled?"disabled":""} title="${!available?`Not purchasable until ${dateFmt(at(h.date))}`:selected.disabled?"Cash, power or floor space currently blocks any purchase — see the capacity panel above":""}">Buy ${fmtCompactNumber(selected.qty)} · ${costLabel}</button></div>`;
 }
+/* THE MINE TAB, IN THREE PARTS.
+
+   Mine ran to nearly twelve screens of scroll against four to eight for every other tab,
+   because it carried the floor, the whole servicing bay and the hardware catalogue at once.
+   That is what made it the worst tab to navigate away from: the tab row lives above the
+   content, so the further down a page runs the longer it is unreachable. Sticking the tab
+   row fixed the reachability; splitting the page fixes the length.
+
+   The split follows what an operator is actually doing rather than the order the markup
+   happened to be in: watching the floor, fixing what is on it, or buying more. */
+const MINE_SECTIONS=[
+  {id:"floor",name:"Floor",hint:"Live machines, temperature and power"},
+  {id:"service",name:"Servicing",hint:"Faults, spare parts and repairs"},
+  {id:"cooling",name:"Cooling",hint:"Heat rejection plant and immersion tanks"},
+  {id:"buy",name:"Hardware",hint:"Catalogue, deliveries and retirement"}
+];
+function mineSection(){return MINE_SECTIONS.some(s=>s.id===state.mineSection)?state.mineSection:"floor"}
+function mineSectionNav(){
+  const active=mineSection();
+  return `<section class="card span-12 mine-sections"><div class="mine-section-tabs" role="tablist">${MINE_SECTIONS.map(s=>`<button class="mine-section ${s.id===active?"active":""}" data-action="mine-section" data-value="${s.id}" role="tab" aria-selected="${s.id===active}"><b>${s.name}</b><small>${s.hint}</small></button>`).join("")}</div></section>`;
+}
 function mine(){
   const fs=fleet(),reserved=plannedFleetProjection(),items=HARDWARE.filter(h=>(state.hardware[h.id]||0)>0||announced(h));
+  if(mineSection()!=="buy")return `<div class="grid"></div>`;
   return `<div class="grid"><section class="card span-12"><div class="hero"><div><div class="hero-kicker">Mining hardware</div><h1>Choose machines that can earn more than they cost to run.</h1><p>Hash rate is the amount of mining work a machine performs. More hash improves its chance of earning BTC; power draw increases the electricity bill. Check both before you buy.</p></div><div class="hero-stat"><strong>${fmtHash(fs.hash)}</strong><span>${fs.count} machines · ${fs.kw.toFixed(2)} kW</span></div></div></section>${profitabilityDeskHtml()}<section class="span-12 catalog">${items.map(h=>{
     const owned=state.hardware[h.id]||0,retired=state.decommissionedHardware?.[h.id]||0,available=state.time>=at(h.date),cost=hardwareUnitCost(h),resale=h.permanent?0:resaleHardwareValue(h),trial=JSON.parse(JSON.stringify(state));trial.hardware[h.id]=(trial.hardware[h.id]||0)+1;const fits=fleet(trial).within;
     const availableKw=Math.max(0,Number(reserved.cap)*1000-Number(reserved.w));
