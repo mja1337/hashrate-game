@@ -56,6 +56,27 @@ function mineSectionBadges(){
     buy:{text:inbound?`${fmtCompactNumber(inbound)} arriving`:"catalogue",tone:inbound?"good":""}
   };
 }
+/* Clicking a faulted machine on the floor takes you to its repair. Splitting Mine into
+   sections broke that silently: the service rows moved to Servicing, so the click still
+   fired, found no row on the Floor section, and did nothing at all. The jump now carries you
+   across the section boundary — which is also the behaviour 3D picking has to match, since
+   a machine you click in the room should reach the same place as one you click on the flat
+   floor. */
+function focusServiceRow(id){
+  const flash=()=>{
+    const row=document.querySelector(`[data-service-row="${id}"]`);
+    if(!row)return false;
+    row.scrollIntoView({behavior:"smooth",block:"center"});
+    row.classList.add("focus-flash");
+    setTimeout(()=>row.classList.remove("focus-flash"),1600);
+    return true;
+  };
+  if(flash())return;
+  state.mineSection="service";
+  save();renderMineContent();
+  // Two frames: one for the section to paint, one for its layout to settle before scrolling.
+  requestAnimationFrame(()=>requestAnimationFrame(flash));
+}
 function mineSectionNav(){
   const active=mineSection(),badges=mineSectionBadges();
   return `<nav class="mine-sections" aria-label="Mine sections"><span class="mine-sections-label">Mine</span><div class="mine-section-tabs" role="tablist">${MINE_SECTIONS.map(s=>{

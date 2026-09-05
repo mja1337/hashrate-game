@@ -99,7 +99,9 @@ const FloorModel=(()=>{
     const f=facility();
     return {preset:f.id,hardware:dominantHardware().id,power:state.power&&!gridCutOff()&&!state.policyLock,
       cooling:typeof thermalPowerAvailable==="function"?thermalPowerAvailable():true,
-      showStaff:true,selected:0};
+      /* Nothing is selected until something is selected. This was pinned at 0, so batch
+         zero wore an orange selection ring in every room the game has ever drawn. */
+      showStaff:true,selected:Number.isInteger(state.floorSelected)?state.floorSelected:-1};
   }
 
   return {presets:FLOOR_SITES,definitions,batches,metrics,crew,cooling,describe,site};

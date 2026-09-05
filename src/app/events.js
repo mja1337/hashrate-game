@@ -41,7 +41,7 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(a==="repair-tap")repairTapSlot(id,b.dataset.slot);
   else if(a==="repair-cable")repairCableClick(id,b.dataset.slot);
   else if(a==="repair-nudge")repairNudgeDial(id,b.dataset.delta);
-  else if(a==="focus-service"){const row=document.querySelector(`[data-service-row="${id}"]`);if(row){row.scrollIntoView({behavior:"smooth",block:"center"});row.classList.add("focus-flash");setTimeout(()=>row.classList.remove("focus-flash"),1600)}}
+  else if(a==="focus-service")focusServiceRow(id);
   else if(a==="buy-cooling")buyCooling(id);
   else if(a==="floor-view"){state.floorView=v==="3d"?"3d":"2d";save();render();}
   else if(a==="gift-card")buyGiftCard(id,Number(v));

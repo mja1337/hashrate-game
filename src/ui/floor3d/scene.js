@@ -92,6 +92,9 @@ const FloorScene=(()=>{
       // Haloes are additive light, so they draw after everything they sit in front of.
       if(bucket.glow)mesh.renderOrder=2;
       mesh.userData.lamp=!!bucket.unlit;
+      /* Haloes are additive light with depth writes off. They are the largest thing in front
+         of a machine and would swallow every pointer hit, so picking has to skip them. */
+      mesh.userData.glow=!!bucket.glow;
       root.add(mesh);
       if(bucket.fan)fanMeshes.push({mesh,items:bucket.items});
     }
