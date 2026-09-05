@@ -33,6 +33,12 @@ const COOLING_EQUIPMENT=[
   {id:"ahu",name:"Filtered air-handling unit",date:"2015-01-01",minTier:4,maxTier:6,cost:54000,install:35,coolingKw:620,watts:22000,desc:"A controlled industrial airflow plant with filtration and economiser logic."},
   {id:"evap",name:"Evaporative cooling bank",date:"2018-01-01",minTier:5,maxTier:7,cost:478000,install:60,coolingKw:5200,watts:173000,desc:"Utility-scale evaporative cooling: capital intensive, and cheaper to run than any air plant below it."},
   {id:"drycooler",name:"Closed-loop dry cooler",date:"2020-01-01",minTier:6,maxTier:8,cost:2110000,install:90,coolingKw:22000,watts:688000,desc:"Container and hydro-loop heat rejection with pumps, controls and redundancy. Dearer to install than an evaporative bank, and leaner to run."},
+  /* Not simply another rung on the air ladder: a tank holds miners as well as rejecting
+     their heat, so it carries a `units` capacity the other plant has no need of. Its draw is
+     pumps and a heat exchanger rather than fans moving a building's worth of air, which is
+     why it sheds so much more per watt than the evaporative bank above it and still costs
+     more per kilowatt to install. */
+  {id:"immersion",name:"Single-phase immersion tank",date:"2021-01-01",minTier:3,maxTier:8,cost:96000,install:45,coolingKw:520,watts:16000,units:150,desc:"A dielectric fluid bath with a pumped heat-exchanger loop, holding up to 150 converted miners. Their heat leaves through the loop instead of the room, and submerged machines take clock headroom air cooling cannot support."},
   {id:"coolingtower",name:"Industrial cooling tower",date:"2023-01-01",minTier:7,maxTier:8,cost:7200000,install:120,coolingKw:72000,watts:2118000,desc:"Campus-scale heat rejection for dense liquid-cooled fleets: the dearest plant to build and the cheapest to run."}
 ];
 const REGIONS=[

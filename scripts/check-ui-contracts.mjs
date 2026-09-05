@@ -631,12 +631,17 @@ assert(legacyHits.length === 0, `Legacy terminology is back in player-facing cop
 // Cooling plant is ordered and installed, not conjured. It was the only thing in the
 // room that appeared instantly and was never drawn, so both are now checked.
 const operationsSource = await readFile(new URL("src/data/operations.js", root), "utf8");
-const coolingRows = [...operationsSource.matchAll(/\{id:"(\w+)",name:"([^"]+)",date:"[\d-]+",minTier:\d+,maxTier:\d+,cost:(\d+),install:(\d+),/g)];
-assert(coolingRows.length === 7, `Every cooling item needs an install lead time; ${coolingRows.length} of 7 have one`);
+const coolingRows = [...operationsSource.matchAll(/\{id:"(\w+)",name:"([^"]+)",date:"[\d-]+",minTier:\d+,maxTier:\d+,cost:(\d+),install:(\d+),[^}]*\}/g)];
+assert(coolingRows.length === 8, `Every cooling item needs an install lead time; ${coolingRows.length} of 8 have one`);
 let previousInstall = 0;
-for (const [, id, name, cost, install] of coolingRows) {
+for (const row of coolingRows) {
+  const [text, id, name, cost, install] = row;
   const days = Number(install);
   assert(days >= 1 && days <= 200, `${name} has an implausible install lead time of ${days} days`);
+  // Plant that holds miners is a different kind of thing rather than a bigger rung of the
+  // air ladder: a single tank is smaller than the dry cooler it arrives after, so it is
+  // read for plausibility but left out of the walk up the ladder.
+  if (text.includes("units:")) continue;
   assert(days >= previousInstall, `Cooling install times should not shrink as the plant gets bigger: ${name} takes ${days} days`);
   previousInstall = days;
 }

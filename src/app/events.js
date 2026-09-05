@@ -34,6 +34,8 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(a==="order-parts")orderParts(id,Number(v));
   else if(a==="service-hw")serviceHardware(id);
   else if(a==="service-part")serviceHardwarePart(id,part);
+  else if(a==="convert-immersion")convertToImmersion(id,Number(v));
+  else if(a==="drain-immersion")revertFromImmersion(id,Number(v));
   else if(a==="repair-remove-old")repairRemoveOldPart(id);
   else if(a==="repair-tap")repairTapSlot(id,b.dataset.slot);
   else if(a==="repair-cable")repairCableClick(id,b.dataset.slot);

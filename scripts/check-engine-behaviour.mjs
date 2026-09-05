@@ -33,8 +33,9 @@ const SITE = (overrides = "") => `
   state.hardwareGlut=null;state.marketPressure={usd:0,at:0};
   state.ops={firmwarePatchedUntil:1e15,hijackUntil:0,outageUntil:0,powerOutageUntil:0,venueFreezes:{},riskMonth:""};
   state.thermal={temperature:22,orders:[],equipment:{}};
-  state.maintenance={condition:{},faults:{},faultsByPart:{},selfRepairs:{},parts:0,
+  state.maintenance={condition:{},faults:{},faultsByPart:{},selfRepairs:{},dryFit:{},parts:0,
     inventory:state.maintenance.inventory,orders:[],serviceJobs:[]};
+  state.immersion={};
   ${overrides}`;
 
 /* ---- PROTOCOL: rules Bitcoin itself enforces, which the game may never bend ---- */
@@ -614,11 +615,31 @@ rule("each security pays the yield it advertises", () => {
 
 /* ---- COOLING: a ladder where every rung is a trade-off ---- */
 
+/* The carve-out above is only honest while it stays narrow: plant excused from the $/kW
+   comparison has to earn its place by holding miners, and has to actually be reachable. */
+rule("cooling plant excused from the cost ladder earns it by holding miners", () => {
+  const problems = json(`(()=>{
+    const out=[];
+    for(const item of COOLING_EQUIPMENT){
+      if(!item.units)continue;
+      if(!(item.units>0))out.push(item.id+" claims a unit capacity that is not a positive number");
+      if(!(item.coolingKw>0))out.push(item.id+" rejects no heat");
+      if(item.minTier>item.maxTier)out.push(item.id+" is available at no facility tier");
+    }
+    return out;})()`);
+  assert(problems.length === 0, `plant excused from the ladder does not justify itself: ${problems.join("; ")}`);
+});
+
+
+/* Plant carrying a unit capacity is not competing on heat rejection alone — an immersion
+   tank also holds the miners and changes what they do, so it is bought for reasons this
+   comparison cannot see, and is expected to lose on dollars per kilowatt. The companion rule
+   above stops that becoming an excuse for any plant to be dominated. */
 rule("no cooling plant is beaten on both cost and efficiency at the same tier", () => {
   const problems = json(`(()=>{
     const out=[];
     for(let tier=1;tier<=FACILITIES.length;tier++){
-      const avail=COOLING_EQUIPMENT.filter(c=>tier>=c.minTier&&tier<=c.maxTier);
+      const avail=COOLING_EQUIPMENT.filter(c=>tier>=c.minTier&&tier<=c.maxTier&&!c.units);
       for(const a of avail)for(const b of avail){
         if(a===b)continue;
         const ac=a.cost/a.coolingKw,ae=a.coolingKw/(a.watts/1000);
@@ -700,6 +721,121 @@ rule("the cheapest power in the game is not automatically the best site", () => 
     const cheapest=REGIONS.filter(r=>at(r.date)<=at("2021-06-01")).sort((a,b)=>a.kwh-b.kwh)[0];
     return best.id===cheapest.id?"cheapest-wins":"trade-off";})()`);
   assert(winner === "trade-off", "the cheapest electricity is also the best site, so the region choice is a lookup");
+});
+
+
+/* ---- IMMERSION: a trade, not an upgrade ---- */
+
+rule("submerging a miner buys hash with power, in the advertised proportions", () => {
+  const r = json(`(()=>{
+    ${SITE(`state.time=at("2022-06-01");state.facility="warehouse";state.region="na";
+      state.hardware={s19:300};state.thermal.equipment.immersion=2;
+      state.maintenance.inventory.immersionKit=400;`)}
+    const before={hash:fleet().hash,watts:fleet().minerW};
+    convertToImmersion("s19",300);
+    const after={hash:fleet().hash,watts:fleet().minerW,converted:immersionTotal()};
+    return{before,after};})()`);
+  assert(r.after.converted === 300, `only ${r.after.converted} of 300 units were converted`);
+  /* Stated as literals rather than read back from the engine's own constants: a rule that
+     asks the engine what it intends and then checks it did that is vacuous, and passes
+     happily when the gain is set to nothing. */
+  const hashGain = r.after.hash / r.before.hash, powerGain = r.after.watts / r.before.watts;
+  assert(hashGain > 1.15 && hashGain < 1.45, `converting changed hash rate by ${hashGain.toFixed(3)}x, which is not a meaningful overclock`);
+  assert(powerGain > 1.15 && powerGain < 1.6, `converting changed power draw by ${powerGain.toFixed(3)}x`);
+  /* The trade has to point the right way. Immersion does not make a miner efficient — it
+     makes headroom usable — so joules per hash must get WORSE, or the choice is free. */
+  assert(powerGain > hashGain, `immersion improved efficiency (${hashGain.toFixed(3)}x hash for ${powerGain.toFixed(3)}x power), so converting is a free upgrade rather than a trade`);
+});
+
+rule("a submerged fleet stops heating the room it stands in", () => {
+  const r = json(`(()=>{
+    ${SITE(`state.time=at("2022-07-01");state.facility="warehouse";state.region="texas";
+      state.hardware={s19:300};state.thermal.equipment.immersion=2;
+      state.maintenance.inventory.immersionKit=400;`)}
+    const before={room:roomHeatWatts(),total:activeMinerWatts(),target:thermalTargetC()};
+    convertToImmersion("s19",300);
+    const after={room:roomHeatWatts(),total:activeMinerWatts(),target:thermalTargetC()};
+    return{before,after};})()`);
+  assert(r.after.total > r.before.total, "converted miners should draw more from the meter, not less");
+  assert(r.after.room < r.before.room * .2, `room heat only fell from ${Math.round(r.before.room)}W to ${Math.round(r.after.room)}W`);
+  assert(r.after.target < r.before.target - 3, `room target barely moved: ${r.before.target.toFixed(1)}C to ${r.after.target.toFixed(1)}C`);
+});
+
+rule("tank capacity is a real limit on how much can be submerged", () => {
+  const r = json(`(()=>{
+    ${SITE(`state.time=at("2022-06-01");state.facility="warehouse";
+      state.hardware={s19:400};state.thermal.equipment.immersion=1;
+      state.maintenance.inventory.immersionKit=900;`)}
+    convertToImmersion("s19",400);
+    return{converted:immersionTotal(),capacity:immersionCapacity(),free:immersionFree()};})()`);
+  assert(r.converted === r.capacity, `converted ${r.converted} units into ${r.capacity} slots`);
+  assert(r.free === 0, "a full tank still reports free slots");
+});
+
+rule("a machine with no fans left cannot suffer a fan fault", () => {
+  const r = json(`(()=>{
+    ${SITE(`state.time=at("2022-06-01");state.facility="warehouse";
+      state.hardware={s19:150};state.thermal.equipment.immersion=1;
+      state.maintenance.inventory.immersionKit=200;`)}
+    const h=HARDWARE.find(x=>x.id==="s19"),fanTier=fanTierFor(h);
+    const air=immersionAdjustedWeights(h,partFaultWeights(h));
+    convertToImmersion("s19",150);
+    const wet=immersionAdjustedWeights(h,partFaultWeights(h));
+    return{fanTier,airHasFan:fanTier in air,wetHasFan:fanTier in wet,share:immersionShare(h)};})()`);
+  assert(r.airHasFan, "an air-cooled ASIC should be able to lose a fan");
+  assert(r.share === 1, `only ${r.share} of the type is submerged`);
+  assert(!r.wetHasFan, "a fully submerged type can still suffer a fan fault");
+});
+
+rule("immersion is not available before it existed", () => {
+  const r = json(`(()=>{
+    ${SITE(`state.time=at("2019-06-01");state.facility="warehouse";
+      state.hardware={s19:150};state.thermal.equipment.immersion=1;
+      state.maintenance.inventory.immersionKit=200;`)}
+    const h=HARDWARE.find(x=>x.id==="s19");
+    return{reason:immersionBlockReason(h,1),date:immersionTankDef().date};})()`);
+  assert(r.date >= "2020-01-01", `immersion tanks are dated ${r.date}, which is early for single-phase mining deployments`);
+  assert(/not available until/.test(r.reason), `a 2019 site was not told immersion does not exist yet: "${r.reason}"`);
+});
+
+/* ---- THERMAL PASTE: a consumable you notice only when it is missing ---- */
+
+rule("a hashboard swap consumes thermal paste", () => {
+  const r = json(`(()=>{
+    ${SITE(`state.time=at("2020-06-01");state.facility="warehouse";
+      state.hardware={s19:16};state.maintenance.condition={s19:40};
+      state.maintenance.faultsByPart={s19:{hashboardmodern:8}};
+      state.maintenance.inventory.thermalpaste=5;`)}
+    state.maintenance.serviceJobs=[{id:"s19",count:8,part:"hashboardmodern",crew:1,totalDays:1,stage:99}];
+    state.time+=DAY*3;advanceMaintenance();
+    return{paste:state.maintenance.inventory.thermalpaste,
+      condition:maintenanceCondition(HARDWARE.find(h=>h.id==="s19")),
+      marked:dryFitActive(HARDWARE.find(h=>h.id==="s19"))};})()`);
+  assert(r.paste === 4, `a hashboard job consumed ${5 - r.paste} tubes rather than 1`);
+  assert(r.condition > 65, `a properly pasted repair left the type at ${r.condition.toFixed(1)}%, below the offline threshold`);
+  assert(!r.marked, "a properly pasted repair still marked the type as dry-fitted");
+});
+
+/* The point of the consumable is the penalty for skipping it, so assert the penalty rather
+   than only the deduction — and assert it stops short of stranding the fleet, because a
+   repair that leaves a machine below the offline threshold is a soft-lock over $12. */
+rule("skipping thermal paste costs condition and comes back, but never strands the fleet", () => {
+  const r = json(`(()=>{
+    const shot=stock=>{
+      ${SITE(`state.time=at("2020-06-01");state.facility="warehouse";
+        state.hardware={s19:16};state.maintenance.condition={s19:40};
+        state.maintenance.faultsByPart={s19:{hashboardmodern:8}};`)}
+      state.maintenance.inventory.thermalpaste=stock;
+      state.maintenance.serviceJobs=[{id:"s19",count:8,part:"hashboardmodern",crew:1,totalDays:1,stage:99}];
+      state.time+=DAY*3;advanceMaintenance();
+      const h=HARDWARE.find(x=>x.id==="s19");
+      return{condition:maintenanceCondition(h),marked:dryFitActive(h),factor:dryFitFailureFactor(h)};
+    };
+    return{wet:shot(5),dry:shot(0)};})()`);
+  assert(r.dry.marked, "a dry-fitted repair left no elevated failure mark");
+  assert(r.dry.factor > 1, `a dry-fitted type carries a failure factor of ${r.dry.factor}`);
+  assert(!r.wet.marked, "a pasted repair was marked dry-fitted");
+  assert(r.dry.condition > 65, `dry-fitting stranded the type at ${r.dry.condition.toFixed(1)}%, below the 65% offline threshold`);
 });
 
 if (failures.length) {

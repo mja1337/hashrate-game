@@ -8,7 +8,30 @@
 
 function sparePart(id){return SPARE_PARTS.find(part=>part.id===id)}
 const PART_FAULT_LABELS={laptopfan:"Laptop fan bearing wear",fan:"Fan bearing seizure",asicfan:"Blower fan bearing seizure",hashboardearly:"Hashboard chip failure",hashboard:"Hashboard chip failure",hashboardmodern:"Hashboard chip failure",powerPcb:"PSU/power PCB failure",coolantPump:"Coolant pump failure",coolingManifold:"Cooling manifold leak"};
-function hardwareUsingPart(partId){return HARDWARE.filter(h=>Object.keys(partFaultWeights(h)).includes(partId))}
+function hardwareUsingPart(partId){
+  /* A consumable is never a fault cause, so it appears in no machine's fault weights. It
+     still fits everything whose repair would use it. */
+  const def=sparePart(partId);
+  if(def?.consumable){
+    if(def.fits==="immersion")return HARDWARE.filter(h=>immersionEligible(h));
+    return HARDWARE.filter(h=>Object.keys(partFaultWeights(h)).some(id=>REPASTE_PARTS.includes(id)));
+  }
+  return HARDWARE.filter(h=>Object.keys(partFaultWeights(h)).includes(partId));
+}
+/* One tube does a bench-full of boards, so this is a rounding-up per job rather than a
+   per-unit charge. Deliberately NOT a requirement to start the job: the interesting decision
+   is whether you keep a $12 consumable in stock, not whether the game blocks you. */
+function repasteUnitsFor(h,job,repaired){
+  const parts=job.part?[job.part]:Object.keys(serviceRequirements(h,repaired));
+  if(!parts.some(id=>REPASTE_PARTS.includes(id)))return 0;
+  return Math.max(1,Math.ceil(repaired/8));
+}
+function consumeRepaste(units){
+  if(!units)return{needed:0,used:0,short:0};
+  const have=state.maintenance.inventory.thermalpaste||0,used=Math.min(have,units);
+  state.maintenance.inventory.thermalpaste=have-used;
+  return{needed:units,used,short:units-used};
+}
 function ownedHardwareUsingPart(partId){return hardwareUsingPart(partId).map(h=>({h,n:(state.hardware[h.id]||0)+(state.inactiveHardware?.[h.id]||0)})).filter(x=>x.n>0)}
 function partFitSummary(partId){
   const owned=ownedHardwareUsingPart(partId);
@@ -126,13 +149,17 @@ function advanceMaintenance(){
     if(job.part){
       const byPart=state.maintenance.faultsByPart[job.id]||(state.maintenance.faultsByPart[job.id]={}),partName=sparePart(job.part)?.name||job.part;
       byPart[job.part]=0;
-      const boosted=Math.min(100,maintenanceCondition(h)+Math.max(6,20*repaired/Math.max(1,state.hardware[job.id]||1)));
+      const paste=consumeRepaste(repasteUnitsFor(h,job,repaired)),dry=paste.short>0;
+      const boosted=Math.min(100,maintenanceCondition(h)+Math.max(6,20*repaired/Math.max(1,state.hardware[job.id]||1))*(dry?.5:1));
       state.maintenance.condition[job.id]=hardwareFaultCount(h)>0?boosted:Math.max(70,boosted);
+      markDryFit(h,dry,paste);
       awardXp((12+6*Math.log2(1+repaired))*(job.contracted?1.5:1),"repair");log(`Service completed: ${h?.name||job.id}`,`${repaired} ${partName}${repaired===1?"":"s"} replaced · ${job.contracted?"serviced by you":`${job.crew}-technician crew`}`);
       const remaining=hardwareFaultCount(h);showToast("Part replacement complete",`${repaired} × ${h?.name||"miner"} ${partName.toLowerCase()} swap finished.${remaining?` ${remaining} other fault${remaining===1?" remains":"s remain"} to repair.`:" The serviced units can return to mining."}`,"info","mine");
     }else{
       state.maintenance.faultsByPart[job.id]={};
-      state.maintenance.condition[job.id]=Math.min(100,maintenanceCondition(h)+Math.max(18,60*repaired/Math.max(1,state.hardware[job.id]||1)));
+      const paste=consumeRepaste(repasteUnitsFor(h,job,repaired)),dry=paste.short>0;
+      state.maintenance.condition[job.id]=Math.min(100,maintenanceCondition(h)+Math.max(18,60*repaired/Math.max(1,state.hardware[job.id]||1))*(dry?.5:1));
+      markDryFit(h,dry,paste);
       awardXp((12+6*Math.log2(1+repaired))*(job.contracted?1.5:1),"repair");log(`Service completed: ${h?.name||job.id}`,`${repaired} unit${repaired===1?"":"s"} repaired · ${job.contracted?"serviced by you":`${job.crew}-technician crew`}`);
       showToast("Fleet service complete",`${repaired} × ${h?.name||"miner"} returned to service with restored condition. Check temperature and load before pushing the fleet again.`,"info","mine");
     }
@@ -143,11 +170,15 @@ function advanceMaintenance(){
   HARDWARE.forEach(h=>{
     const n=state.hardware[h.id]||0;if(!n||hardwareOfflineReason(h)!=="")return;
     const age=Math.max(0,(state.time-at(h.date))/DAY/365),condition=maintenanceCondition(h),active=hardwareRepairState(h).active;if(!active)return;
-    const wear=((h.era==="HYDRO ASIC"?.035:.018)+Math.min(.04,age*.002))*wearFactor*(active/n)*(state.overdrive?1.6:1);
+    /* Stable fluid temperature, no dust and no thermal cycling: the submerged share of a
+       type ages and fails more slowly than the air-cooled share standing beside it. */
+    const imm=immersionActive(h,active),airShare=(active-imm+imm*IMMERSION_WEAR)/Math.max(1,active);
+    const wear=((h.era==="HYDRO ASIC"?.035:.018)+Math.min(.04,age*.002))*wearFactor*(active/n)*(state.overdrive?1.6:1)*airShare;
     state.maintenance.condition[h.id]=Math.max(0,condition-wear);
-    const base=h.era==="HYDRO ASIC"?.00075:h.era==="ASIC"?.00045:h.era==="GPU"?.000325:.000175,stress=(1+(100-condition)/55+age*.12)*failureHeat*(state.overdrive?2.2:1),failures=Math.min(active,poisson(active*base*stress*(technicians?0.72:1)));
+    const exposed=active-imm+imm*IMMERSION_FAULT;
+    const base=h.era==="HYDRO ASIC"?.00075:h.era==="ASIC"?.00045:h.era==="GPU"?.000325:.000175,stress=(1+(100-condition)/55+age*.12)*failureHeat*(state.overdrive?2.2:1)*dryFitFailureFactor(h),failures=Math.min(active,poisson(exposed*base*stress*(technicians?0.72:1)));
     if(failures){
-      const weights=partFaultWeights(h),byPart=state.maintenance.faultsByPart[h.id]||(state.maintenance.faultsByPart[h.id]={}),gained={};
+      const weights=immersionAdjustedWeights(h,partFaultWeights(h)),byPart=state.maintenance.faultsByPart[h.id]||(state.maintenance.faultsByPart[h.id]={}),gained={};
       for(let i=0;i<failures;i++){const part=pickWeightedPart(weights);byPart[part]=(byPart[part]||0)+1;gained[part]=(gained[part]||0)+1}
       const detail=Object.entries(gained).map(([part,count])=>`${count}× ${PART_FAULT_LABELS[part]||sparePart(part)?.name||part}`).join(" · ");
       log(`${h.name} fault detected`,`${detail} · ${roomTemperatureC().toFixed(0)} °C room`,`fleet`);
@@ -159,7 +190,7 @@ function advanceMaintenance(){
     const existingFaults=hardwareFaultCount(h);
     if(!existingFaults||activeServiceJob(h.id))return;
     if(nextRand()<Math.min(.25,existingFaults*.02)){
-      const breakdown=hardwareFaultBreakdown(h),weights=partFaultWeights(h);
+      const breakdown=hardwareFaultBreakdown(h),weights=immersionAdjustedWeights(h,partFaultWeights(h));
       let extra=pickWeightedPart(weights),tries=0;while(breakdown[extra]&&tries<4){extra=pickWeightedPart(weights);tries++}
       const byPart=state.maintenance.faultsByPart[h.id]||(state.maintenance.faultsByPart[h.id]={});
       byPart[extra]=(byPart[extra]||0)+1;
@@ -280,6 +311,26 @@ function repairNudgeDial(id,delta){
   if(before!==0&&Math.sign(after)!==Math.sign(before))selfRepairMistake(job,"Over-torqued straight past spec.");
   save();renderMineContent();
 }
+/* A board that went back on dry still goes back on: the machine returns to service, because
+   soft-locking a fleet over a missing twelve-dollar tube would be a worse game than it is a
+   simulation. What it does not do is last. The chip runs hot against degraded compound, so
+   the type carries an elevated failure rate for the next two months and you meet the same
+   fault again — which is exactly what skipping the paste buys you in a real bay.
+
+   Completing the job WITH paste clears the mark, so the fix is the obvious one. */
+const DRY_FIT_DAYS=60;
+const DRY_FIT_FAILURE=1.8;
+function markDryFit(h,dry,paste){
+  if(!h)return;
+  const store=state.maintenance.dryFit||(state.maintenance.dryFit={});
+  if(!dry){if(store[h.id]){delete store[h.id];}return}
+  store[h.id]=state.time+DRY_FIT_DAYS*DAY;
+  log(`${h.name} boards dry-fitted`,`${paste.short} tube${paste.short===1?"":"s"} of thermal paste short — heatsinks reseated on degraded compound · half the condition recovery lost · ${DRY_FIT_FAILURE}× failure rate for ${DRY_FIT_DAYS} days`,"fleet");
+  showToast("Refitted without thermal paste",`There was no thermal paste in stock, so ${h.name} heatsinks went back on the old compound. The boards recovered half the condition they should have and will fail roughly ${DRY_FIT_FAILURE}× as often for the next ${DRY_FIT_DAYS} days. A tube costs ${fmtUsd(sparePartCost("thermalpaste"))}.`,"bad","mine");
+  renderFullQueued=true;
+}
+function dryFitActive(h,s=state){return !!h&&(s.maintenance?.dryFit?.[h.id]||0)>s.time}
+function dryFitFailureFactor(h,s=state){return dryFitActive(h,s)?DRY_FIT_FAILURE:1}
 function sparePartCost(part){const def=typeof part==="string"?sparePart(part):part;return (def?.cost||0)*(covidPartsMarket()?2.25:1)*(hasSkill("partssourcing")?.8:1)}
 function partsLeadDays(){return Math.max(3,Math.round((covidPartsMarket()?42:14)*(hasSkill("supplychain")?.6:1)))}
 function selfRepairExperience(id){return Math.max(0,Math.floor(Number(state.maintenance.selfRepairs?.[id])||0))}

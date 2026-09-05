@@ -7,9 +7,25 @@ function coolingInstallDays(item){const covid=state.time>=at("2020-03-12")&&stat
 function pendingCoolingOrders(id=null){return (state.thermal?.orders||[]).filter(o=>!id||o.id===id)}
 function pendingCoolingCount(id){return pendingCoolingOrders(id).reduce((sum,o)=>sum+Number(o.qty||1),0)}
 function coolingCapacityKw(s=state){const f=FACILITIES.find(x=>x.id===s.facility)||FACILITIES[0],equipment=COOLING_EQUIPMENT.reduce((sum,item)=>sum+(s.thermal?.equipment?.[item.id]||0)*item.coolingKw,0);return Math.max(.1,(f.passiveCoolingKw||f.kw*.3)+equipment)*(s.skills?.includes("heat")?1.15:1)}
-function activeMinerWatts(s=state){
-  return HARDWARE.reduce((sum,h)=>{const n=s.hardware?.[h.id]||0;if(!n||hardwareOfflineReason(h,s))return sum;const repairing=Math.min(n,Math.max(activeServiceJob(h.id,s)?.count||0,hardwareFaultCount(h,s))),paused=Math.min(n-repairing,hardwarePoweredDownCount(h,s));return sum+h.w*Math.max(0,n-repairing-paused)},0)*(s.skills?.includes("undervolt") ? .95 : 1)*(s.overdrive?1.25:1)
+/* One walk of the fleet, two answers. Total draw is what the meter reads and what the plant
+   has to be sized against; room heat is only the part that reaches the air. They stopped
+   being the same number when miners could be submerged: a converted machine draws MORE and
+   warms the room LESS, because its heat goes into the fluid and out through the tank loop. */
+function minerWattsSplit(s=state){
+  let total=0,room=0;
+  HARDWARE.forEach(h=>{
+    const n=s.hardware?.[h.id]||0;if(!n||hardwareOfflineReason(h,s))return;
+    const repairing=Math.min(n,Math.max(activeServiceJob(h.id,s)?.count||0,hardwareFaultCount(h,s))),paused=Math.min(n-repairing,hardwarePoweredDownCount(h,s));
+    const active=Math.max(0,n-repairing-paused);if(!active)return;
+    const imm=immersionActive(h,active,s),air=active-imm,submerged=h.w*imm*IMMERSION_POWER_GAIN;
+    total+=h.w*air+submerged;
+    room+=h.w*air+submerged*IMMERSION_ROOM_HEAT_SHARE;
+  });
+  const scale=(s.skills?.includes("undervolt")?.95:1)*(s.overdrive?1.25:1);
+  return{total:total*scale,room:room*scale};
 }
+function activeMinerWatts(s=state){return minerWattsSplit(s).total}
+function roomHeatWatts(s=state){return minerWattsSplit(s).room}
 function coolingPeakWatts(s=state){return COOLING_EQUIPMENT.reduce((sum,item)=>sum+(s.thermal?.equipment?.[item.id]||0)*item.watts,0)}
 function coolingPowerWatts(s=state,minerWatts=activeMinerWatts(s)){if(minerWatts<=0)return 0;const capacity=Math.max(.1,coolingCapacityKw(s)),demand=Math.max(.12,Math.min(1,minerWatts/1000/capacity));return coolingPeakWatts(s)*demand}
 function thermalPowerAvailable(s=state){return !!s.power&&!gridCutOff(s)&&!s.policyLock&&s.time>=(s.ops?.powerOutageUntil||0)&&!(s.relocationJob&&s.time<s.relocationJob.due)&&!(s.facilityUpgradeJob&&s.time<s.facilityUpgradeJob.due)}
@@ -23,11 +39,11 @@ function siteBaselineC(s=state){const f=FACILITIES.find(x=>x.id===s.facility)||F
 function thermalTargetC(s=state){
   const baseline=siteBaselineC(s);
   if(!thermalPowerAvailable(s))return baseline;
-  const heatKw=activeMinerWatts(s)/1000;
+  const heatKw=roomHeatWatts(s)/1000;
   if(heatKw<=0)return baseline;
   return Math.min(95,Math.max(baseline,ambientTemperatureC(s.time,s)+heatKw/thermalLossKwPerC(s)));
 }
 function roomTemperatureC(s=state){const value=Number(s.thermal?.temperature);return Number.isFinite(value)?value:ambientTemperatureC(s.time,s)+2}
 function temperatureWearMultiplier(s=state){return 1+Math.max(0,roomTemperatureC(s)-28)*.04}
 function temperatureFailureMultiplier(s=state){return 1+Math.max(0,roomTemperatureC(s)-30)*.12}
-function advanceThermals(){const target=thermalTargetC(),current=roomTemperatureC(),rate=activeMinerWatts()>0&&thermalPowerAvailable()?0.72:0.8;state.thermal.temperature=Math.max(-10,Math.min(90,current+(target-current)*rate))}
+function advanceThermals(){const target=thermalTargetC(),current=roomTemperatureC(),rate=roomHeatWatts()>0&&thermalPowerAvailable()?0.72:0.8;state.thermal.temperature=Math.max(-10,Math.min(90,current+(target-current)*rate))}

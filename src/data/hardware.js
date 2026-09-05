@@ -35,5 +35,14 @@ const SPARE_PARTS=[
   {id:"hashboardmodern",name:"High-density hashboard",cost:900,desc:"SHA-256 compute board for current-generation ASIC and hydro miners."},
   {id:"powerPcb",name:"Power PCB",cost:180,desc:"Power-control and distribution boards for mining hardware."},
   {id:"coolantPump",name:"Coolant pump",cost:420,desc:"Circulation pumps for closed-loop hydro ASIC cooling systems."},
-  {id:"coolingManifold",name:"Cooling manifold",cost:260,desc:"Quick-connect hoses, manifolds and seals for hydro-miner racks."}
+  {id:"coolingManifold",name:"Cooling manifold",cost:260,desc:"Quick-connect hoses, manifolds and seals for hydro-miner racks."},
+  /* A consumable rather than a part that fails. Nothing breaks BECAUSE the paste is old;
+     the paste is what you use up every time a heatsink comes off a chip, and a hashboard
+     swap always does. Cheap enough to be an afterthought, which is the point: forgetting it
+     costs far more than the tube. */
+  {id:"immersionKit",name:"Immersion conversion kit",cost:35,consumable:true,fits:"immersion",desc:"Fan-delete blanking plates, dielectric-safe gaskets and immersion-rated interface compound for one air-cooled miner. Consumed by the conversion and not recoverable if the machine is later drained."},
+  {id:"thermalpaste",name:"Thermal paste",cost:12,consumable:true,fits:"repaste",desc:"Thermal interface compound. Consumed whenever a hashboard is reseated — a dry-fitted board runs hot and comes back off the bench in worse condition."}
 ];
+/* Replacing these means breaking the seal between a chip and its heatsink, so the interface
+   compound has to be renewed. Fans and manifolds bolt on without disturbing it. */
+const REPASTE_PARTS=["hashboardearly","hashboard","hashboardmodern"];
