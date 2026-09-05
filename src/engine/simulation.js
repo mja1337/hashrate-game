@@ -11,7 +11,7 @@ const initialState=()=>{const seed=Math.floor(Math.random()*4294967296);return{
   cash:1500,startingCash:1500,difficulty:"medium",campaignStart:START,debt:0,bill:0,billLedger:{energy:0,rent:0,internet:0,staff:0,insurance:0,nodeNetwork:0,other:0},lastMonth:new Date(START).toISOString().slice(0,7),power:true,policyLock:null,
   wallets:{hot:0,cold:0,mtgox:0,bitfinex:0,quadriga:0,frontier:0,exchange:0,etf:0,frozen:0},
   lightning:{locked:0,earned:0},
-  giftCards:{spentBtc:0,spentUsd:0,cards:0},
+  giftCards:{spentBtc:0,spentUsd:0,cards:0},floorView:"2d",
   hardware:{laptop:1},poweredDownHardware:{},facility:"home",region:"na",thermal:{temperature:22,orders:[],equipment:{}},overdrive:false,settlementSaleMode:false,autoRepair:false,node:0,nodeStorage:50,nodePruned:false,nodeMode:"archival",nodeSync:{primaryLag:0,primaryPeak:0,backupLag:0,backupPeak:0},backupNode:{enabled:false,outageUntil:0},mode:"solo",pool:"f2pool",
   skills:[],points:0,startingGrant:false,seen:[],activeEvent:null,storyPause:true,shoppingPause:false,speculations:[],powerRateShock:null,hardwareGlut:null,hardwareAlerts:{seen:[],queue:[],active:null,resumeSpeed:0},hardwareToastSeen:[],exposureWarned:[],
   treasuryPolicy:"cover",pendingSettlement:null,endReason:null,arrearsDue:0,gridCutAnnounced:false,marketPressure:{usd:0,at:0},
@@ -94,6 +94,7 @@ state.nodeSync=Object.assign({primaryLag:0,primaryPeak:0,backupLag:0,backupPeak:
 state.backupNode=Object.assign({enabled:false,outageUntil:0},state.backupNode||{});state.backupNode.enabled=!!state.backupNode.enabled;state.backupNode.outageUntil=Math.max(0,Number(state.backupNode.outageUntil)||0);
 state.strategy=Object.assign({mstr:0,strk:0,strf:0,strd:0,strc:0,yieldEarned:0},state.strategy||{});
 state.giftCards=Object.assign({spentBtc:0,spentUsd:0,cards:0},state.giftCards||{});
+state.floorView=state.floorView==="3d"?"3d":"2d";
 /* Custody arrived after these saves were written. Balances and skills are untouched: a run
    loading into the new model keeps every coin exactly where it was and simply has no devices
    yet, which reads correctly — it never bought any. */

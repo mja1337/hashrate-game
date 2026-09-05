@@ -180,6 +180,38 @@ assert(inline.includes("creditFor=c=>c.id===\"curtail\""),
   "The energy tariff desk quotes curtailment without its credit, so contracts cannot be compared");
 assert(inline.includes("method-demand-response"), "Method does not document demand response");
 
+// THE 3D FLOOR is an alternative view, never a replacement. Four things have to stay true:
+// the flat floor is the default and stays in the markup, the library is not loaded until
+// somebody asks for it, the canvas outlives the repaints that destroy everything around it,
+// and every failure path lands back on the flat floor.
+assert(/floorView:"2d"/.test(inline), "The flat floor is no longer the default view");
+assert(inline.includes('state.floorView=state.floorView==="3d"?"3d":"2d"'),
+  "floorView has no save migration, so an unknown value could leave the floor blank");
+assert(inline.includes('data-action="floor-view"'), "The floor view toggle is missing");
+{
+  const head = await readFile(new URL("index.html", root), "utf8");
+  assert(!head.includes("vendor/three.floor.js"),
+    "three.js is loaded on every page load; the 3D floor is opt-in and so is its half-megabyte");
+  assert(!/floor3d\/(silhouettes|scenery|scene|model)\.js/.test(head),
+    "The 3D view modules are loaded eagerly; only the mount layer belongs in index.html");
+  assert(head.includes("src/ui/floor3d/mount.js"),
+    "The mount layer is not loaded, so the toggle cannot offer the 3D floor at all");
+}
+assert(inline.includes("if(floor3dCanvas.parentElement!==host)host.appendChild(floor3dCanvas)"),
+  "The canvas is not re-attached across repaints, so every repaint would build a new WebGL context");
+assert(/signature!==floor3dSignature/.test(inline),
+  "The scene rebuilds unconditionally instead of only when the floor has changed");
+assert(inline.includes('state.floorView="2d";save();render()'),
+  "A 3D failure does not fall back to the flat floor");
+assert(inline.includes('webglcontextlost'), "A lost 3D context is not handled");
+// A dynamically loaded script must come from this bundle, not from anywhere else.
+assert(/const FLOOR3D_SCRIPTS=\[[^\]]*\]/.test(inline), "The 3D script list is missing");
+{
+  const list = inline.match(/const FLOOR3D_SCRIPTS=\[([^\]]*)\]/)[1];
+  assert(!/https?:|\/\//.test(list.replace(/\/\*[\s\S]*?\*\//g, "")),
+    "A 3D module is loaded from somewhere other than this bundle");
+}
+
 // THE FLOOR AS DATA — the batch model exists so a second renderer draws the same floor
 // rather than deriving the rules again. If the SVG floor goes back to computing statuses
 // inline, the two will drift the moment either is touched.

@@ -158,3 +158,8 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--orange);outline-off
 .blocked-control{display:inline-flex;align-items:stretch;max-width:100%}.blocked-control>.action{border-radius:0}.blocked-help{display:inline-grid;place-items:center;flex:0 0 34px;min-width:34px;border:1px solid #6c5831;border-left:0;background:#1a160e;color:var(--orange2);font:700 11px var(--mono);cursor:help}.blocked-help:hover,.blocked-help:focus-visible{background:#28200f;outline:1px solid var(--orange);outline-offset:1px}.blocked-control>.action+ .blocked-help{margin-left:0}
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 @media(max-width:700px){.context-help dl{grid-template-columns:1fr}.context-help summary{min-height:48px}.blocked-help{flex-basis:40px;min-width:40px}}
+.floor-view-switch{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px}
+.floor-view-switch>span{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.floor-view-switch small{flex-basis:100%;margin:0}
+.floor-3d-mount{position:relative;width:100%;border-radius:10px;overflow:hidden;background:#101b24;min-height:180px}
+.floor-3d-canvas{display:block;width:100%;height:auto}
