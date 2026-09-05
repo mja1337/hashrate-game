@@ -454,6 +454,59 @@ rule("moving coins between wallets conserves them", () => {
   assert(Math.abs(r.before - r.after - r.fee) < 1e-12, "coins were created or destroyed by a transfer");
 });
 
+/* ---- SOLVENCY: paying a bill and earning it are not the same thing ---- */
+
+rule("a bill met by selling the treasury is not a solvent month", () => {
+  const r = json(`(()=>{
+    const run=(startingCash)=>{
+      ${SITE(``)}
+      state.time=at("2017-01-01");state.facility="warehouse";state.region="na";
+      state.hardware={s9:100};state.cash=startingCash;state.treasuryPolicy="cover";
+      state.wallets={hot:1000,cold:0,mtgox:0,exchange:0,frozen:0,bitfinex:0,quadriga:0,etf:0,frontier:0};
+      state.projectLoan=0;state.debt=0;state.arrearsDue=0;
+      state.operator=Object.assign(state.operator,{restructures:0,bridgeLoans:0,
+        profitableMonths:0,solventMonths:0,totalMonths:0,competitiveMonths:0});
+      Object.values(state.operator.eras).forEach(e=>{e.months=0;e.solvent=0;e.profitable=0;e.uptime=0;e.competitive=0});
+      for(let i=0;i<420&&!state.ended;i++){
+        tick();
+        if(state.pendingSettlement){
+          treasurySaleForSettlement(state.pendingSettlement.due,true);
+          if(state.cash+1e-8>=state.pendingSettlement.due)finishMonthlySettlement("btc-rescue");
+          else enterReceivership();
+        }
+      }
+      return {solvent:state.operator.solventMonths,months:state.operator.totalMonths,
+        btcLeft:state.wallets.hot};
+    };
+    return {funded:run(1e9),liquidating:run(0)};})()`);
+  assert(r.funded.months > 6, "the funded run did not reach enough month boundaries to compare");
+  assert(r.funded.solvent === r.funded.months,
+    `an operation paying every bill from cash recorded ${r.funded.solvent} solvent months of ${r.funded.months}`);
+  assert(r.liquidating.months > 6, "the liquidating run did not reach enough month boundaries to compare");
+  assert(r.liquidating.solvent === 0,
+    `an operation funding itself by selling its treasury recorded ${r.liquidating.solvent} solvent months, as though it had earned the money`);
+  assert(r.liquidating.btcLeft < 1000, "the liquidating run never actually sold anything, so this rule proves nothing");
+});
+
+rule("an operation with nothing left to sell reaches an end", () => {
+  const r = json(`(()=>{
+    ${SITE(``)}
+    state.time=at("2017-01-01");state.facility="warehouse";state.region="na";
+    state.hardware={s9:100};state.cash=0;state.treasuryPolicy="hodl";
+    state.wallets={hot:0,cold:0,mtgox:0,exchange:0,frozen:0,bitfinex:0,quadriga:0,etf:0,frontier:0};
+    state.projectLoan=0;state.debt=0;state.arrearsDue=0;state.gridCutAnnounced=false;
+    state.operator=Object.assign(state.operator,{restructures:0,bridgeLoans:0});
+    let days=0;
+    for(let i=0;i<2000&&!state.ended;i++){
+      tick();days++;
+      // only moves the interface permits: deferral is barred once arrears are carried
+      if(state.pendingSettlement){ if(state.debt<=0)deferSettlement(); else enterReceivership(); }
+    }
+    return {days,ended:state.ended,reason:state.endReason};})()`);
+  assert(r.ended, `a broke operation with no coins and no credit ran for ${r.days} days without the run ever ending`);
+  assert(r.days < 400, `it took ${r.days} days for a hopeless position to resolve, which is too long to be a consequence`);
+});
+
 /* ---- SPENDING: the one path where coins leave and nothing financial comes back ---- */
 
 rule("spending on a gift card takes the coins, pays experience, and respects its dates", () => {

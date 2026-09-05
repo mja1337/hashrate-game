@@ -59,7 +59,7 @@ function treasurySaleForSettlement(due,silent=false){
   // grows with size and size grows with impact, so the amount needed is solved iteratively.
   for(let i=0;i<5&&btc>0;i++){const slip=tradeImpact(Math.min(state.wallets.hot,btc)*price,1);btc=need/(price*(1-fee)*(1-slip))}
   btc=Math.min(state.wallets.hot,btc);if(btc<=0)return 0;const impact=tradeImpact(btc*price,1);if(impact>0)addPressure(btc*price,1);state.wallets.hot-=btc;const proceeds=btc*price*(1-fee)*(1-impact);state.cash+=proceeds;
-  log(`Settlement conversion: ${policy.name}`,`${fmtBtc(btc)} sold · +${fmtUsd(proceeds)}`,"trade");
+  log(`Settlement conversion: ${policy.name}`,`${fmtBtc(btc)} sold · +${fmtUsd(proceeds)} · the month does not count as solvent`,"trade");
   const left=controlled(),drained=btc/Math.max(btc+left,1e-12);
   if(!silent){
     const heavy=left<=0||drained>=.5;
@@ -71,7 +71,11 @@ function treasurySaleForSettlement(due,silent=false){
 }
 
 function finishMonthlySettlement(kind="cash",automatic=false){
-  const pending=state.pendingSettlement;if(!pending||state.cash+1e-8<pending.due)return false;const rescueFeedback=settlementRescueFeedback(kind,pending.due,state.cash-pending.due);state.cash-=pending.due;const interest=pending.loanInterest||0;log("Operating bill settled",fmtUsd(pending.due));if(interest>0)log("Project finance interest",fmtUsd(interest));recordOperatorMonth(pending.snapshot,kind==="cash"||kind==="policy");state.bill=0;state.billLedger=blankBillLedger();state.lastMonth=pending.month;state.pendingSettlement=null;state.debt=0;state.power=!state.policyLock;clearTimeout(toastTimer);toast=null;
+  const pending=state.pendingSettlement;if(!pending||state.cash+1e-8<pending.due)return false;const rescueFeedback=settlementRescueFeedback(kind,pending.due,state.cash-pending.due);state.cash-=pending.due;const interest=pending.loanInterest||0;log("Operating bill settled",fmtUsd(pending.due));if(interest>0)log("Project finance interest",fmtUsd(interest));/* An operation that pays its bills by selling its own treasury is not solvent, it is
+   shrinking. It used to be recorded as though it had earned the money: twenty-five solvent
+   months out of twenty-five, whether the cash came from mining or from liquidating a
+   thousand bitcoin. Only a bill met from operating cash counts now. */
+  recordOperatorMonth(pending.snapshot,kind==="cash");state.bill=0;state.billLedger=blankBillLedger();state.lastMonth=pending.month;state.pendingSettlement=null;state.debt=0;state.power=!state.policyLock;clearTimeout(toastTimer);toast=null;
   let hardwareOpened=false;if(!state.ended){state.speed=pending.resumeSpeed||state.returnSpeed||0;hardwareOpened=activateNextHardwareAlert();setTimer()}save();if(automatic&&!hardwareOpened){refreshLive();requestAnimationFrame(()=>{refreshDashboardVisuals();refreshMinePricing()})}else render();if(!automatic&&rescueFeedback)setTimeout(()=>showToast(rescueFeedback[0],rescueFeedback[1],"warning","finance"),0);return true;
 }
 

@@ -382,8 +382,13 @@ function sellControlledBtc(amount){
   let remaining=Math.max(0,amount),sold=0;for(const bucket of ["hot","cold"]){const take=Math.min(state.wallets[bucket],remaining);state.wallets[bucket]-=take;remaining-=take;sold+=take}return sold;
 }
 function queueMonthlySettlement(due,month,loanInterest,silent=false){
-  const snapshot=settlementSnapshot(due,month),resumeSpeed=state.speed||state.returnSpeed||0;treasurySaleForSettlement(due,silent);state.pendingSettlement={due,month,loanInterest,snapshot,resumeSpeed};
-  if(state.cash+1e-8>=due){finishMonthlySettlement(treasuryPolicy().id==="cover"?"policy":"cash",true);return}
+  const snapshot=settlementSnapshot(due,month),resumeSpeed=state.speed||state.returnSpeed||0;
+  /* Whether the treasury had to be sold is the fact that matters, not which policy is set.
+     A well-funded operation on the cover policy sells nothing and is simply solvent; one
+     that had to liquidate to meet payroll is not, however smoothly it happened. */
+  const soldForBill=treasurySaleForSettlement(due,silent);
+  state.pendingSettlement={due,month,loanInterest,snapshot,resumeSpeed,coveredBySale:soldForBill>0};
+  if(state.cash+1e-8>=due){finishMonthlySettlement(soldForBill>0?"policy":"cash",true);return}
   state.speed=0;renderFullQueued=true;log("Settlement decision required",`${fmtUsd(due-state.cash)} short`);if(!silent)showToast("Settlement paused","Choose how to cover the shortfall. Time will not move until the decision is resolved.","bad","finance");setTimer();
 }
 function liquidationCandidates(onlyId=null){
