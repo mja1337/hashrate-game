@@ -115,6 +115,23 @@ function custodyReadiness(s=state){
   return{label:"Ready",tone:"good",detail:"Keys assigned, backed up and recoverable"};
 }
 
+/* ---- key strength ------------------------------------------------------------------- */
+
+function custodyWeakEntropyAt(product,t){
+  const w=COLDCARD_ENTROPY_WINDOW;
+  if(!product||product.supplier!==w.supplier)return false;
+  return t>=at(w.from)&&t<at(w.to);
+}
+function custodyWeakKeys(s=state){return (s.custody?.keys||[]).filter(k=>k.weakEntropy)}
+/* Can the wallet be spent using weak keys alone? That is the only question that matters:
+   one brute-forceable key in a 2-of-3 moves nothing, and two of them move everything. */
+function custodyWeakQuorum(s=state){
+  const set=custodySetup(s);
+  if(!set.ready)return custodyWeakKeys(s).length>0&&(s.custody?.assigned||[]).length>0;
+  const weakAssigned=new Set(set.assigned.filter(k=>k.weakEntropy).map(k=>k.seed)).size;
+  return weakAssigned>=set.policy.threshold;
+}
+
 /* ---- supplier exposure --------------------------------------------------------------- */
 
 /* A vendor losing its customer list is a privacy event, not a theft. It exposes the people
@@ -237,7 +254,10 @@ function generateCustodyKey(uid){
   const product=custodyProduct(device.product);
   const c=state.custody;
   const key={id:`k${(c.keys.length+1)}`,label:nextKeyLabel(),seed:`s${c.keys.length+1}`,
-    bornOn:state.time,deviceUid:uid,stateless:!!product?.stateless,backup:null};
+    bornOn:state.time,deviceUid:uid,stateless:!!product?.stateless,backup:null,
+    // Weakness is a property of the seed at the moment it was generated. It does not attach
+    // to the device, cannot be patched away, and follows the seed onto any other signer.
+    weakEntropy:custodyWeakEntropyAt(product,state.time)};
   c.keys.push(key);device.keyId=key.id;
   log(`Generated key ${key.label}`,`${product?product.name:device.product}${product?.stateless?" · stateless signer":""}`,"custody");
   showToast("Key generated",`Key ${key.label} exists on ${product?product.name:"the device"}. Back it up, then assign it to a wallet.`,"info","custody");
@@ -315,6 +335,28 @@ function backupCustodyConfig(){
    including you; a phishing success is somebody else spending them. Backups answer the first
    and a spending quorum answers the second, which is why neither alone is a complete
    position. */
+/* The waves. A guessable key is not a risk that might happen — it is a key somebody else
+   already has, and the only variable is when they get to you. So this drains rather than
+   rolls, in tranches, and it keeps draining for as long as the wallet can still be opened by
+   weak keys alone. Rotating to a fresh seed stops it, which is exactly the remedy the
+   advisory describes and the only one that works. */
+function advanceEntropyDrain(next){
+  const alert=state.custody.entropyAlert;
+  if(!alert)return;
+  if(!custodyWeakQuorum())return;
+  const held=(state.wallets.hot||0)+(state.wallets.cold||0);
+  if(held<=0)return;
+  const days=Math.max(0,(next-alert.since)/DAY);
+  if(days>45)return;                                  // the waves ran their course
+  const share=days<1?.33:.18;                          // the first wave took the most
+  const taken=held*share;
+  const hotShare=held>0?(state.wallets.hot||0)/held:0;
+  state.wallets.hot=Math.max(0,state.wallets.hot-taken*hotShare);
+  state.wallets.cold=Math.max(0,state.wallets.cold-taken*(1-hotShare));
+  log("Coldcard entropy theft",`-${fmtBtc(taken)} · swept from a guessable key`,"custody");
+  showToast("Your coins are being swept",
+    `${fmtBtc(taken)} gone. A seed generated on a Coldcard in the affected window is brute-forceable, and no firmware update repairs it. Generate a fresh key on a different signer and move what is left.`,"bad","custody");
+}
 function advanceCustodyRisks(next){
 const lossRisk=custodyLossRisk();
 if(lossRisk>0&&nextRand()<lossRisk){

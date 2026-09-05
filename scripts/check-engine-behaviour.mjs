@@ -375,6 +375,53 @@ rule("a build consumes its components and respects its unlock date", () => {
   assert(r.supplier === "selfbuilt", "a self-built signer is attributed to a vendor");
 });
 
+rule("a guessable seed is a property of the key, and a quorum survives one of them", () => {
+  const r = json(`(()=>{
+    const born=(product,when)=>{
+      ${CUSTODY_SITE(``)}
+      state.time=at(when);orderCustodyProduct(product,1);
+      for(let i=0;i<18;i++)tick();
+      const d=state.custody.devices.find(x=>x.product===product);
+      generateCustodyKey(d.uid);
+      return !!state.custody.keys[0].weakEntropy;
+    };
+    const drained=(build)=>{
+      ${CUSTODY_SITE(`state.time=at("2022-06-01");`)}
+      build();
+      state.time=at("2026-07-30");
+      applyEvent(EVENTS.find(e=>e.id==="coldcardentropy"));
+      const before=state.wallets.hot+state.wallets.cold;
+      for(let i=0;i<6;i++)tick();
+      return {before,after:state.wallets.hot+state.wallets.cold};
+    };
+    const own=(product,when)=>{state.time=at(when);orderCustodyProduct(product,1);
+      for(let i=0;i<18;i++)tick();
+      return state.custody.devices.find(x=>x.product===product&&!x.keyId);};
+    return {
+      beforeWindow:born("coldcard","2019-01-01"),
+      inWindow:born("coldcardmk4","2022-06-01"),
+      differentVendor:born("jade","2022-06-01"),
+      singleWeak:drained(()=>{const d=own("coldcardmk4","2022-06-01");generateCustodyKey(d.uid);
+        assignCustodyKey(state.custody.keys[0].id)}),
+      singleSound:drained(()=>{const d=own("jade","2022-06-01");generateCustodyKey(d.uid);
+        assignCustodyKey(state.custody.keys[0].id)}),
+      quorumOneWeak:drained(()=>{setCustodyPolicy("2of3");
+        for(const p of ["coldcardmk4","jade","bitbox02"]){const d=own(p,"2022-06-01");generateCustodyKey(d.uid)}
+        for(const k of state.custody.keys)assignCustodyKey(k.id);backupCustodyConfig()}),
+      quorumTwoWeak:drained(()=>{setCustodyPolicy("2of3");
+        for(const p of ["coldcardmk4","coldcard","jade"]){const d=own(p,"2022-07-01");generateCustodyKey(d.uid)}
+        for(const k of state.custody.keys)assignCustodyKey(k.id);backupCustodyConfig()}),
+    };})()`);
+  const lost = x => x.before - x.after > 0.01;
+  assert(r.inWindow, "a seed generated on an affected device inside the window is not marked weak");
+  assert(!r.beforeWindow, "a seed generated before the defect existed is marked weak");
+  assert(!r.differentVendor, "a seed from a different vendor is caught by this vendor's defect");
+  assert(lost(r.singleWeak), "a single-signature wallet on a guessable seed was not swept");
+  assert(!lost(r.singleSound), "a wallet with no affected key lost coins anyway");
+  assert(!lost(r.quorumOneWeak), "a 2-of-3 was emptied though only one of its three keys was guessable");
+  assert(lost(r.quorumTwoWeak), "a 2-of-3 whose quorum is entirely guessable keys survived, which it must not");
+});
+
 rule("a vendor leak reaches that vendor's customers and no one else", () => {
   const r = json(`(()=>{
     ${CUSTODY_SITE(`state.time=at("2016-08-01");`)}

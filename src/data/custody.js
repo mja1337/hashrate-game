@@ -23,6 +23,8 @@ const CUSTODY_PRODUCTS=[
     desc:"Secure-element signer, sold through a direct e-commerce channel that keeps customer records."},
   {id:"coldcard",name:"Coldcard Mk1",kind:"signer",supplier:"coinkite",date:"2018-05-01",cost:120,lead:14,
     desc:"Bitcoin-only, air-gappable, built to be used without ever touching a computer."},
+  {id:"coldcardmk4",name:"Coldcard Mk4",kind:"signer",supplier:"coinkite",date:"2021-11-01",cost:158,lead:14,
+    desc:"USB-C, NFC and a faster secure element. Ships with the firmware line whose entropy defect surfaced in 2026."},
   {id:"nanox",name:"Ledger Nano X",kind:"signer",supplier:"ledger",date:"2019-05-01",cost:119,lead:9,
     desc:"Bluetooth signer from the same direct channel as the Nano S."},
   {id:"bitbox02",name:"BitBox02",kind:"signer",supplier:"shiftcrypto",date:"2019-09-01",cost:109,lead:12,
@@ -63,6 +65,15 @@ const CUSTODY_PRODUCTS=[
 
 /* What a SeedSigner needs before it can be assembled. The enclosure is genuinely optional:
    the build completes without it, and the device works. */
+/* THE COLDCARD ENTROPY WINDOW. Coinkite's advisory: a configuration error introduced with
+   the March 2021 libNgU migration (first public release v4.0.1) caused some devices to fall
+   back on a software random number generator instead of the hardware source when generating
+   a seed. Any seed generated on an affected device in this window is weak whatever firmware
+   the device runs today — "updating corrects future seed generation but does not repair an
+   existing affected seed". The window closes at the patch, which the game dates to the
+   disclosure rather than tracking firmware versions it does not model. */
+const COLDCARD_ENTROPY_WINDOW={supplier:"coinkite",from:"2021-03-01",to:"2026-07-30"};
+
 const CUSTODY_BUILDS={
   seedsigner:{
     id:"seedsigner",name:"SeedSigner",days:2,

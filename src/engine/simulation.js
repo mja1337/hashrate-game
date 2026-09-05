@@ -96,7 +96,7 @@ state.strategy=Object.assign({mstr:0,strk:0,strf:0,strd:0,strc:0,yieldEarned:0},
    loading into the new model keeps every coin exactly where it was and simply has no devices
    yet, which reads correctly — it never bought any. */
 state.custody=Object.assign({devices:[],keys:[],policy:"single",assigned:[],configBackedUp:false,
-  orders:[],parts:{},builds:[],exposure:[],seq:0,lastScare:0},state.custody||{});
+  orders:[],parts:{},builds:[],exposure:[],seq:0,lastScare:0,entropyAlert:null},state.custody||{});
 for(const field of ["devices","keys","assigned","orders","builds","exposure"])
   if(!Array.isArray(state.custody[field]))state.custody[field]=[];
 if(!state.custody.parts||typeof state.custody.parts!=="object")state.custody.parts={};
@@ -354,6 +354,7 @@ function advanceOperationalRisks(next){
 }
 function advanceFleetLifecycle(){
   advanceCustodyOrders(state.time);
+  advanceEntropyDrain(state.time);
   state.commissioningJobs=state.commissioningJobs.filter(job=>{if(job.due>state.time)return true;const h=HARDWARE.find(item=>item.id===job.id);
     if(h){const incoming=incomingConditionFor(h,job.orderedAt||state.time);
       if(incoming<100){const existing=state.hardware[job.id]||0,prior=maintenanceCondition(h),total=existing+job.qty;
@@ -420,6 +421,12 @@ function expectedDay(){return expectedDailyBtcForHash(fleet().hash,state.time)}
    keeps reaching them: a leaked record cannot be un-leaked by buying a different device.
    What it never does is move coins by itself, or prove the device was compromised. */
 function applyEvent(e){
+  if(e.fx==="coldcardentropy"){
+    state.custody.entropyAlert={since:state.time};
+    const weak=custodyWeakKeys();
+    if(weak.length)log("Your seeds are in the affected window",
+      `${weak.length} key${weak.length===1?"":"s"} generated on a Coldcard between March 2021 and the patch`,"custody");
+  }
   if(e.fx==="ledgerleak"){
     state.custody.exposure.push({supplier:"ledger",at:state.time,from:"2016-06-01",to:"2020-06-30",
       source:e.source||"vendor disclosure"});
