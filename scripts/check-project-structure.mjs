@@ -15,6 +15,7 @@ const expectedScripts = [
   "src/data/glossary.js",
   "src/engine/history.js",
   "src/engine/immersion.js",
+  "src/engine/connectivity.js",
   "src/engine/thermal.js",
   "src/engine/secondary.js",
   "src/engine/nodes.js",
