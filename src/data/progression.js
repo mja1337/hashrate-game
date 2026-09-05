@@ -23,30 +23,65 @@ const STRATEGY_SECURITIES=[
   {id:"strd",ticker:"STRD",name:"Stride preferred",date:"2025-06-10",base:100,btcBeta:.25,yield:.10,desc:"Higher-yield preferred exposure; its payment profile is simplified here as a 10% annual fiat dividend."},
   {id:"strc",ticker:"STRC",name:"Stretch preferred",date:"2025-07-29",base:100,btcBeta:.08,yield:.09,desc:"Variable-rate preferred designed for cash income. This game models its initial 9% annual fiat yield, paid daily."}
 ];
+/* THE OPERATOR TREE.
+
+   Two things were wrong with it. Ten of twenty-three skills required a facility upgrade, and
+   the early Energy branch needed one before its first rung — so a 2009 operator in a spare
+   room could buy exactly three things, then bank points with nothing to spend them on until
+   they could afford a garage. Saving with no way to spend is not a decision.
+
+   And whole systems added since had no presence here at all: consumables, immersion, key
+   custody beyond a single line, connectivity failover, outage recovery. The branches now
+   follow what an operator actually does — Electronics is hands-on hardware work, Security is
+   keys and firmware, Resilience is what happens when the site goes down — and the new rungs
+   are weighted to the years when there was nothing to buy.
+
+   Every skill here changes engine behaviour. A contract walks this list and fails the build
+   if an id is never read by the simulation, because a skill that costs points and does
+   nothing is worse than no skill at all. */
 const SKILLS=[
   {id:"undervolt",branch:"Compute",name:"Undervolt",desc:"Hardware consumes 5% less power.",cost:2},
   {id:"firmware",branch:"Compute",name:"Custom firmware",desc:"Hardware produces 4% more hash.",cost:3,req:"undervolt",date:"2010-07-17"},
   {id:"procurement",branch:"Compute",name:"Direct procurement",desc:"New hardware costs 6% less.",cost:4,req:"firmware",date:"2012-01-01",minFacility:2},
   {id:"asictune",branch:"Compute",name:"ASIC autotuning",desc:"ASIC and hydro-ASIC hash rate rises 5%.",cost:5,req:"procurement",date:"2013-01-01",minFacility:3},
-  {id:"metering",branch:"Energy",name:"Smart metering",desc:"Electricity costs 4% less.",cost:2,minFacility:2},
-  {id:"heat",branch:"Energy",name:"Heat reuse",desc:"Recover 4% of every power bill.",cost:3,req:"metering",date:"2011-01-01",minFacility:2},
-  {id:"capacity",branch:"Energy",name:"Power engineering",desc:"Facilities support 10% more electrical load.",cost:4,req:"heat",date:"2012-01-01",minFacility:3},
-  {id:"substation",branch:"Energy",name:"Dedicated substation",desc:"Adds 10% electrical capacity beyond power engineering.",cost:5,req:"capacity",date:"2015-01-01",minFacility:4},
-  {id:"liquidcool",branch:"Energy",name:"Liquid-cooling plant",desc:"Enables water-cooled ASIC deployment at warehouse scale or above.",cost:6,req:"substation",date:"2020-01-01",minFacility:4},
-  {id:"curtailment",branch:"Energy",name:"Demand-response control",desc:"Power costs fall by a further 4% through flexible load management.",cost:5,req:"liquidcool",date:"2020-01-01",minFacility:4},
-  {id:"poolops",branch:"Operations",name:"Pool operations",desc:"Pool fees fall by 0.4 percentage points.",cost:2,date:"2010-12-16"},
-  {id:"monitoring",branch:"Operations",name:"Fleet monitoring",desc:"Uptime improves one point and connectivity incidents fall 25%.",cost:3,req:"poolops",date:"2011-01-01",minFacility:2},
-  {id:"fieldservice",branch:"Operations",name:"Field service technique",desc:"Halves the chance of a complication at every stage of a repair.",cost:4,req:"monitoring",date:"2014-01-01",minFacility:3},
-  {id:"blocktemplate",branch:"Operations",name:"Block-template construction",desc:"With an online archival or relay node, construct candidate blocks locally, capture 8% more transaction fees and unlock OCEAN's miner-selected templates.",cost:4,req:"monitoring",date:"2012-01-01"},
-  {id:"relocation",branch:"Operations",name:"Relocation playbook",desc:"Moving regions costs 20% less.",cost:4,req:"blocktemplate",date:"2013-01-01"},
-  {id:"spares",branch:"Operations",name:"Critical spares inventory",desc:"Transit damage during facility moves destroys fewer miners.",cost:4,req:"relocation",date:"2015-01-01"},
-  {id:"benchskills",branch:"Operations",name:"Bench repair skills",desc:"You learn to work on your own machines properly. Botching a self-serviced repair becomes far less likely, and every unit type you service teaches you more about it.",cost:2,date:"2009-01-03"},
-  {id:"partssourcing",branch:"Operations",name:"Parts sourcing",desc:"You know who actually stocks this stuff. Every spare part costs 20% less.",cost:3,req:"benchskills",date:"2010-01-01"},
-  {id:"supplychain",branch:"Operations",name:"Supply-chain contacts",desc:"Standing arrangements with suppliers. Spare-part orders arrive 40% sooner, including through a supply shock.",cost:3,req:"partssourcing",date:"2011-01-01"},
-  {id:"practisedhands",branch:"Operations",name:"Practised hands",desc:"Work you have done many times before starts completing itself: a growing chance to finish a self-serviced repair with no puzzle at all, rising with every unit of that type you have fixed.",cost:4,req:"benchskills",date:"2011-06-01"},
-  {id:"backups",branch:"Treasury",name:"Key backups",desc:"Redundant seed backups cut the chance of losing self-held coins by 30%.",cost:1},
-  {id:"counterparty",branch:"Treasury",name:"Counterparty radar",desc:"Advance warnings about a venue or a jurisdiction arrive 30 days sooner.",cost:2,req:"backups",date:"2010-07-17"},
-  {id:"multisig",branch:"Treasury",name:"Multisig discipline",desc:"Cold-storage transfers cost 20% less.",cost:4,req:"counterparty",date:"2012-01-01"}
+  {id:"immersiontuning",branch:"Compute",name:"Immersion tuning",desc:"Submerged miners clock higher still: 35% more hash instead of 25%, for the same extra power.",cost:5,req:"asictune",date:"2021-01-01",minFacility:3},
+
+  {id:"metering",branch:"Energy",name:"Smart metering",desc:"Energy costs fall 4%.",cost:2,minFacility:2},
+  {id:"heat",branch:"Energy",name:"Heat reuse",desc:"Energy costs fall a further 4%.",cost:3,req:"metering",date:"2011-01-01",minFacility:2},
+  {id:"capacity",branch:"Energy",name:"Power engineering",desc:"Facility electrical capacity rises 10%.",cost:4,req:"heat",date:"2012-01-01",minFacility:3},
+  {id:"substation",branch:"Energy",name:"Dedicated substation",desc:"Facility electrical capacity rises a further 10%.",cost:5,req:"capacity",date:"2015-01-01",minFacility:4},
+  {id:"liquidcool",branch:"Energy",name:"Liquid-cooling plant",desc:"Unlocks hydro-ASIC hardware.",cost:6,req:"substation",date:"2020-01-01",minFacility:4},
+  {id:"curtailment",branch:"Energy",name:"Demand-response control",desc:"Energy costs fall a further 4%.",cost:5,req:"substation",date:"2020-01-01",minFacility:4},
+
+  {id:"poolops",branch:"Operations",name:"Pool operations",desc:"Pool fees fall 0.4 percentage points.",cost:2,date:"2010-12-16"},
+  {id:"monitoring",branch:"Operations",name:"Fleet monitoring",desc:"Uptime improves and connectivity incidents become less likely.",cost:3,req:"poolops",date:"2011-01-01",minFacility:2},
+  {id:"fieldservice",branch:"Operations",name:"Field service technique",desc:"Repair complications happen half as often.",cost:4,req:"monitoring",date:"2014-01-01",minFacility:3},
+  {id:"blocktemplate",branch:"Operations",name:"Block-template construction",desc:"Solo mining on your own node earns the block's fees as well as its subsidy.",cost:4,date:"2012-01-01"},
+
+  /* Hands-on hardware work. Deliberately ungated: this is the branch a solo operator in a
+     spare room can commit to from the first day, which is the gap the tree had. */
+  {id:"benchskills",branch:"Electronics",name:"Bench repair skills",desc:"Cuts the chance of damaging a machine you are working on to 40% of its value.",cost:2,date:"2009-01-03"},
+  {id:"thermalwork",branch:"Electronics",name:"Thermal discipline",desc:"A tube of thermal paste covers twice as many boards, and a dry-fitted repair fails far less often.",cost:2,date:"2009-01-03"},
+  {id:"partssourcing",branch:"Electronics",name:"Parts sourcing",desc:"Every spare part costs 20% less.",cost:3,req:"benchskills",date:"2010-01-01"},
+  {id:"diagnostics",branch:"Electronics",name:"Diagnostic method",desc:"An ignored fault spreads to a second part half as often.",cost:3,req:"thermalwork",date:"2010-01-01"},
+  {id:"salvage",branch:"Electronics",name:"Salvage and cannibalise",desc:"Retiring a machine to storage recovers a usable fan from it.",cost:3,req:"diagnostics",date:"2011-01-01"},
+  {id:"supplychain",branch:"Electronics",name:"Supply-chain contacts",desc:"Spare-part orders arrive 40% sooner, supply shock included.",cost:3,req:"partssourcing",date:"2011-01-01"},
+  {id:"practisedhands",branch:"Electronics",name:"Practised hands",desc:"A familiar repair can complete itself with no puzzle at all.",cost:4,req:"supplychain",date:"2011-06-01"},
+
+  /* Keys and firmware. Custody had one line in the tree while the game grew devices, key
+     policies and multisig behind it. */
+  {id:"backups",branch:"Security",name:"Key backups",desc:"Hot-wallet incidents become less likely.",cost:1},
+  {id:"counterparty",branch:"Security",name:"Counterparty radar",desc:"Venue failures are flagged a month before they land.",cost:2,req:"backups",date:"2010-07-17"},
+  {id:"multisig",branch:"Security",name:"Multisig discipline",desc:"Unlocks multi-key spending policies.",cost:4,req:"backups",date:"2012-01-01"},
+  {id:"airgap",branch:"Security",name:"Air-gapped signing",desc:"Signing offline cuts the chance a key compromise reaches your coins by a further 30%.",cost:3,req:"multisig",date:"2013-01-01"},
+  {id:"firmwarehygiene",branch:"Security",name:"Firmware hygiene",desc:"Signed firmware holds for 30 months instead of 18, and an unpatched fleet is hijacked half as often.",cost:3,date:"2017-04-26"},
+
+  /* What happens when the site goes down. */
+  {id:"runbook",branch:"Resilience",name:"Incident runbook",desc:"Grid and connectivity outages are a quarter shorter.",cost:2,date:"2011-01-01"},
+  {id:"spares",branch:"Resilience",name:"Critical spares inventory",desc:"Hardware failures happen half as often.",cost:4,req:"runbook",date:"2015-01-01"},
+  {id:"relocation",branch:"Resilience",name:"Relocation playbook",desc:"Relocation costs 20% less.",cost:4,req:"runbook",date:"2013-01-01"},
+  {id:"dualupstream",branch:"Resilience",name:"Dual upstream",desc:"A second independent route cuts connectivity incidents by a further 40%.",cost:4,req:"runbook",date:"2016-01-01",minFacility:2},
+  {id:"standbypower",branch:"Resilience",name:"Standby generator",desc:"The first two days of any grid outage no longer stop the fleet.",cost:4,req:"runbook",date:"2014-01-01",minFacility:3}
 ];
 const LEARNING=[
   {id:"cryptomailinglist",type:"Mailing list",date:"2008-10-31",title:"The Cryptography Mailing List",author:"cryptography@metzdowd.com",days:1,reward:1,desc:"Where Satoshi Nakamoto actually posted \"Bitcoin P2P e-cash paper\" on 31 October 2008, two months before the Genesis Block — the same cypherpunk-descended list a working cryptographer would already have been reading."},

@@ -129,5 +129,33 @@ for (const file of ["src/styles/app.css", ...expectedScripts]) {
   if (file.startsWith("src/") && file.endsWith(".js")) assert(info.size < 70_000, `${file} has grown beyond the agreed module ceiling`);
 }
 
+/* NO SKILL MAY COST POINTS AND DO NOTHING.
+
+   The operator tree is the one place in the game where a player spends a scarce currency on
+   a promise, so every id in it has to be read by something that changes behaviour. A skill
+   that reads well and is wired to nothing is worse than a missing skill: it takes points and
+   silently returns none of them. This walks the tree against the shipped source, which also
+   catches the reverse — a branch added to the data and forgotten in the engine. */
+{
+  const progression = await readFile(new URL("src/data/progression.js", root), "utf8");
+  const skillsBlock = progression.slice(progression.indexOf("const SKILLS=["), progression.indexOf("\n];", progression.indexOf("const SKILLS=[")));
+  const skillIds = [...skillsBlock.matchAll(/\{id:"([a-zA-Z]+)"/g)].map(m => m[1]);
+  assert(skillIds.length > 20, `only ${skillIds.length} skills were parsed out of the tree, so this check is not reading it properly`);
+  const consumers = [];
+  for (const file of expectedScripts) {
+    if (!file.startsWith("src/")) continue;
+    if (file === "src/data/progression.js") continue;
+    consumers.push(await readFile(new URL(file, root), "utf8"));
+  }
+  const haystack = consumers.join("\n");
+  const dead = skillIds.filter(id => {
+    // Read by the engine, required by a hardware entry, or named as another skill's parent.
+    if (haystack.includes(`hasSkill("${id}")`) || haystack.includes(`includes("${id}")`)) return false;
+    if (haystack.includes(`requires:"${id}"`)) return false;
+    return true;
+  });
+  assert(dead.length === 0, `Operator skills that cost points and change nothing: ${dead.join(", ")}`);
+}
+
 assert((await stat(new URL("index.html", root))).size < 5_000, "index.html is becoming a monolith again");
 console.log(`Project structure passed: ${expectedScripts.length - 1} application modules, one generated historical bundle, one stylesheet`);

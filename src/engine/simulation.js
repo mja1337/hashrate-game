@@ -162,7 +162,13 @@ function connectivityPlan(s=state){return CONNECTIVITY_PLANS.find(x=>x.id===s.co
 function connectivityScale(s=state){return[1,1.5,4,15,55,150,300,600][Math.max(0,facilityTier(s)-1)]||1}
 function internetMonthlyCost(s=state){const r=REGIONS.find(x=>x.id===s.region)||REGIONS[0];return(r.internet||75)*connectivityPlan(s).mult*connectivityScale(s)}
 function connectivityMiningFactor(s=state){return connectivityPlan(s).payout||1}
-function connectivityIncidentRisk(s=state){const r=REGIONS.find(x=>x.id===s.region)||REGIONS[0];return(r.netRisk||.02)*(connectivityPlan(s).risk||1)*(s.skills?.includes("monitoring")?.75:1)}
+function connectivityIncidentRisk(s=state){const r=REGIONS.find(x=>x.id===s.region)||REGIONS[0];return(r.netRisk||.02)*(connectivityPlan(s).risk||1)*(s.skills?.includes("monitoring")?.75:1)*(s.skills?.includes("dualupstream")?.6:1)}
+/* A rehearsed recovery does not stop an outage happening, it stops it running long. Applied
+   where the outage is created, so the banner counts down the length the site will actually
+   be out for rather than a figure the player then has to discount. */
+function outageDays(days,s=state){return Math.max(1,Math.round(days*(s.skills?.includes("runbook")?.75:1)))}
+/* A generator carries the first two days. An outage that short never reaches the fleet. */
+function gridOutageDays(days,s=state){return Math.max(0,outageDays(days,s)-(s.skills?.includes("standbypower")?2:0))}
 function skillGateReason(skill){if(skill.req&&!hasSkill(skill.req))return`Requires ${SKILLS.find(x=>x.id===skill.req)?.name||skill.req}`;if(skill.date&&state.time<at(skill.date))return`Unlocks ${dateFmt(at(skill.date),true)}`;if(skill.minFacility&&facilityTier()<skill.minFacility)return`Requires ${FACILITIES[skill.minFacility-1]?.name||`tier ${skill.minFacility} facility`}`;return""}
 function staffHiringAvailable(s=state){return facilityTier(s)>=3}
 function maintenanceCondition(h,s=state){const value=Number(s.maintenance?.condition?.[h.id]);return Number.isFinite(value)?Math.max(0,Math.min(100,value)):100}
@@ -188,7 +194,7 @@ function hardwareOfflineReason(h,s=state){
 function fitsInstalledFleet(s){const fs=fleet(s),f=FACILITIES.find(x=>x.id===s.facility)||FACILITIES[0];return fs.potentialKw<=fs.cap&&fs.space<=f.space}
 function fleet(s=state){
   let hash=0,minerW=0,space=0,value=0,count=0,activeCount=0,potentialW=0,offline=[];
-  HARDWARE.forEach(h=>{const n=s.hardware[h.id]||0,reason=hardwareOfflineReason(h,s),rs=hardwareRepairState(h,s),{repairing,paused,active,servicing}=rs;space+=h.space*n;value+=h.cost*n;count+=n;{const immAll=immersionCount(h.id,s);potentialW+=h.w*(n-immAll+immAll*IMMERSION_POWER_GAIN)}if(n&&reason){offline.push({h,n,reason});return}if(repairing)offline.push({h,n:repairing,reason:servicing?"Repair in progress":"Unexpected hardware fault"});if(paused)offline.push({h,n:paused,reason:"Manually powered down"});const effectiveHash=h.hash*hardwareLaunchFactor(h,s.time);activeCount+=active;const imm=immersionActive(h,active,s),air=active-imm;hash+=effectiveHash*(air+imm*IMMERSION_HASH_GAIN);minerW+=h.w*(air+imm*IMMERSION_POWER_GAIN);if(s.skills.includes("asictune")&&(h.era==="ASIC"||h.era==="HYDRO ASIC"))hash+=effectiveHash*active*.05});
+  HARDWARE.forEach(h=>{const n=s.hardware[h.id]||0,reason=hardwareOfflineReason(h,s),rs=hardwareRepairState(h,s),{repairing,paused,active,servicing}=rs;space+=h.space*n;value+=h.cost*n;count+=n;{const immAll=immersionCount(h.id,s);potentialW+=h.w*(n-immAll+immAll*IMMERSION_POWER_GAIN)}if(n&&reason){offline.push({h,n,reason});return}if(repairing)offline.push({h,n:repairing,reason:servicing?"Repair in progress":"Unexpected hardware fault"});if(paused)offline.push({h,n:paused,reason:"Manually powered down"});const effectiveHash=h.hash*hardwareLaunchFactor(h,s.time);activeCount+=active;const imm=immersionActive(h,active,s),air=active-imm;hash+=effectiveHash*(air+imm*immersionHashGain(s));minerW+=h.w*(air+imm*IMMERSION_POWER_GAIN);if(s.skills.includes("asictune")&&(h.era==="ASIC"||h.era==="HYDRO ASIC"))hash+=effectiveHash*active*.05});
   if(s.skills.includes("firmware"))hash*=1.04;if(s.skills.includes("undervolt"))minerW*=.95;
   if(s.overdrive){hash*=1.15;minerW*=1.25}
   const coolingW=coolingPowerWatts(s,minerW),w=minerW+coolingW;potentialW*=s.skills.includes("undervolt")?.95:1;if(s.overdrive)potentialW*=1.25;potentialW+=coolingPeakWatts(s);
@@ -237,6 +243,10 @@ function log(text,amount="",category=""){
 }
 function operating(){const fs=fleet();return state.power&&!gridCutOff()&&!state.policyLock&&!siteOutage()&&!fleetGrounded()&&fs.within&&fs.hash>0}
 function asicCount(){return HARDWARE.filter(h=>h.era==="ASIC"||h.era==="HYDRO ASIC").reduce((n,h)=>n+(state.hardware[h.id]||0),0)}
+/* Signed cover lasts longer and fails less often for an operator who treats firmware as
+   maintenance rather than an emergency. */
+function firmwareCoverDays(s=state){return s.skills?.includes("firmwarehygiene")?900:540}
+function firmwareHijackRisk(s=state){return s.skills?.includes("firmwarehygiene")?.035:.07}
 function firmwarePatchDue(){return asicCount()>0&&state.time>=at("2017-04-26")&&state.time>(state.ops?.firmwarePatchedUntil||0)}
 function firmwareHijacked(){return state.time<(state.ops?.hijackUntil||0)}
 function venueFrozen(id){return state.time<(state.ops?.venueFreezes?.[id]||0)}
@@ -332,7 +342,7 @@ function covidPartsMarket(){return state.time>=at("2020-03-12")&&state.time<at("
 function patchFirmware(){
   const count=asicCount(),cost=Math.max(75,count*18);if(!count)return showToast("No ASIC fleet","Firmware patching applies to ASIC and hydro ASIC hardware.");
   if(state.cash<cost)return showToast("Not enough cash",`Signed firmware rollout costs ${fmtUsd(cost)}.`);
-  state.cash-=cost;state.ops.firmwarePatchedUntil=state.time+DAY*540;state.ops.hijackUntil=0;
+  state.cash-=cost;state.ops.firmwarePatchedUntil=state.time+DAY*firmwareCoverDays();state.ops.hijackUntil=0;
   log("ASIC firmware patched",`${count} machines · protected for 18 months`);showToast("Fleet patched","Signed firmware is current for 18 simulation months.");save();render();
 }
 function advanceNodeSync(silent=false){
@@ -346,10 +356,12 @@ function advanceOperationalRisks(next){
   const month=new Date(next).toISOString().slice(0,7);if(state.ops.riskMonth===month)return;state.ops.riskMonth=month;
   advanceCustodyRisks(next);
   const hotRisk=hotWalletIncidentRisk();if(hotRisk>0&&nextRand()<hotRisk){const lost=state.wallets.hot*(.12+nextRand()*.28);state.wallets.hot=Math.max(0,state.wallets.hot-lost);log("Hot-wallet key compromise",`-${fmtBtc(lost)} · cold storage unaffected`,"custody");showToast("Hot wallet compromised",`${fmtBtc(lost)} was lost from the online wallet. Cold storage and custodial venues were unaffected.`,"bad","custody");renderFullQueued=true}
-  if(firmwarePatchDue()&&!firmwareHijacked()&&nextRand()<.07){state.ops.hijackUntil=next+DAY*(10+Math.floor(nextRand()*21));log("ASIC fleet hijacked","35% of hash diverted");showToast("Firmware compromise","Unpatched ASIC firmware is pointing part of your hash rate to an attacker. Patch it now.","bad");}
+  if(firmwarePatchDue()&&!firmwareHijacked()&&nextRand()<firmwareHijackRisk()){state.ops.hijackUntil=next+DAY*(10+Math.floor(nextRand()*21));log("ASIC fleet hijacked","35% of hash diverted");showToast("Firmware compromise","Unpatched ASIC firmware is pointing part of your hash rate to an attacker. Patch it now.","bad");}
   const r=region(),outageRisk=connectivityIncidentRisk(),gridRisk=Math.min(.28,Math.max(.004,(1-r.rely)*1.15));
-  if(!siteOutage()&&(operating()||nodeHostPowered())&&nextRand()<gridRisk){const days=1+Math.floor(nextRand()*(2+gridRisk*45));state.ops.powerOutageUntil=next+DAY*days;log(`${r.name} grid outage`,`${days} days without power`,`operations`);showToast("Grid outage",`${r.name}'s grid is unavailable at ${facility().name}. Mining, cooling and primary-node services pause for ${days} days.`,"bad","facilities");}
-  else if(!siteOutage()&&(operating()||nodeHostPowered())&&nextRand()<outageRisk){const plan=connectivityPlan(),days=(1+Math.floor(nextRand()*(3+outageRisk*90)))*(plan.failover??1);
+  if(!siteOutage()&&(operating()||nodeHostPowered())&&nextRand()<gridRisk){const raw=1+Math.floor(nextRand()*(2+gridRisk*45)),days=gridOutageDays(raw);
+    if(days<1){log(`${r.name} grid outage rode out`,`${raw} day${raw===1?"":"s"} carried by the standby generator`,`operations`);showToast("Generator carried the outage",`${r.name}'s grid went down for ${raw} day${raw===1?"":"s"} at ${facility().name}. The standby generator covered it and the fleet kept hashing.`,"info","facilities");}
+    else{state.ops.powerOutageUntil=next+DAY*days;log(`${r.name} grid outage`,`${days} days without power${days<raw?` · ${raw-days} carried by standby power`:""}`,`operations`);showToast("Grid outage",`${r.name}'s grid is unavailable at ${facility().name}. Mining, cooling and primary-node services pause for ${days} days.`,"bad","facilities");}}
+  else if(!siteOutage()&&(operating()||nodeHostPowered())&&nextRand()<outageRisk){const plan=connectivityPlan(),days=outageDays((1+Math.floor(nextRand()*(3+outageRisk*90)))*(plan.failover??1));
     state.ops.outageUntil=next+DAY*days;
     // A failover link is measured in hours, not days, so the notice has to say so.
     const spell=days<1?`${Math.max(1,Math.round(days*24))} hours`:`${Math.round(days)} days`;

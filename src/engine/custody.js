@@ -70,10 +70,12 @@ function custodySetup(s=state){
    protection at all, because owning a device in a drawer is not custody. */
 function custodyCompromiseFactor(s=state){
   const set=custodySetup(s);
+  // Signing offline narrows what a compromised machine can reach, whatever the policy is.
+  const airgap=s.skills?.includes("airgap")?.7:1;
   if(!set.ready)return 1;
-  if(set.policy.threshold<=1)return .55;
+  if(set.policy.threshold<=1)return .55*airgap;
   // Requiring two independent secrets is the single largest reduction available here.
-  return .18;
+  return .18*airgap;
 }
 
 /* The chance per month that a self-custody setup becomes unrecoverable: a device dies, a

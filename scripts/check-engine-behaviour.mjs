@@ -978,6 +978,108 @@ rule("the electrical figure shown against capacity is the one that governs purch
   assert(r.peak > r.live, "peak and live draw are identical, so this rule cannot tell them apart");
 });
 
+
+/* ---- THE OPERATOR TREE: skills that do what they say ---- */
+
+/* Ten of twenty-three skills used to need a facility upgrade, and the early Energy branch
+   needed one before its first rung, so a 2009 spare-room operator could buy three things and
+   then bank points with nothing to spend them on. Saving with no way to spend is not a
+   decision, so the shape of the tree is asserted rather than left to drift back. */
+rule("an operator can spend points from the first year without upgrading the site", () => {
+  const r = json(`(()=>{
+    const early=SKILLS.filter(s=>(!s.date||at(s.date)<=at("2009-12-31"))&&!(s.minFacility>1));
+    const ungated=SKILLS.filter(s=>!(s.minFacility>1));
+    const branches=[...new Set(SKILLS.map(s=>s.branch))];
+    return{total:SKILLS.length,early:early.map(s=>s.id),ungated:ungated.length,branches};})()`);
+  assert(r.early.length >= 4, `only ${r.early.length} skills are buyable in 2009 at tier 1: ${r.early.join(", ")}`);
+  assert(r.ungated >= r.total / 2, `${r.ungated} of ${r.total} skills are reachable without a facility upgrade`);
+  assert(r.branches.length >= 5, `the tree has only ${r.branches.length} branches: ${r.branches.join(", ")}`);
+});
+
+rule("immersion tuning raises hash without raising the power it costs", () => {
+  const r = json(`(()=>{
+    ${SITE(`state.time=at("2022-06-01");state.facility="warehouse";
+      state.hardware={s19:300};state.thermal.equipment={immersion:2};
+      state.maintenance.inventory.immersionKit=400;`)}
+    convertToImmersion("s19",300);
+    const before={hash:fleet().hash,watts:fleet().minerW};
+    state.skills=["immersiontuning"];
+    const after={hash:fleet().hash,watts:fleet().minerW};
+    return{before,after};})()`);
+  assert(r.after.hash > r.before.hash, "immersion tuning did not raise hash rate at all");
+  close(r.after.watts, r.before.watts, 1, "immersion tuning changed the power draw");
+  const lift = r.after.hash / r.before.hash;
+  assert(lift > 1.05 && lift < 1.12, `immersion tuning moved hash by ${lift.toFixed(3)}x, which is not the advertised step from 25% to 35%`);
+});
+
+rule("thermal discipline makes a tube of paste go twice as far", () => {
+  const r = json(`(()=>{
+    const run=skills=>{
+      ${SITE(`state.time=at("2020-06-01");state.facility="warehouse";
+        state.hardware={s19:32};state.maintenance.condition={s19:40};
+        state.maintenance.faultsByPart={s19:{hashboardmodern:16}};`)}
+      state.skills=skills;state.maintenance.inventory.thermalpaste=9;
+      state.maintenance.serviceJobs=[{id:"s19",count:16,part:"hashboardmodern",crew:1,totalDays:1,stage:99}];
+      state.time+=DAY*3;advanceMaintenance();
+      return 9-state.maintenance.inventory.thermalpaste;
+    };
+    return{plain:run([]),skilled:run(["thermalwork"])};})()`);
+  assert(r.plain > r.skilled, `a skilled bench used ${r.skilled} tubes against ${r.plain} unskilled`);
+  assert(r.skilled >= 1, "thermal discipline made the consumable free, which removes the decision rather than easing it");
+});
+
+rule("salvage recovers a fan from every machine retired", () => {
+  const r = json(`(()=>{
+    const run=skills=>{
+      ${SITE(`state.time=at("2016-06-01");state.facility="warehouse";state.hardware={s9:10};`)}
+      state.skills=skills;state.maintenance.inventory.asicfan=0;
+      // The shared site setup leaves storage alone, and it accumulates between runs.
+      state.decommissionedHardware={};state.poweredDownHardware={};
+      decommissionHardware("s9",4);
+      return{fans:state.maintenance.inventory.asicfan,stored:state.decommissionedHardware.s9||0};
+    };
+    return{plain:run([]),skilled:run(["salvage"])};})()`);
+  assert(r.plain.fans === 0, `retiring machines without the skill produced ${r.plain.fans} fans`);
+  assert(r.skilled.fans === 4, `retiring four machines with salvage produced ${r.skilled.fans} fans`);
+  assert(r.skilled.stored === 4, "salvage consumed the machines instead of storing them");
+});
+
+rule("air-gapped signing reduces what a key compromise can reach", () => {
+  const r = json(`(()=>{
+    const factor=skills=>{
+      ${SITE(`state.time=at("2016-06-01");`)}
+      state.skills=skills;
+      return custodyCompromiseFactor();
+    };
+    return{plain:factor([]),skilled:factor(["airgap"])};})()`);
+  assert(r.skilled < r.plain, `air-gapping left the compromise factor at ${r.skilled} against ${r.plain}`);
+  assert(r.skilled > 0, "air-gapping made compromise impossible, which no custody arrangement does");
+});
+
+rule("firmware hygiene holds cover longer and is hijacked less often", () => {
+  const r = json(`(()=>{
+    const read=skills=>{${SITE(`state.time=at("2018-06-01");`)}state.skills=skills;
+      return{cover:firmwareCoverDays(),risk:firmwareHijackRisk()};};
+    return{plain:read([]),skilled:read(["firmwarehygiene"])};})()`);
+  assert(r.skilled.cover > r.plain.cover, `cover stayed at ${r.skilled.cover} days`);
+  assert(r.skilled.risk < r.plain.risk, `hijack risk stayed at ${r.skilled.risk}`);
+  assert(r.skilled.risk > 0, "firmware hygiene removed the risk entirely rather than reducing it");
+});
+
+rule("a runbook shortens an outage and a generator carries a short one", () => {
+  const r = json(`(()=>{
+    const read=skills=>{${SITE(`state.time=at("2018-06-01");`)}state.skills=skills;
+      return{eight:outageDays(8),gridEight:gridOutageDays(8),gridTwo:gridOutageDays(2),
+        net:connectivityIncidentRisk()};};
+    return{plain:read([]),runbook:read(["runbook"]),generator:read(["runbook","standbypower"]),
+      dual:read(["dualupstream"])};})()`);
+  assert(r.runbook.eight < r.plain.eight, `a runbook left an eight-day outage at ${r.runbook.eight} days`);
+  assert(r.generator.gridEight < r.runbook.gridEight, "the generator did not shorten a grid outage further");
+  assert(r.generator.gridTwo === 0, `a two-day grid outage still stopped the fleet for ${r.generator.gridTwo} days`);
+  assert(r.plain.gridTwo > 0, "a two-day outage stops nobody even without a generator, so the rule proves nothing");
+  assert(r.dual.net < r.plain.net, `a second upstream left connectivity risk at ${r.dual.net}`);
+});
+
 if (failures.length) {
   console.error(`Engine behaviour: ${failures.length} of ${checked} rules failed\n`);
   for (const failure of failures) console.error(`  ✗ ${failure}`);

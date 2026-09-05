@@ -60,6 +60,9 @@ function immersionShare(h,s=state){const n=s.hardware?.[h.id]||0;return n?immers
 /* How many of a type's currently-running units are submerged. Repairs and manual shutdowns
    come off the air-cooled units first, which keeps the split stable while a job runs. */
 function immersionActive(h,active,s=state){return Math.max(0,Math.min(active,immersionCount(h.id,s)))}
+/* Immersion tuning buys clock headroom, not efficiency: the extra hash rises, the extra
+   power does not, so the trade stays a trade and only gets better at it. */
+function immersionHashGain(s=state){return s.skills?.includes("immersiontuning")?1.35:IMMERSION_HASH_GAIN}
 
 /* Fans that are not there cannot seize. The weight does not vanish — it is redistributed
    across whatever else the machine can break — and it only falls in proportion to how much

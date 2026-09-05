@@ -24,7 +24,7 @@ function hardwareUsingPart(partId){
 function repasteUnitsFor(h,job,repaired){
   const parts=job.part?[job.part]:Object.keys(serviceRequirements(h,repaired));
   if(!parts.some(id=>REPASTE_PARTS.includes(id)))return 0;
-  return Math.max(1,Math.ceil(repaired/8));
+  return Math.max(1,Math.ceil(repaired/(hasSkill("thermalwork")?16:8)));
 }
 function consumeRepaste(units){
   if(!units)return{needed:0,used:0,short:0};
@@ -194,7 +194,7 @@ function advanceMaintenance(){
   HARDWARE.forEach(h=>{
     const existingFaults=hardwareFaultCount(h);
     if(!existingFaults||activeServiceJob(h.id))return;
-    if(nextRand()<Math.min(.25,existingFaults*.02)){
+    if(nextRand()<Math.min(.25,existingFaults*.02)*(hasSkill("diagnostics")?.5:1)){
       const breakdown=hardwareFaultBreakdown(h),weights=immersionAdjustedWeights(h,partFaultWeights(h));
       let extra=pickWeightedPart(weights),tries=0;while(breakdown[extra]&&tries<4){extra=pickWeightedPart(weights);tries++}
       const byPart=state.maintenance.faultsByPart[h.id]||(state.maintenance.faultsByPart[h.id]={});
@@ -335,7 +335,11 @@ function markDryFit(h,dry,paste){
   renderFullQueued=true;
 }
 function dryFitActive(h,s=state){return !!h&&(s.maintenance?.dryFit?.[h.id]||0)>s.time}
-function dryFitFailureFactor(h,s=state){return dryFitActive(h,s)?DRY_FIT_FAILURE:1}
+function dryFitFailureFactor(h,s=state){
+  if(!dryFitActive(h,s))return 1;
+  // Knowing how to seat a heatsink does not make old compound good, but it helps.
+  return s.skills?.includes("thermalwork")?1.4:DRY_FIT_FAILURE;
+}
 function sparePartCost(part){const def=typeof part==="string"?sparePart(part):part;return (def?.cost||0)*(covidPartsMarket()?2.25:1)*(hasSkill("partssourcing")?.8:1)}
 function partsLeadDays(){return Math.max(3,Math.round((covidPartsMarket()?42:14)*(hasSkill("supplychain")?.6:1)))}
 function selfRepairExperience(id){return Math.max(0,Math.floor(Number(state.maintenance.selfRepairs?.[id])||0))}
