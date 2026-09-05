@@ -377,11 +377,44 @@ function advanceOperationalRisks(next){
 function advanceFleetLifecycle(){
   advanceCustodyOrders(state.time);
   advanceEntropyDrain(state.time);
-  state.commissioningJobs=state.commissioningJobs.filter(job=>{if(job.due>state.time)return true;const h=HARDWARE.find(item=>item.id===job.id);
-    if(h){const incoming=Number.isFinite(job.condition)?job.condition:incomingConditionFor(h,job.orderedAt||state.time);
-      if(incoming<100){const existing=state.hardware[job.id]||0,prior=maintenanceCondition(h),total=existing+job.qty;
-        if(total>0)state.maintenance.condition[job.id]=(existing*prior+job.qty*incoming)/total}}
-    state.hardware[job.id]=(state.hardware[job.id]||0)+job.qty;awardXp((6+3*Math.log2(1+(h?.hash||0)/1e9))*Math.log2(1+job.qty),"deploy");log(`Commissioned ${job.qty} × ${h?.name||job.id}`,"Racked, configured and hashing","fleet");showToast("Commissioning complete",`${job.qty} × ${h?.name||"miner"} is now connected to the fleet.`);renderFullQueued=true;return false});
+  /* COMMISSIONING IS A CREW WORKING DOWN A ROW, not a delivery that appears at the end of it.
+
+     A five-hundred-machine order used to earn nothing for twenty-five days and then everything
+     at once, which is neither what a build looks like nor what it pays: the first rack is
+     hashing while the last is still in its box. Machines now come online in proportion to how
+     far through the job the crew is, so revenue ramps with the build.
+
+     XP is still awarded once for the whole batch on completion. Paying it per increment would
+     quietly inflate it, because the award is logarithmic in quantity and a sum of small logs
+     is far larger than the log of the sum. */
+  state.commissioningJobs=state.commissioningJobs.filter(job=>{
+    const h=HARDWARE.find(item=>item.id===job.id);
+    const total=Math.max(0,Math.floor(Number(job.qty)||0));
+    if(!h||!total)return false;
+    /* Saves written before the ramp carry a due date and nothing else. Stamping the start
+       when the job is first seen ramps it over whatever time remains, rather than inventing a
+       past that would drop the whole batch on the due date exactly as before. */
+    if(!Number.isFinite(job.started))job.started=Math.min(state.time,job.due);
+    const started=job.started;
+    const span=Math.max(DAY,job.due-started);
+    const done=Math.max(0,Math.floor(Number(job.done)||0));
+    const finished=state.time>=job.due;
+    const racked=finished?total:Math.min(total,Math.floor(total*Math.max(0,(state.time-started)/span)));
+    const add=Math.max(0,racked-done);
+    if(add>0){
+      const incoming=Number.isFinite(job.condition)?job.condition:incomingConditionFor(h,job.orderedAt||state.time);
+      if(incoming<100){const existing=state.hardware[job.id]||0,prior=maintenanceCondition(h),pool=existing+add;
+        if(pool>0)state.maintenance.condition[job.id]=(existing*prior+add*incoming)/pool}
+      state.hardware[job.id]=(state.hardware[job.id]||0)+add;
+      job.done=done+add;
+      renderFullQueued=true;
+    }
+    if(!finished)return true;
+    awardXp((6+3*Math.log2(1+(h.hash||0)/1e9))*Math.log2(1+total),"deploy");
+    log(`Commissioned ${total} × ${h.name}`,`Racked, configured and hashing over ${Math.max(1,Math.round(span/DAY))} day${Math.round(span/DAY)===1?"":"s"}`,"fleet");
+    showToast("Commissioning complete",`${total} × ${h.name} is now connected to the fleet. Machines came online as the crew worked through them.`);
+    renderFullQueued=true;
+    return false});
   const job=state.relocationJob;if(job&&job.due<=state.time){const destination=REGIONS.find(r=>r.id===job.id);state.region=job.id;
     enforceConnectivityAvailability();state.relocationJob=null;state.policyLock=null;state.power=state.debt<=0;log(`Fleet arrived in ${destination?.name||job.id}`,"Site commissioning complete","operations");showToast("Relocation complete",`The fleet is live at ${destination?.name||job.id}.`);renderFullQueued=true}
   const upgradeJob=state.facilityUpgradeJob;if(upgradeJob&&upgradeJob.due<=state.time){

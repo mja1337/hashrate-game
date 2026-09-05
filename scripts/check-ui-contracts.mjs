@@ -687,6 +687,12 @@ assert(/firmware-status[^"]*\$\{tone\}|firmware-status \$\{tone\}/.test(inline) 
 assert(/state\.region=job\.id;\s*\n?\s*enforceConnectivityAvailability\(\);/.test(inline),
   "Completing a relocation no longer re-checks connectivity availability, so a site can keep a plan its new jurisdiction never offered");
 
+/* Commissioning brings machines online as the crew works through them, so the incoming-fleet
+   row has to report progress. Announcing the full order as "racking" while a third of it is
+   already hashing reads as though nothing has happened. */
+assert(inline.includes("still to rack") && inline.includes("already hashing"),
+  "The incoming-fleet row no longer reports how much of a build is already online, so a ramping commission looks stalled");
+
 const mineTabSource = await readFile(new URL("src/ui/tabs/mine.js", root), "utf8");
 /* hardwarePurchaseStatusHtml existed, was maintained, and was called by nothing — so the
    panel explaining WHY an order is capped, and now which market you are buying in, never

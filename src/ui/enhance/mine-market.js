@@ -284,7 +284,14 @@ function incomingFleetVisual(){
   const rows=[
     ...transit.map(o=>{const h=HARDWARE.find(x=>x.id===o.id),days=Math.max(0,Math.ceil((o.due-state.time)/DAY)),slipped=(o.slips||0)>0;return `<div class="incoming-fleet-row ${slipped?"slipped":""}"><div class="incoming-fleet-name"><b>${o.qty} × ${h?.name||o.id}</b><small>${slipped?"Delivery slipped · ":""}${o.vendor||h?.maker||"Supplier"} · ETA ${dateFmt(o.due)} · ${days}d remaining · ${Math.round((o.risk||0)*100)}% delay risk</small></div>${track(0)}</div>`}),
     ...delivered.map(h=>{const qty=state.inactiveHardware[h.id];return `<div class="incoming-fleet-row"><div class="incoming-fleet-name"><b>${qty} × ${h.name}</b><small>Staged at ${facility().name} — ready to commission</small></div>${track(1)}<button class="action small primary" data-action="activate-hw" data-id="${h.id}">Commission ${qty}</button></div>`}),
-    ...commissioning.map(j=>{const h=HARDWARE.find(x=>x.id===j.id),days=Math.max(0,Math.ceil((j.due-state.time)/DAY));return `<div class="incoming-fleet-row"><div class="incoming-fleet-name"><b>${j.qty} × ${h?.name||j.id}</b><small>Racking, configuring and testing · ${days}d remaining</small></div>${track(2)}</div>`})
+    /* Machines come online as the crew works through them, so this row is a progress report
+       rather than a countdown: saying "500 racking" while 180 of them are already hashing
+       reads as though nothing has happened yet. */
+    ...commissioning.map(j=>{
+      const h=HARDWARE.find(x=>x.id===j.id),days=Math.max(0,Math.ceil((j.due-state.time)/DAY));
+      const done=Math.max(0,Math.floor(Number(j.done)||0)),left=Math.max(0,j.qty-done);
+      const pct=j.qty?Math.round(done/j.qty*100):0;
+      return `<div class="incoming-fleet-row"><div class="incoming-fleet-name"><b>${fmtCompactNumber(left)} of ${fmtCompactNumber(j.qty)} × ${h?.name||j.id} still to rack</b><small>${done?`${fmtCompactNumber(done)} already hashing · `:""}${days}d remaining</small><div class="bar" style="--w:${pct}%;--bar:var(--green)"><i></i></div></div>${track(2)}</div>`})
   ].join("");
   return `<section class="card span-12 incoming-fleet"><div class="card-head"><h2>Incoming fleet</h2><div class="meta">ORDER → TRANSIT → COMMISSION → ACTIVE</div></div><div class="card-pad">${rows}</div></section>`;
 }

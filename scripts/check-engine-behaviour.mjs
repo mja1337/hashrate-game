@@ -1440,6 +1440,82 @@ rule("purchase orders are raised on a monthly cycle, not on every tick", () => {
   assert(r.nextMonth > 0, "the planner never ran again in the following month");
 });
 
+
+/* ---- COMMISSIONING: a crew working down a row ---- */
+
+const BUILD_SITE = `
+  ${SITE(`state.time=at("2021-06-01");state.facility="megacampus";state.cash=1e8;state.power=true;`)}
+  state.hardware={};state.commissioningJobs=[];state.maintenance.condition={};
+  state.thermal={temperature:22,orders:[],equipment:{coolingtower:4}};`;
+
+/* A five-hundred-machine order used to earn nothing for twenty-five days and then everything
+   at once. The first rack is hashing while the last is still in its box. */
+rule("machines come online across the build rather than all on the last day", () => {
+  const r = json(`(()=>{
+    ${BUILD_SITE}
+    state.inactiveHardware={s19:500};
+    activateHardware("s19");
+    const job=state.commissioningJobs[0];
+    const total=job.qty,days=job.days;
+    const trail=[];
+    for(let d=0;d<days+3;d++){state.time+=DAY;advanceFleetLifecycle();
+      trail.push({day:d+1,owned:state.hardware.s19||0,hash:fleet().hash});}
+    return{total,days,trail};})()`);
+  assert(r.days >= 4, `the build only takes ${r.days} days, so a ramp cannot be observed`);
+  const mid = r.trail[Math.floor(r.days / 2) - 1];
+  assert(mid.owned > 0, "nothing was hashing halfway through the build");
+  assert(mid.owned < r.total, `the whole order was online halfway through: ${mid.owned} of ${r.total}`);
+  assert(mid.hash > 0, "machines are counted as owned but contribute no hash rate mid-build");
+  const finished = r.trail[r.days - 1];
+  assert(finished.owned === r.total, `the build ended with ${finished.owned} of ${r.total} online`);
+  const after = r.trail[r.trail.length - 1];
+  assert(after.owned === r.total, `machines kept appearing after the build finished: ${after.owned}`);
+});
+
+rule("a build racks exactly what was ordered, no more and no less", () => {
+  const r = json(`(()=>{
+    const run=qty=>{${BUILD_SITE}
+      state.inactiveHardware={s19:qty};
+      activateHardware("s19");
+      for(let d=0;d<60;d++){state.time+=DAY;advanceFleetLifecycle();}
+      return{asked:qty,got:state.hardware.s19||0,open:state.commissioningJobs.length};};
+    return{one:run(1),odd:run(7),many:run(500)};})()`);
+  for (const key of ["one", "odd", "many"]) {
+    assert(r[key].got === r[key].asked, `${key}: ordered ${r[key].asked} and ended with ${r[key].got}`);
+    assert(r[key].open === 0, `${key}: the job never closed`);
+  }
+});
+
+/* The deploy award is logarithmic in quantity, so paying it per increment would inflate it
+   badly — a sum of small logs is far larger than the log of the sum. */
+rule("a build is paid its deployment experience once, not once per rack", () => {
+  const r = json(`(()=>{
+    ${BUILD_SITE}
+    state.inactiveHardware={s19:400};
+    state.xp={total:0,level:1,peakLevel:1,bestDifficulty:0,shares:0,sources:{shares:0,record:0,deploy:0,repair:0,spend:0}};
+    activateHardware("s19");
+    for(let d=0;d<40;d++){state.time+=DAY;advanceFleetLifecycle();}
+    const h=HARDWARE.find(x=>x.id==="s19");
+    return{paid:state.xp.sources.deploy,
+      once:(6+3*Math.log2(1+(h.hash||0)/1e9))*Math.log2(1+400)};})()`);
+  close(r.paid, r.once, 1, "deployment experience for one batch");
+});
+
+/* Saves written before the ramp carry a due date and nothing else. */
+rule("a build already in progress from an older save still completes", () => {
+  const r = json(`(()=>{
+    ${BUILD_SITE}
+    // The shape the old code wrote: quantity and a due date, no start, no progress.
+    state.commissioningJobs=[{id:"s19",qty:120,due:state.time+6*DAY}];
+    const trail=[];
+    for(let d=0;d<10;d++){state.time+=DAY;advanceFleetLifecycle();
+      trail.push(state.hardware.s19||0);}
+    return{trail,open:state.commissioningJobs.length};})()`);
+  assert(r.trail[r.trail.length - 1] === 120, `an old-shaped job delivered ${r.trail[r.trail.length - 1]} of 120`);
+  assert(r.open === 0, "an old-shaped job never closed");
+  assert(r.trail[2] > 0 && r.trail[2] < 120, `an old-shaped job did not ramp: ${r.trail.join(", ")}`);
+});
+
 if (failures.length) {
   console.error(`Engine behaviour: ${failures.length} of ${checked} rules failed\n`);
   for (const failure of failures) console.error(`  ✗ ${failure}`);
