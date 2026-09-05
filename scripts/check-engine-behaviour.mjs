@@ -1146,6 +1146,104 @@ rule("the price chart says which of its data is recorded and which is modelled",
   assert(r.wellPast === "MODELLED", `a range entirely past the cutoff was labelled ${r.wellPast}`);
 });
 
+
+/* ---- THE SECOND-HAND MARKET ---- */
+
+/* The buy side depreciated but never behaved like a market: you could buy ten thousand
+   six-year-old S9s instantly at three percent of list. Used machines exist because somebody
+   else is retiring them, so the quantity is finite. */
+rule("old hardware is not an unlimited tap", () => {
+  const r = json(`(()=>{
+    ${SITE(`state.time=at("2021-06-01");state.facility="megacampus";state.cash=1e9;state.power=true;`)}
+    state.secondary={stock:{},month:""};state.procurementOrders=[];state.inactiveHardware={};
+    for(let m=0;m<18;m++){state.time+=30*DAY;advanceSecondaryMarket(state.time)}
+    const h=HARDWARE.find(x=>x.id==="s9");
+    const listed=secondaryStock("s9");
+    buyHardware("s9",100000);
+    const ordered=state.procurementOrders.reduce((sum,o)=>sum+o.qty,0);
+    return{channel:hardwareChannel(h),listed,ordered,
+      leftListed:secondaryStock("s9"),cash:state.cash};})()`);
+  assert(r.channel === "secondary", "a five-year-old machine is still being sold as factory stock");
+  assert(r.listed > 0 && r.listed < 5000, `the market listed ${r.listed} units, which is not a finite second-hand supply`);
+  assert(r.ordered === r.listed, `asked for 100,000 and got ${r.ordered} against ${r.listed} listed`);
+  assert(r.leftListed === 0, `${r.leftListed} units remained listed after buying the lot`);
+});
+
+rule("buying a listing takes it off the market", () => {
+  const r = json(`(()=>{
+    ${SITE(`state.time=at("2021-06-01");state.facility="megacampus";state.cash=1e9;state.power=true;`)}
+    state.secondary={stock:{},month:""};state.procurementOrders=[];
+    for(let m=0;m<18;m++){state.time+=30*DAY;advanceSecondaryMarket(state.time)}
+    const before=secondaryStock("s9");
+    buyHardware("s9",Math.max(1,Math.floor(before/2)));
+    return{before,after:secondaryStock("s9"),
+      ordered:state.procurementOrders.reduce((sum,o)=>sum+o.qty,0)};})()`);
+  assert(r.before > 1, `only ${r.before} units were listed, so this rule proves little`);
+  assert(r.after === r.before - r.ordered, `bought ${r.ordered} of ${r.before} and ${r.after} remain`);
+});
+
+/* Supply follows how many were BUILT, not how fast they are. A first attempt scaled with hash
+   rate and gave an S9 generation almost the same supply as an S21 one. */
+rule("a later generation has more of itself on the second-hand market", () => {
+  const r = json(`(()=>{
+    const peak=id=>{const h=HARDWARE.find(x=>x.id===id);
+      ${SITE(``)}
+      state.time=at(h.date)+Math.round(2.6*365)*DAY;
+      return secondaryBaseStock(h);};
+    return{gpurig:peak("gpurig"),s5:peak("s5"),s9:peak("s9"),s19:peak("s19"),s21:peak("s21")};})()`);
+  assert(r.s9 > r.s5 && r.s19 > r.s9 && r.s21 > r.s19,
+    `supply does not grow with generation: ${JSON.stringify(r)}`);
+  assert(r.s21 > r.gpurig * 20, `an S21 generation lists ${r.s21} against a GPU rig's ${r.gpurig}, which is not an industrial difference`);
+});
+
+/* Nothing is available while the machine is still current, and the tail runs out. */
+rule("second-hand supply appears after a generation is retired and dries up later", () => {
+  const r = json(`(()=>{
+    const h=HARDWARE.find(x=>x.id==="s9");
+    const at_=years=>{${SITE(``)}state.time=at(h.date)+Math.round(years*365)*DAY;
+      return{stock:secondaryBaseStock(h),channel:hardwareChannel(h)};};
+    return{fresh:at_(0.5),early:at_(2),peak:at_(2.6),late:at_(6),ancient:at_(10)};})()`);
+  assert(r.fresh.stock === 0 && r.fresh.channel === "factory", "a current machine is already on the second-hand market");
+  assert(r.peak.stock > r.early.stock, "supply does not build toward a peak");
+  assert(r.late.stock < r.peak.stock, "supply never thins after the peak");
+  assert(r.ancient.stock === 0, `a ten-year-old machine still lists ${r.ancient.stock} units`);
+});
+
+/* A liquidation is somebody else's fleet arriving at once: the event already softened prices,
+   and now it puts the machines behind that discount on the market too. */
+rule("a liquidation puts machines on the market as well as cutting the price", () => {
+  const r = json(`(()=>{
+    const run=glut=>{
+      ${SITE(`state.time=at("2021-06-01");`)}
+      state.secondary={stock:{},month:""};
+      state.hardwareGlut=glut?{discount:.22,until:state.time+400*DAY}:null;
+      for(let m=0;m<10;m++){state.time+=30*DAY;advanceSecondaryMarket(state.time)}
+      const h=HARDWARE.find(x=>x.id==="s19");
+      return{listed:secondaryStock("s19"),price:hardwareUnitCost(h)};
+    };
+    return{calm:run(false),liquidation:run(true)};})()`);
+  assert(r.liquidation.listed > r.calm.listed, `a liquidation listed ${r.liquidation.listed} against ${r.calm.listed} in calm conditions`);
+  assert(r.liquidation.price < r.calm.price, "a liquidation did not soften the price");
+});
+
+/* A used machine is somebody else's maintenance record. The band is disclosed; the draw is
+   not — and a factory machine has no band at all. */
+rule("a second-hand machine arrives worn, within a band the player was shown", () => {
+  const r = json(`(()=>{
+    ${SITE(`state.time=at("2021-06-01");`)}
+    const h=HARDWARE.find(x=>x.id==="s9"),fresh=HARDWARE.find(x=>x.id==="s19");
+    const band=secondaryConditionRange(h);
+    const draws=[];for(let i=0;i<40;i++)draws.push(rollSecondaryCondition(h));
+    return{band,min:Math.min(...draws),max:Math.max(...draws),
+      distinct:new Set(draws).size,
+      freshBand:secondaryConditionRange(fresh),freshChannel:hardwareChannel(fresh)};})()`);
+  assert(r.band.spread > 0, "a five-year-old machine arrives with no condition uncertainty at all");
+  assert(r.min >= r.band.low && r.max <= r.band.high, `draws ran ${r.min}-${r.max} outside the shown band ${r.band.low}-${r.band.high}`);
+  assert(r.distinct > 3, `forty draws produced ${r.distinct} distinct conditions, so it is not really a draw`);
+  assert(r.band.high <= 100 && r.band.low >= 55, "the condition band leaves the plausible range");
+  assert(r.freshBand.spread === 0, "a machine still sold new arrives with second-hand uncertainty");
+});
+
 if (failures.length) {
   console.error(`Engine behaviour: ${failures.length} of ${checked} rules failed\n`);
   for (const failure of failures) console.error(`  ✗ ${failure}`);

@@ -682,6 +682,11 @@ assert(/firmware-status[^"]*\$\{tone\}|firmware-status \$\{tone\}/.test(inline) 
   "The Mine firmware panel no longer offers the patch action itself");
 
 const mineTabSource = await readFile(new URL("src/ui/tabs/mine.js", root), "utf8");
+/* hardwarePurchaseStatusHtml existed, was maintained, and was called by nothing — so the
+   panel explaining WHY an order is capped, and now which market you are buying in, never
+   reached the screen. A function nobody calls is worse than a missing one: it reads as
+   working. */
+assert(mineTabSource.includes("hardwarePurchaseStatusHtml(h)"), "The hardware card no longer shows the purchase-capacity panel, so nothing explains what is limiting an order or which market it comes from");
 assert(mineTabSource.includes("hardwarePurchaseLimits(h)"), "The Mine hardware card no longer asks the shared purchase-limit helper for its capacity");
 assert(!/cap\)?\s*\*\s*1000\s*-\s*(Number\()?reserved\.w/.test(mineTabSource), "The Mine card is computing power headroom from live draw again, which offers quantities the purchase path will refuse");
 assert(/const maxBuy=h\.permanent\?0:limits\.fiatMax/.test(mineTabSource), "The Mine card's maximum quantity is no longer the shared limit");
