@@ -196,6 +196,7 @@ function render(preserveScroll=true){
   const banner=state.debt>0||state.policyLock?`<div class="status-banner ${state.debt>0&&!gridCutOff()?"warning":""}"><strong>${state.policyLock?"Policy shutdown":gridCutOff()?"Grid disconnected":"Operating bill in arrears"}</strong><span>${state.policyLock||fmtUsd(state.debt)+" must be paid before mining resumes."}</span><div class="push actions">${state.debt>0?`<button class="action small primary" data-action="pay-debt" ${state.cash<state.debt?"disabled":""}>Pay ${fmtUsd(state.debt)}</button>`:""}<button class="action small" data-action="tab" data-value="${state.policyLock?"facilities":"market"}">${state.policyLock?"Relocate":"Raise cash"}</button></div></div>`:"",incident=activeSiteIncident(),incidentBanner=incident?`<div class="incident-banner"><strong>${incident.kind} · fleet offline</strong><span>${region().name} / ${facility().name} · estimated restoration ${dateFmt(incident.until)} · ${Math.max(0,Math.ceil((incident.until-state.time)/DAY))} simulation days remaining</span><button class="action small" data-action="tab" data-value="facilities">Open Operations</button></div>`:"",settlementBanner=state.pendingSettlement&&state.settlementSaleMode?`<div class="status-banner settlement-sale-banner"><strong>Settlement paused · ${fmtUsd(Math.max(0,state.pendingSettlement.due-state.cash))} short</strong><span>Deposit self-held BTC onto an exchange and sell it there — the bill clears automatically once cash covers it.</span><div class="push actions"><button class="action small primary" data-action="tab" data-value="market">Open Market</button><button class="action small" data-action="cancel-settlement-sale">Choose a different rescue</button></div></div>`:"",forecast=!state.pendingSettlement&&state.started?settlementForecast():null,forecastBanner=forecast&&forecast.cashAfter<0?`<div class="status-banner forecast-warning-banner"><strong>Cash shortfall ahead · ${fmtUsd(-forecast.cashAfter)} short</strong><span>At today's burn rate, the bill due ${dateFmt(forecast.dueAt,true)} (${fmtUsd(forecast.estimated)}) won't be covered by current cash. Raise fiat now, or the month-end settlement will force a rescue.</span><div class="push actions"><button class="action small primary" data-action="tab" data-value="market">Open Market</button></div></div>`:"",exposureBanners=EXPOSURE_WARNINGS.filter(w=>state.time>=at(w.date)&&state.time<at(EVENTS.find(e=>e.id===w.eventId)?.date||0)&&(w.wallet?state.wallets[w.wallet]>0:state.region===w.region)).map(w=>`<div class="status-banner exposure-warning-banner"><strong>${w.title}</strong><span>${w.wallet?`${fmtBtc(state.wallets[w.wallet])} exposed on ${walletName(w.wallet)}`:`${region().name} exposure`}</span><div class="push actions"><button class="action small primary" data-action="tab" data-value="${w.wallet?"market":"facilities"}">${w.wallet?"Open Market":"Open Facilities"}</button></div></div>`).join("");
   document.getElementById("app").innerHTML=`${svgSpriteDefs()}<div class="app">${renderHeader()}${banner}${incidentBanner}${settlementBanner}${forecastBanner}${exposureBanners}<div class="shell"><main class="main">${nav()}<div class="content">${content(revision)}</div></main>${sidebar()}</div><footer class="footer"><span>Historical simulation · recorded, derived and modelled data are labelled separately · not financial advice</span><span><button data-action="story-pause">Story pause: ${state.storyPause?"on":"off"}</button> · <button data-action="export">Export save</button> · <button data-action="import">Import save</button> · <button data-action="reset">New run</button><input id="importSave" type="file" accept="application/json,.json" hidden></span></footer></div>${!state.started?introModal():""}${state.started&&!state.walletSetup.done?walletSetupModal():""}${state.activeEvent?eventModal():""}${glossaryOpen?glossaryModalHtml():""}${state.hardwareAlerts.active?hardwareReleaseModal():""}${state.pendingSettlement&&!state.settlementSaleMode?settlementModal():""}${state.ended&&!state.endDismissed?endModal():""}${toast?toastMarkup(toast):""}${faucet?faucetMarkup(faucet):""}`;
   enhanceActiveTab();
+  measureTabRow();
   if(pendingTransaction)document.getElementById("app").insertAdjacentHTML("beforeend",transactionConfirmationModal());
   setTimeout(()=>{if(revision===renderRevision)enhanceDisabledControls()},0);
   if(keepPosition){window.scrollTo({left:scrollX,top:scrollY,behavior:"instant"});restoreScrollAnchor(anchor);requestAnimationFrame(()=>{app.style.minHeight=""})}else app.style.minHeight="";
@@ -229,6 +230,14 @@ function restoreScrollAnchor(anchor){
   apply();
   requestAnimationFrame(apply);
 }
+/* The tab row's height changes with the breakpoint, and anything sticking beneath it needs
+   to know. Measured rather than hardcoded so the two cannot drift apart. */
+function measureTabRow(){
+  const tabs=document.querySelector("nav.tabs");
+  if(!tabs)return;
+  const height=Math.round(tabs.getBoundingClientRect().height);
+  if(height>0)document.documentElement.style.setProperty("--tabs-h",height+"px");
+}
 function renderMineContent(){
   if(deferWhilePressed(renderMineContent))return;
   if(activeTab!=="mine")return render();
@@ -241,7 +250,7 @@ function renderMineContent(){
   // enhancement let the browser paint the short un-enhanced tab first, which
   // is what made a fault notification visibly kick the page down.
   host.innerHTML=mine();
-  enhanceMine();refreshMinePricing();
+  enhanceMine();refreshMinePricing();measureTabRow();
   enhanceDisabledControls();
   if(keepPosition){restoreScrollAnchor(anchor);requestAnimationFrame(()=>{host.style.minHeight=""})}
   else host.style.minHeight="";

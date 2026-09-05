@@ -170,7 +170,6 @@ const FloorScenery=(()=>{
     /* The plant the operation actually bought, drawn last so it can place itself around
        everything else that is already standing in the room. */
     FloorCooling.populate(s,api,site);
-    label('HASHRATE / '+p.year,[-w/2+2.8,3.22,-d/2+.16],4.7,.6);
     return {...site,crew};
   }
   return {plan,crewLayout,populate,roleColors};

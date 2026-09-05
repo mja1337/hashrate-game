@@ -37,9 +37,31 @@ const MINE_SECTIONS=[
   {id:"buy",name:"Hardware",hint:"Catalogue, deliveries and retirement"}
 ];
 function mineSection(){return MINE_SECTIONS.some(s=>s.id===state.mineSection)?state.mineSection:"floor"}
+
+/* Each section carries a live figure rather than only a name. Mine is the one tab in the
+   game with a second level of navigation, so it has to announce itself — and a row of four
+   inert labels is easy to read straight past. A count that changes is not. */
+function mineSectionBadges(){
+  const fs=fleet();
+  const faults=HARDWARE.reduce((sum,h)=>sum+hardwareFaultCount(h),0);
+  const ailing=HARDWARE.filter(h=>(state.hardware[h.id]||0)>0&&maintenanceCondition(h)<65).length;
+  const temperature=roomTemperatureC();
+  const band=temperature<32?"cool":temperature<42?"warm":temperature<52?"hot":"critical";
+  const inbound=(state.procurementOrders||[]).reduce((sum,o)=>sum+Number(o.qty||0),0);
+  const needsService=faults+ailing;
+  return{
+    floor:{text:`${fmtCompactNumber(fs.activeCount)} / ${fmtCompactNumber(fs.count)} hashing`,tone:fs.count&&!fs.activeCount?"bad":""},
+    service:{text:needsService?`${fmtCompactNumber(needsService)} need${needsService===1?"s":""} attention`:"all healthy",tone:needsService?"bad":"good"},
+    cooling:{text:`${temperature.toFixed(0)} °C · ${band}`,tone:band==="cool"?"good":band==="warm"?"":"bad"},
+    buy:{text:inbound?`${fmtCompactNumber(inbound)} arriving`:"catalogue",tone:inbound?"good":""}
+  };
+}
 function mineSectionNav(){
-  const active=mineSection();
-  return `<section class="card span-12 mine-sections"><div class="mine-section-tabs" role="tablist">${MINE_SECTIONS.map(s=>`<button class="mine-section ${s.id===active?"active":""}" data-action="mine-section" data-value="${s.id}" role="tab" aria-selected="${s.id===active}"><b>${s.name}</b><small>${s.hint}</small></button>`).join("")}</div></section>`;
+  const active=mineSection(),badges=mineSectionBadges();
+  return `<nav class="mine-sections" aria-label="Mine sections"><span class="mine-sections-label">Mine</span><div class="mine-section-tabs" role="tablist">${MINE_SECTIONS.map(s=>{
+    const badge=badges[s.id]||{text:"",tone:""};
+    return `<button class="mine-section ${s.id===active?"active":""}" data-action="mine-section" data-value="${s.id}" role="tab" aria-selected="${s.id===active}"><b>${s.name}</b><small>${s.hint}</small><i class="mine-section-badge ${badge.tone}">${badge.text}</i></button>`;
+  }).join("")}</div></nav>`;
 }
 function mine(){
   const fs=fleet(),reserved=plannedFleetProjection(),items=HARDWARE.filter(h=>(state.hardware[h.id]||0)>0||announced(h));
