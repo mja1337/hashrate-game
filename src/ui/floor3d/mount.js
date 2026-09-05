@@ -206,20 +206,14 @@ function floor3dDraw(){
      broad; sizing both axes from one radius left a third of the frame empty above and below.
      The eight corners of the bounds are projected onto the camera's own right and up vectors
      and the frustum is fitted to those extents. */
-  const reach=bounds.radius*4;
-  const eye=[bounds.x+reach,bounds.y+reach*.8,bounds.z+reach];
-  const fwd=norm([bounds.x-eye[0],bounds.y-eye[1],bounds.z-eye[2]]);
-  const right=norm(cross(fwd,[0,1,0]));
-  const up=cross(right,fwd);
-  let halfW=0,halfH=0;
-  for(const cx of [bounds.minX,bounds.maxX])for(const cy of [bounds.minY,bounds.maxY])for(const cz of [bounds.minZ,bounds.maxZ]){
-    const d=[cx-bounds.x,cy-bounds.y,cz-bounds.z];
-    halfW=Math.max(halfW,Math.abs(dot(d,right)));
-    halfH=Math.max(halfH,Math.abs(dot(d,up)));
-  }
-  // A little air so the roofline and the front edge of the floor are not touching the frame.
-  const margin=1.12;
-  halfW=Math.max(halfW*margin,.5);halfH=Math.max(halfH*margin,.5);
+  const distance=bounds.radius*6;
+  const view=floor3dExtent(bounds,floor3dView.azimuth,floor3dView.elevation,distance);
+  const eye=view.eye;
+  /* The PANEL is sized from the default vantage, not the current one. Deriving its height
+     from whichever way the camera happens to be pointing meant the card grew and shrank
+     under the cursor while you dragged, which is unusable. */
+  const frame=floor3dViewIsDefault()?view:floor3dExtent(bounds,FLOOR3D_DEFAULT_VIEW.azimuth,FLOOR3D_DEFAULT_VIEW.elevation,distance);
+  let halfW=view.halfW,halfH=view.halfH;
   /* The panel takes its shape from the room rather than the other way round. A fixed
      width*0.42 letterbox was 2.38:1 against scenes that project between 1.37:1 (a spare
      room) and 1.76:1 (a megacampus), so the fit — which is bound by whichever axis runs out
@@ -228,7 +222,7 @@ function floor3dDraw(){
      The clamps stop a tall room turning the panel into a tower, and stop a wide one
      collapsing it to a strip. */
   floor3dFitShadow(bounds);
-  const contentAspect=halfW/halfH;
+  const contentAspect=frame.halfW/frame.halfH;
   const height=Math.max(1,Math.round(Math.min(
     Math.max(width/contentAspect, width*FLOOR3D_MIN_ASPECT),
     width*FLOOR3D_MAX_ASPECT,
@@ -239,10 +233,11 @@ function floor3dDraw(){
   const fitW=halfW,fitH=halfH,frameAspect=width/height;
   let viewW=fitW,viewH=fitH;
   if(fitW/fitH>frameAspect)viewH=fitW/frameAspect; else viewW=fitH*frameAspect;
-  floor3dCamera.left=-viewW;floor3dCamera.right=viewW;
-  floor3dCamera.top=viewH;floor3dCamera.bottom=-viewH;
+  const zoom=floor3dView.zoom||1;
+  floor3dCamera.left=-viewW/zoom;floor3dCamera.right=viewW/zoom;
+  floor3dCamera.top=viewH/zoom;floor3dCamera.bottom=-viewH/zoom;
   floor3dCamera.position.set(eye[0],eye[1],eye[2]);
-  floor3dCamera.far=reach*4;
+  floor3dCamera.near=-distance*2;floor3dCamera.far=distance*4;
   floor3dCamera.lookAt(bounds.x,bounds.y,bounds.z);
   floor3dCamera.updateProjectionMatrix();
   floor3dRenderer.render(floor3dScene,floor3dCamera);
@@ -280,6 +275,25 @@ let floor3dKeyLight=null,floor3dShadowKey="";
 
 /* The shadow camera has to enclose the scene, and the scene changes size by a factor of five
    between a spare room and a megacampus. Refitted only when the bounds actually move. */
+/* Where the camera sits for a given orbit, and how much of the scene that vantage spans on
+   screen. Separated out because the panel's shape and the camera's frustum need it for two
+   different vantages once the view can be dragged. */
+function floor3dExtent(bounds,azimuth,elevation,distance){
+  const ce=Math.cos(elevation),se=Math.sin(elevation);
+  const eye=[bounds.x+distance*ce*Math.sin(azimuth),bounds.y+distance*se,bounds.z+distance*ce*Math.cos(azimuth)];
+  const fwd=norm([bounds.x-eye[0],bounds.y-eye[1],bounds.z-eye[2]]);
+  const right=norm(cross(fwd,[0,1,0]));
+  const up=cross(right,fwd);
+  let halfW=0,halfH=0;
+  for(const cx of [bounds.minX,bounds.maxX])for(const cy of [bounds.minY,bounds.maxY])for(const cz of [bounds.minZ,bounds.maxZ]){
+    const d=[cx-bounds.x,cy-bounds.y,cz-bounds.z];
+    halfW=Math.max(halfW,Math.abs(dot(d,right)));
+    halfH=Math.max(halfH,Math.abs(dot(d,up)));
+  }
+  // A little air so the roofline and the front edge of the floor are not touching the frame.
+  const margin=1.12;
+  return{eye,halfW:Math.max(halfW*margin,.5),halfH:Math.max(halfH*margin,.5)};
+}
 function floor3dFitShadow(bounds){
   const key=floor3dKeyLight;
   if(!key||!bounds)return;
@@ -293,6 +307,95 @@ function floor3dFitShadow(bounds){
   camera.updateProjectionMatrix();
   key.target.position.set(bounds.x,bounds.y,bounds.z);
   key.target.updateMatrixWorld();
+}
+
+/* PICKING WITHOUT RAYCASTING THE WHOLE ROOM.
+
+   Raycaster does work against InstancedMesh and returns an instanceId that maps through
+   userData.batchIds to a batch — but it tests every instance, and at megacampus that is
+   10.8ms for one ray. Two thirds of a frame to answer a single click, and hover impossible.
+
+   A per-batch bounding volume was the obvious fix and is not: a room of open racks is mostly
+   empty space, so a ray passing through a nearer rack's box beats the machine it actually
+   hits. Loose boxes agreed with brute force 54% of the time, and TIGHTENING them made it
+   worse — 36% — because a tight box misses the true batch and the ray falls through to
+   something further away.
+
+   What works is the same axis-aligned box per INSTANCE, flattened into typed arrays and
+   swept in one loop: 98% agreement with brute force at 1.4ms median, built once per rebuild.
+   The 2% are rays grazing a cylinder or torus where the box is a little larger than the
+   shape, which is the right way to be wrong about what is under a cursor. */
+let floor3dPickTable=null;
+function floor3dBuildPickTable(root){
+  const min=[],max=[],ids=[];
+  root.traverse(node=>{
+    // Haloes are additive light sitting in front of everything; four rays in a scan of 576
+    // were intercepted by one before reaching the machine behind it.
+    if(!node.isInstancedMesh||node.userData.glow)return;
+    const g=node.geometry;
+    if(!g)return;
+    if(!g.boundingBox)g.computeBoundingBox();
+    const bb=g.boundingBox;
+    if(!bb)return;
+    const lx=(bb.min.x+bb.max.x)/2,ly=(bb.min.y+bb.max.y)/2,lz=(bb.min.z+bb.max.z)/2,
+          hx=(bb.max.x-bb.min.x)/2,hy=(bb.max.y-bb.min.y)/2,hz=(bb.max.z-bb.min.z)/2;
+    const m=node.instanceMatrix.array,batch=node.userData.batchIds||[];
+    for(let i=0;i<node.count;i++){
+      const o=i*16;
+      const cx=m[o]*lx+m[o+4]*ly+m[o+8]*lz+m[o+12],
+            cy=m[o+1]*lx+m[o+5]*ly+m[o+9]*lz+m[o+13],
+            cz=m[o+2]*lx+m[o+6]*ly+m[o+10]*lz+m[o+14];
+      if(!Number.isFinite(cx)||!Number.isFinite(cy)||!Number.isFinite(cz))continue;
+      const ex=Math.abs(m[o])*hx+Math.abs(m[o+4])*hy+Math.abs(m[o+8])*hz,
+            ey=Math.abs(m[o+1])*hx+Math.abs(m[o+5])*hy+Math.abs(m[o+9])*hz,
+            ez=Math.abs(m[o+2])*hx+Math.abs(m[o+6])*hy+Math.abs(m[o+10])*hz;
+      min.push(cx-ex,cy-ey,cz-ez);max.push(cx+ex,cy+ey,cz+ez);
+      ids.push(Number.isInteger(batch[i])?batch[i]:-1);
+    }
+  });
+  return{min:Float32Array.from(min),max:Float32Array.from(max),id:Int32Array.from(ids),n:ids.length};
+}
+/* Nearest box the ray enters, by the usual slab test. Returns a batch id, -1 for scenery, or
+   null when the ray leaves the room entirely. */
+function floor3dSweep(origin,dir){
+  const table=floor3dPickTable;
+  if(!table||!table.n)return null;
+  const {min,max,id,n}=table;
+  const ox=origin.x,oy=origin.y,oz=origin.z;
+  const ix=1/dir.x,iy=1/dir.y,iz=1/dir.z;
+  let best=null,bestT=Infinity;
+  for(let k=0,o=0;k<n;k++,o+=3){
+    let t0=(min[o]-ox)*ix,t1=(max[o]-ox)*ix;
+    if(t0>t1){const t=t0;t0=t1;t1=t}
+    let u0=(min[o+1]-oy)*iy,u1=(max[o+1]-oy)*iy;
+    if(u0>u1){const t=u0;u0=u1;u1=t}
+    if(u0>t0)t0=u0;
+    if(u1<t1)t1=u1;
+    if(t0>t1)continue;
+    let v0=(min[o+2]-oz)*iz,v1=(max[o+2]-oz)*iz;
+    if(v0>v1){const t=v0;v0=v1;v1=t}
+    if(v0>t0)t0=v0;
+    if(v1<t1)t1=v1;
+    if(t0>t1||t1<0)continue;
+    if(t0<bestT){bestT=t0;best=id[k]}
+  }
+  return best;
+}
+/* Built on first use, not at parse time: mount.js is loaded with the application, and the
+   three.js bundle is fetched lazily afterwards. Constructing these at the top level threw
+   before FloorThree existed, which aborted the rest of this module and surfaced as a
+   confusing "cannot access floor3dScene before initialization" somewhere else entirely. */
+let floor3dRay=null,floor3dNdc=null;
+/* Which batch is under a point on the canvas, in CSS pixels relative to the element. */
+function floor3dPickAt(x,y){
+  if(!floor3dCanvas||!floor3dCamera||!floor3dPickTable)return null;
+  if(!floor3dRay){floor3dRay=new FloorThree.Raycaster();floor3dNdc=new FloorThree.Vector2()}
+  const width=floor3dCanvas.clientWidth,height=floor3dCanvas.clientHeight;
+  if(!width||!height)return null;
+  floor3dNdc.set(x/width*2-1,-(y/height*2-1));
+  floor3dRay.setFromCamera(floor3dNdc,floor3dCamera);
+  const hit=floor3dSweep(floor3dRay.ray.origin,floor3dRay.ray.direction);
+  return hit===null||hit<0?null:hit;
 }
 
 let floor3dBounds=null;
@@ -362,6 +465,7 @@ function floor3dBuildScene(){
   if(floor3dBuilt){floor3dScene.remove(floor3dBuilt.root);floor3dDisposeScene()}
   floor3dBuilt=FloorScene.build(FloorModel.describe(),{});
   floor3dScene.add(floor3dBuilt.root);
+  floor3dPickTable=floor3dBuildPickTable(floor3dBuilt.root);
   // New geometry casts new shadows; the cached map has to be told.
   floor3dRenderer.shadowMap.needsUpdate=true;
   floor3dBounds=floor3dMeasure(floor3dBuilt.root)||{x:floor3dBuilt.cx,y:1,z:floor3dBuilt.cz,
@@ -372,15 +476,159 @@ function floor3dBuildScene(){
 /* Called after every repaint of the Mine tab. Re-attaches the surviving canvas, rebuilds the
    scene only if the floor actually changed, and runs the fan animation only when the tab is
    visible and the player has not asked for less motion. */
+/* POINTER BEHAVIOUR.
+
+   Deliberately no wheel handler. Zooming a canvas under the cursor mid-page means consuming
+   the wheel, and a reader who scrolls past a floor that swallows their scroll has been given
+   a worse bug than the one that zoom fixes. Drag orbits, the buttons zoom.
+
+   Hover picking is coalesced into a frame: at megacampus one pick is 1.4ms, so picking per
+   pointermove event would spend more of the frame answering "what is under the cursor" than
+   drawing the room. */
+/* The camera as two angles and a zoom, rather than a fixed vantage. The projection is
+   orthographic, so the eye's distance changes nothing about framing — only the direction
+   and the frustum size matter — which is why orbiting can be this cheap. */
+const FLOOR3D_DEFAULT_VIEW={azimuth:Math.PI/4,elevation:Math.atan2(.8,Math.SQRT2),zoom:1};
+const FLOOR3D_MIN_ELEVATION=.18,FLOOR3D_MAX_ELEVATION=1.32;
+const FLOOR3D_MIN_ZOOM=.55,FLOOR3D_MAX_ZOOM=6;
+let floor3dView={...FLOOR3D_DEFAULT_VIEW},floor3dViewTouched=false;
+function floor3dViewIsDefault(){
+  return !floor3dViewTouched;
+}
+function floor3dResetView(){
+  floor3dView={...FLOOR3D_DEFAULT_VIEW};floor3dViewTouched=false;
+  floor3dSyncViewControls();floor3dDraw();
+}
+function floor3dZoomBy(factor){
+  floor3dView.zoom=Math.min(FLOOR3D_MAX_ZOOM,Math.max(FLOOR3D_MIN_ZOOM,floor3dView.zoom*factor));
+  floor3dViewTouched=true;floor3dSyncViewControls();floor3dDraw();
+}
+function floor3dSyncViewControls(){
+  const reset=document.querySelector('[data-action="floor3d-reset"]');
+  if(reset)reset.disabled=floor3dViewIsDefault();
+}
+let floor3dHover=null,floor3dHoverRaf=0,floor3dPointer={x:0,y:0},floor3dPressed=null;
+/* A press that moves is an orbit; a press that does not is a click. Four pixels of slop,
+   because a mouse always moves a little between down and up. */
+const FLOOR3D_DRAG_SLOP=4;
+function floor3dPointerDown(event){
+  if(event.button!==undefined&&event.button!==0)return;
+  floor3dPressed={x:event.clientX,y:event.clientY,moved:false,
+    azimuth:floor3dView.azimuth,elevation:floor3dView.elevation};
+  if(floor3dCanvas.setPointerCapture)try{floor3dCanvas.setPointerCapture(event.pointerId)}catch(e){}
+}
+function floor3dPointerUp(event){
+  if(!floor3dPressed)return;
+  const dragged=floor3dPressed.moved;
+  floor3dPressed=null;
+  if(floor3dCanvas.releasePointerCapture)try{floor3dCanvas.releasePointerCapture(event.pointerId)}catch(e){}
+  if(floor3dCanvas)floor3dCanvas.classList.remove("dragging");
+  // A drag must not also select whatever happened to be under the finger when it stopped.
+  if(dragged)floor3dSuppressClick=true;
+}
+let floor3dSuppressClick=false;
+function floor3dOrbit(event){
+  const start=floor3dPressed;
+  const dx=event.clientX-start.x,dy=event.clientY-start.y;
+  if(!start.moved&&Math.hypot(dx,dy)<FLOOR3D_DRAG_SLOP)return;
+  if(!start.moved){start.moved=true;floor3dCanvas.classList.add("dragging")}
+  floor3dView.azimuth=start.azimuth-dx*.008;
+  floor3dView.elevation=Math.min(FLOOR3D_MAX_ELEVATION,Math.max(FLOOR3D_MIN_ELEVATION,start.elevation+dy*.006));
+  floor3dViewTouched=true;
+  floor3dSyncViewControls();
+  floor3dDraw();
+}
+function floor3dApplyHover(next){
+  if(next===floor3dHover)return;
+  floor3dHover=next;
+  if(floor3dCanvas)floor3dCanvas.style.cursor=next===null?"":"pointer";
+  floor3dUpdateReadout();
+  floor3dDraw();
+}
+/* The batch under the cursor, described in words, so hovering says something before you
+   commit to a click. The flat floor puts the same text in a title attribute. */
+function floor3dUpdateReadout(){
+  const host=document.querySelector("[data-floor3d-readout]");
+  if(!host)return;
+  const batch=floor3dHover===null?null:FloorModel.batches().find(b=>b.id===floor3dHover);
+  if(!batch){host.textContent=floor3dSelectedLabel();host.classList.remove("live");return}
+  host.classList.add("live");
+  host.textContent=`${batch.hardware?.name||"Machine"} · ${batch.qty>1?`${fmtCompactNumber(batch.qty)} units · `:""}${batch.label||batch.status}`;
+}
+function floor3dSelectedLabel(){
+  const id=Number.isInteger(state.floorSelected)?state.floorSelected:-1;
+  const batch=id<0?null:FloorModel.batches().find(b=>b.id===id);
+  if(!batch)return "Hover a machine to inspect it. Click a faulted one to open its repair.";
+  return `Selected: ${batch.hardware?.name||"machine"} · ${batch.label||batch.status}`;
+}
+function floor3dPointerMove(event){
+  const rect=floor3dCanvas.getBoundingClientRect();
+  floor3dPointer.x=event.clientX-rect.left;floor3dPointer.y=event.clientY-rect.top;
+  if(floor3dPressed){floor3dOrbit(event);return}
+  if(floor3dHoverRaf)return;
+  floor3dHoverRaf=requestAnimationFrame(()=>{
+    floor3dHoverRaf=0;
+    if(!floor3dCanvas||!floor3dCanvas.parentElement)return;
+    floor3dApplyHover(floor3dPickAt(floor3dPointer.x,floor3dPointer.y));
+  });
+}
+function floor3dPointerLeave(){
+  floor3dPointer.x=-1;floor3dPointer.y=-1;
+  floor3dApplyHover(null);
+}
+/* A click selects, and a faulted machine also opens its repair — the same destination the
+   flat floor's clickable units reach, so the two views cannot disagree about what clicking a
+   broken machine means. */
+function floor3dClick(event){
+  if(floor3dSuppressClick){floor3dSuppressClick=false;return}
+  const rect=floor3dCanvas.getBoundingClientRect();
+  const id=floor3dPickAt(event.clientX-rect.left,event.clientY-rect.top);
+  if(id===null){
+    if(Number.isInteger(state.floorSelected)&&state.floorSelected>=0){
+      state.floorSelected=-1;save();floor3dRebuild();
+    }
+    return;
+  }
+  state.floorSelected=id;save();
+  floor3dRebuild();
+  const batch=FloorModel.batches().find(b=>b.id===id);
+  if(batch&&(batch.status==="fault"||batch.status==="repair")&&batch.hardware&&typeof focusServiceRow==="function")
+    focusServiceRow(batch.hardware.id);
+}
+/* The selection ring is geometry, so changing the selection means rebuilding — cheap at this
+   size, and it keeps one description of the floor rather than a second overlay. */
+function floor3dRebuild(){
+  floor3dBuildScene();
+  floor3dSignature=floor3dSignatureNow();
+  floor3dUpdateReadout();
+  floor3dDraw();
+}
+function floor3dBindPointer(){
+  if(!floor3dCanvas||floor3dCanvas.dataset.pointerBound)return;
+  floor3dCanvas.dataset.pointerBound="1";
+  floor3dCanvas.addEventListener("pointerdown",floor3dPointerDown);
+  floor3dCanvas.addEventListener("pointermove",floor3dPointerMove);
+  floor3dCanvas.addEventListener("pointerup",floor3dPointerUp);
+  floor3dCanvas.addEventListener("pointercancel",floor3dPointerUp);
+  floor3dCanvas.addEventListener("pointerleave",floor3dPointerLeave);
+  floor3dCanvas.addEventListener("click",floor3dClick);
+  /* Deliberately no wheel listener. Zooming under the cursor means consuming the wheel, and
+     a reader scrolling past a floor that eats their scroll has a worse problem than the one
+     zoom solves. The buttons zoom. */
+}
+
 function mountFloor3d(){
   const host=document.querySelector(".floor-3d-mount");
   if(!host){floor3dStop();return}
   if(floor3dState!=="ready"){ensureFloor3dLoaded();return}
   if(!floor3dEnsureRenderer()){render();return}
   if(floor3dCanvas.parentElement!==host)host.appendChild(floor3dCanvas);
+  floor3dBindPointer();
   const signature=floor3dSignatureNow();
   if(signature!==floor3dSignature){floor3dBuildScene();floor3dSignature=signature}
   floor3dDraw();
+  floor3dUpdateReadout();
+  floor3dSyncViewControls();
   floor3dStop();
   const still=typeof reducedMotion==="function"&&reducedMotion();
   if(!still&&floor3dBuilt&&(floor3dBuilt.animated||floor3dAnythingWrong())){

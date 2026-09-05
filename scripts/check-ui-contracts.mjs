@@ -686,6 +686,31 @@ assert(mineTabSource.includes("hardwarePurchaseLimits(h)"), "The Mine hardware c
 assert(!/cap\)?\s*\*\s*1000\s*-\s*(Number\()?reserved\.w/.test(mineTabSource), "The Mine card is computing power headroom from live draw again, which offers quantities the purchase path will refuse");
 assert(/const maxBuy=h\.permanent\?0:limits\.fiatMax/.test(mineTabSource), "The Mine card's maximum quantity is no longer the shared limit");
 
+/* INTERACTION. The 3D floor cannot be exercised headlessly — there is no WebGL in the
+   harness — so these are source matches, and the behaviour behind them was verified in a
+   browser with real pointer input. They exist to stop the three decisions that were
+   expensive to reach from being undone by accident. */
+
+// Raycasting every instance costs 10.8ms per ray at megacampus. The flat AABB sweep is 1.4ms.
+assert(mountSource.includes("function floor3dBuildPickTable(") && mountSource.includes("function floor3dSweep("),
+  "The 3D floor's pick table is gone, which means picking is back to raycasting every instance in the room");
+assert(/if\(!node\.isInstancedMesh\|\|node\.userData\.glow\)return/.test(mountSource),
+  "The pick table no longer skips glow meshes, so additive haloes will intercept pointer hits before the machines behind them");
+
+/* No wheel handler, deliberately: zooming under the cursor means consuming the wheel, and a
+   reader scrolling past a floor that eats their scroll has a worse problem than the one zoom
+   solves. The buttons zoom instead. */
+assert(!/addEventListener\("wheel"/.test(mountSource),
+  "The 3D floor has taken over the mouse wheel, which traps the reader's page scroll");
+assert(/touch-action:pan-y/.test(css),
+  "The 3D canvas no longer reserves vertical panning for the page, so dragging it will trap scrolling on touch");
+
+// A machine clicked in the room must reach the same place as one clicked on the flat floor.
+assert(mountSource.includes("focusServiceRow(batch.hardware.id)"),
+  "Clicking a faulted machine in 3D no longer opens its repair, so the two floor views disagree about what a click means");
+assert(inline.includes("data-floor3d-readout") && inline.includes('data-action="floor3d-reset"'),
+  "The 3D floor lost its readout or its reset control, leaving orbit with no way back to the default vantage");
+
 assert(mountSource.includes("immersionTotal"), "The 3D floor signature ignores how many miners are submerged, so converting to immersion will not redraw the tanks");
 assert(inline.includes('<i class="cooling"></i> Cooling plant') && inline.includes('<i class="cooling-pending"></i> Cooling on order'), "The mining-floor legend does not explain the cooling sprites");
 assert(css.includes(".floor-cooling-row{") && css.includes(".floor-cooling.pending{") && css.includes(".floor-cooling-row{top:58px;left:8px"), "Floor cooling sprites are missing their styling or their phone layout, where the facility caption spans the room and a right-aligned row collides with it");
