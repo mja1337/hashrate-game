@@ -668,6 +668,24 @@ const undrawn = [...operationsSource.matchAll(/\{id:"(\w+)",name:"[^"]+",date:"[
 assert(undrawn.length === 0, `Cooling plant with no 3D silhouette, so buying it changes nothing on the floor: ${undrawn.join(", ")}`);
 assert(!/const vents=p\.id===/.test(await readFile(new URL("src/ui/floor3d/scenery.js", root), "utf8")), "The 3D floor is back to deriving a generic vent count from the size of the room rather than drawing the plant actually installed");
 assert(mountSource.includes("src/ui/floor3d/cooling.js"), "The 3D cooling module is not in the lazy-load list, so the floor will throw when it is drawn");
+/* The behavioural suite proves the ENGINE's purchase limit is right, but it cannot run the
+   Mine card — so nothing there notices if the card goes back to doing the sum itself. It did
+   exactly that: its own headroom from live draw against a buy path enforcing peak draw,
+   offering 34 machines where the game allowed 31 and advertising floor space that could
+   never be filled. One function owns this arithmetic; the card asks it. */
+/* Firmware patching lives on the Operations risk desk, and Mine never mentioned it — so a
+   player whose hash rate has quietly dropped by a third has nothing on the screen they are
+   looking at to explain it. It is fleet maintenance; the action belongs beside the rest. */
+assert(inline.includes("function firmwareStatusHtml()") && inline.includes("${firmwareStatusHtml()}${partsStatusStrip()}"),
+  "Fleet servicing no longer surfaces firmware state, so an unpatched fleet is invisible from the tab that owns the fleet");
+assert(/firmware-status[^"]*\$\{tone\}|firmware-status \$\{tone\}/.test(inline) && inline.includes('data-action="patch-firmware"'),
+  "The Mine firmware panel no longer offers the patch action itself");
+
+const mineTabSource = await readFile(new URL("src/ui/tabs/mine.js", root), "utf8");
+assert(mineTabSource.includes("hardwarePurchaseLimits(h)"), "The Mine hardware card no longer asks the shared purchase-limit helper for its capacity");
+assert(!/cap\)?\s*\*\s*1000\s*-\s*(Number\()?reserved\.w/.test(mineTabSource), "The Mine card is computing power headroom from live draw again, which offers quantities the purchase path will refuse");
+assert(/const maxBuy=h\.permanent\?0:limits\.fiatMax/.test(mineTabSource), "The Mine card's maximum quantity is no longer the shared limit");
+
 assert(mountSource.includes("immersionTotal"), "The 3D floor signature ignores how many miners are submerged, so converting to immersion will not redraw the tanks");
 assert(inline.includes('<i class="cooling"></i> Cooling plant') && inline.includes('<i class="cooling-pending"></i> Cooling on order'), "The mining-floor legend does not explain the cooling sprites");
 assert(css.includes(".floor-cooling-row{") && css.includes(".floor-cooling.pending{") && css.includes(".floor-cooling-row{top:58px;left:8px"), "Floor cooling sprites are missing their styling or their phone layout, where the facility caption spans the room and a right-aligned row collides with it");

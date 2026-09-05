@@ -161,6 +161,14 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--orange);outline-off
   .mine-section{border-bottom:1px solid var(--line)}
   .mine-section:nth-last-child(-n+2){border-bottom:0}
 }
+.firmware-status{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;padding:9px 11px;border:1px solid var(--line);border-left:3px solid var(--green);background:#0b1112}
+.firmware-status.warn{border-left-color:var(--orange)}
+.firmware-status.bad{border-left-color:var(--red)}
+.firmware-status b{display:block;color:var(--text);font:600 10px var(--mono);text-transform:uppercase;letter-spacing:.06em}
+.firmware-status.warn b{color:var(--orange2)}
+.firmware-status.bad b{color:var(--red)}
+.firmware-status span{display:block;margin-top:4px;color:var(--muted);font:9px/1.5 var(--mono)}
+.firmware-status .action{flex:none;white-space:nowrap}
 .parts-status{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px;margin-bottom:10px}
 .parts-status-block{border:1px solid var(--line);background:#0b1112;padding:8px 10px}
 .parts-status-block.short{border-color:var(--orange)}

@@ -48,7 +48,9 @@ function mineSectionBadges(){
   const temperature=roomTemperatureC();
   const band=temperature<32?"cool":temperature<42?"warm":temperature<52?"hot":"critical";
   const inbound=(state.procurementOrders||[]).reduce((sum,o)=>sum+Number(o.qty||0),0);
-  const needsService=faults+ailing;
+  // Unpatched firmware is a fleet problem the Servicing section can now fix, so it counts.
+  const firmware=(typeof firmwarePatchDue==="function"&&firmwarePatchDue())?1:0;
+  const needsService=faults+ailing+firmware;
   return{
     floor:{text:`${fmtCompactNumber(fs.activeCount)} / ${fmtCompactNumber(fs.count)} hashing`,tone:fs.count&&!fs.activeCount?"bad":""},
     service:{text:needsService?`${fmtCompactNumber(needsService)} need${needsService===1?"s":""} attention`:"all healthy",tone:needsService?"bad":"good"},
@@ -89,9 +91,15 @@ function mine(){
   if(mineSection()!=="buy")return `<div class="grid"></div>`;
   return `<div class="grid"><section class="card span-12"><div class="hero"><div><div class="hero-kicker">Mining hardware</div><h1>Choose machines that can earn more than they cost to run.</h1><p>Hash rate is the amount of mining work a machine performs. More hash improves its chance of earning BTC; power draw increases the electricity bill. Check both before you buy.</p></div><div class="hero-stat"><strong>${fmtHash(fs.hash)}</strong><span>${fs.count} machines · ${fs.kw.toFixed(2)} kW</span></div></div></section>${profitabilityDeskHtml()}<section class="span-12 catalog">${items.map(h=>{
     const owned=state.hardware[h.id]||0,retired=state.decommissionedHardware?.[h.id]||0,available=state.time>=at(h.date),cost=hardwareUnitCost(h),resale=h.permanent?0:resaleHardwareValue(h),trial=JSON.parse(JSON.stringify(state));trial.hardware[h.id]=(trial.hardware[h.id]||0)+1;const fits=fleet(trial).within;
-    const availableKw=Math.max(0,Number(reserved.cap)*1000-Number(reserved.w));
-    const availableSpace=Math.max(0,Number(facility().space)-Number(reserved.space));
-    const safeCost=Number.isFinite(Number(cost))?Number(cost):Infinity,safeW=Math.max(1,Number(h.w)||1),safeSpace=Math.max(1,Number(h.space)||1);const maxBuy=h.permanent?0:Math.max(0,Math.min(Math.floor(Math.max(0,Number(state.cash)||0)/safeCost),Math.floor(availableKw/safeW),Math.floor(availableSpace/safeSpace)));
-    const marketOpenNow=state.time>=MARKET,unitBtc=marketOpenNow?safeCost/Math.max(1e-9,priceAt(state.time)):Infinity,maxBtcQty=h.permanent||!marketOpenNow?0:Math.max(0,Math.min(Math.floor(Math.max(0,Number(state.wallets.hot)||0)/unitBtc),Math.floor(availableKw/safeW),Math.floor(availableSpace/safeSpace)));
+    /* The card used to work out its own headroom from LIVE draw while the purchase path
+       enforced PEAK draw, so it offered quantities the game then refused — 34 against 31 on
+       a mid-game workshop, and worse with overdrive engaged. Cooling is thermostatic: a cold
+       room draws almost nothing, so a live-draw check passes fleets that cannot actually run.
+       There is one function that already computes this correctly for the buy path, and the
+       card now asks it rather than doing the sum again differently. */
+    const limits=hardwarePurchaseLimits(h);
+    const availableKw=limits.freeWatts,availableSpace=limits.freeSpace;
+    const safeCost=Number.isFinite(Number(cost))?Number(cost):Infinity;const maxBuy=h.permanent?0:limits.fiatMax;
+    const marketOpenNow=limits.marketOpen,unitBtc=marketOpenNow?safeCost/Math.max(1e-9,priceAt(state.time)):Infinity,maxBtcQty=h.permanent||!marketOpenNow?0:Math.max(0,Math.min(Math.floor(Math.max(0,Number(state.wallets.hot)||0)/unitBtc),Math.floor(availableKw/safeW),Math.floor(availableSpace/safeSpace)));
     return `<article class="item ${owned?"owned":""} ${available?"":"locked"}" data-hw-id="${h.id}"><div class="item-top"><span class="era">${h.era}</span><span class="owned-count push">${owned?fmtCompactNumber(owned)+" INSTALLED":retired?fmtCompactNumber(retired)+" RETIRED":dateFmt(at(h.date),true)}</span></div><h3>${h.name}</h3><div class="item-maker">${h.maker}</div><p>${h.desc}</p><div class="specs"><div class="spec"><span>Hash</span><b>${fmtHash(h.hash)}${hardwareLaunchFactor(h)>1?` · ${hardwareLaunchFactor(h).toFixed(2)}× launch edge`:""}</b></div><div class="spec"><span>Power</span><b>${h.w} W</b></div><div class="spec"><span>Space</span><b>${h.space||"desk"}</b></div></div><div class="item-foot"><span class="price">${h.permanent?"Permanent":`Buy · ${fmtCompactUsd(cost)}`} ${!h.permanent?`<small>Fiat resale now · ${fmtCompactUsd(resale)}</small>`:""}</span>${owned&&!h.permanent?`<div class="actions"><button class="action small" data-action="decommission-hw" data-id="${h.id}" data-value="1">Retire 1 to storage</button><button class="action small danger" data-action="decommission-hw" data-id="${h.id}" data-value="${owned}">Retire ${fmtCompactNumber(owned)}</button></div>`:""}${retired&&!h.permanent?`<div class="actions"><button class="action small primary" data-action="sell-hw" data-id="${h.id}" data-value="1">Sell retired 1</button><button class="action small danger" data-action="sell-hw" data-id="${h.id}" data-value="${retired}">Sell retired ${fmtCompactNumber(retired)}</button></div>`:""}${!h.permanent?hardwareBuyControls(h,cost,maxBuy,maxBtcQty,available,marketOpenNow):""}</div></article>`}).join("")}</section></div>`
 }

@@ -561,7 +561,11 @@ function queueRender(full=false){
   renderQueued=true;
   const paint=()=>{
     const needsFull=renderFullQueued;renderQueued=false;renderFullQueued=false;lastRenderAt=performance.now();
-    if(!needsFull&&state.started&&!state.activeEvent&&!state.ended)refreshLive();else renderMineContent();
+    /* An incident starting or ending changes the strip above the tab content, which only a
+       full render draws — patching the tab would leave a stale banner counting down to a
+       date already gone. */
+    if(state.started&&typeof bannerStateChanged==="function"&&bannerStateChanged())render();
+    else if(!needsFull&&state.started&&!state.activeEvent&&!state.ended)refreshLive();else renderMineContent();
   };
   // Align the DOM write with the display refresh so it never lands mid-paint.
   setTimeout(()=>requestAnimationFrame(paint),delay);

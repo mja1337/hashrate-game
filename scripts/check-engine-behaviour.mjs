@@ -932,6 +932,52 @@ rule("a save carrying legacy fault counts still loads", () => {
   assert(total === 4, `four legacy faults became ${total} attributed faults`);
 });
 
+
+/* ---- CAPACITY: the number on the card is the number you can buy ---- */
+
+/* The Mine card worked out its own headroom from live draw while the purchase path enforced
+   peak draw. Cooling is thermostatic, so a cold room draws almost nothing and a live-draw
+   check passes a fleet that cannot actually run: the card offered 34 machines where the game
+   allowed 31, and advertised free floor units that could never be filled. */
+rule("what the hardware card offers is what the purchase actually allows", () => {
+  const cases = json(`(()=>{
+    const out=[];
+    // Each case is dated to when its hardware actually exists, or the purchase is refused
+    // for a reason that has nothing to do with capacity.
+    for(const [facility,fleetShape,overdrive,when] of [
+      ["workshop",{s9:40},false,"2018-06-01"],["workshop",{s9:40},true,"2018-06-01"],
+      ["warehouse",{s19:120},false,"2021-06-01"],["garage",{gpurig:6},false,"2012-06-01"]]){
+      ${SITE(`state.time=at("2018-06-01");state.cash=1e9;state.power=true;`)}
+      state.facility=facility;state.hardware=fleetShape;state.overdrive=overdrive;
+      state.thermal.equipment={axial:2};
+      // The shared site setup does not clear these, and orders carry between cases.
+      state.procurementOrders=[];state.inactiveHardware={};state.time=at(when);
+      const id=Object.keys(fleetShape)[0],h=HARDWARE.find(x=>x.id===id);
+      const offered=hardwarePurchaseLimits(h).fiatMax;
+      buyHardware(id,100000);
+      const allowed=state.procurementOrders.reduce((sum,o)=>sum+o.qty,0);
+      out.push({facility,id,overdrive,offered,allowed});
+    }
+    return out;})()`);
+  for (const row of cases) {
+    assert(row.offered === row.allowed,
+      `${row.facility} ${row.id}${row.overdrive ? " (overdrive)" : ""}: the card offered ${row.offered} and the game allowed ${row.allowed}`);
+  }
+  assert(cases.some(row => row.allowed > 0), "no case actually bought anything, so the rule proves nothing");
+});
+
+/* Free floor space that power will never let you fill is a promise the game cannot keep, so
+   the capacity a player is shown has to be the one that binds. */
+rule("the electrical figure shown against capacity is the one that governs purchases", () => {
+  const r = json(`(()=>{
+    ${SITE(`state.time=at("2018-06-01");state.cash=1e9;state.power=true;`)}
+    state.facility="workshop";state.hardware={s9:40};state.thermal.equipment={axial:2};
+    const p=plannedFleetProjection();
+    return{live:p.kw,peak:p.potentialKw,cap:p.cap};})()`);
+  assert(r.peak >= r.live, `peak draw (${r.peak.toFixed(1)}) is below live draw (${r.live.toFixed(1)})`);
+  assert(r.peak > r.live, "peak and live draw are identical, so this rule cannot tell them apart");
+});
+
 if (failures.length) {
   console.error(`Engine behaviour: ${failures.length} of ${checked} rules failed\n`);
   for (const failure of failures) console.error(`  ✗ ${failure}`);

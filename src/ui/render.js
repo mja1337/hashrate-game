@@ -186,6 +186,27 @@ function deferWhilePressed(repaint){
   deferredRender=repaint;if(!deferredSince)deferredSince=performance.now();
   return true;
 }
+/* THE BANNERS ARE ONLY BUILT BY render().
+
+   The tick repaints with refreshLive(), which patches text, or renderMineContent(), which
+   replaces the tab's content and nothing above it. Neither touches the banner strip — so on
+   the Mine tab an incident banner was never rebuilt by the clock at all, and sat there
+   advertising a restoration date that had already passed until some unrelated action forced
+   a full render. Cheap scalars only: this runs on every repaint. */
+let lastBannerSignature=null;
+function bannerSignature(){
+  const incident=typeof activeSiteIncident==="function"?activeSiteIncident():null;
+  return [incident?`${incident.kind}:${incident.until}`:"",
+    state.debt>0?"debt":"",state.policyLock||"",
+    state.pendingSettlement?"settlement":"",state.settlementSaleMode?"sale":"",
+    typeof gridCutOff==="function"&&gridCutOff()?"cut":""].join("|");
+}
+function bannerStateChanged(){
+  const current=bannerSignature();
+  if(current===lastBannerSignature)return false;
+  lastBannerSignature=current;
+  return true;
+}
 function render(preserveScroll=true){
   if(deferWhilePressed(()=>render(preserveScroll)))return;
   deferredRender=null;deferredSince=0;
@@ -197,6 +218,8 @@ function render(preserveScroll=true){
   document.getElementById("app").innerHTML=`${svgSpriteDefs()}<div class="app">${renderHeader()}${banner}${incidentBanner}${settlementBanner}${forecastBanner}${exposureBanners}<div class="shell"><main class="main">${nav()}<div class="content">${content(revision)}</div></main>${sidebar()}</div><footer class="footer"><span>Historical simulation · recorded, derived and modelled data are labelled separately · not financial advice</span><span><button data-action="story-pause">Story pause: ${state.storyPause?"on":"off"}</button> · <button data-action="export">Export save</button> · <button data-action="import">Import save</button> · <button data-action="reset">New run</button><input id="importSave" type="file" accept="application/json,.json" hidden></span></footer></div>${!state.started?introModal():""}${state.started&&!state.walletSetup.done?walletSetupModal():""}${state.activeEvent?eventModal():""}${glossaryOpen?glossaryModalHtml():""}${state.hardwareAlerts.active?hardwareReleaseModal():""}${state.pendingSettlement&&!state.settlementSaleMode?settlementModal():""}${state.ended&&!state.endDismissed?endModal():""}${toast?toastMarkup(toast):""}${faucet?faucetMarkup(faucet):""}`;
   enhanceActiveTab();
   measureTabRow();
+  // A full render has just drawn the banners, so the next tick has nothing to catch up on.
+  lastBannerSignature=bannerSignature();
   if(pendingTransaction)document.getElementById("app").insertAdjacentHTML("beforeend",transactionConfirmationModal());
   setTimeout(()=>{if(revision===renderRevision)enhanceDisabledControls()},0);
   if(keepPosition){window.scrollTo({left:scrollX,top:scrollY,behavior:"instant"});restoreScrollAnchor(anchor);requestAnimationFrame(()=>{app.style.minHeight=""})}else app.style.minHeight="";
