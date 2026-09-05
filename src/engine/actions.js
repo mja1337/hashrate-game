@@ -279,6 +279,36 @@ function sellBtc(bucket,fraction){
   if(state.settlementSaleMode&&state.pendingSettlement&&state.cash+1e-8>=state.pendingSettlement.due){state.settlementSaleMode=false;finishMonthlySettlement("btc-rescue");return}
   showToast(bucket==="etf"?"ETF sale complete":"Bitcoin sale complete",impact>=.01?`${fmtBtc(btc)} became ${fmtUsd(usd)}. The order was ${formatPercent(impact*100)}% of its quoted value larger than the book could absorb, so it filled below the quote. ${fmtUsd(state.cash)} cash is now available.`:`${fmtBtc(btc)} became ${fmtUsd(usd)} after fees. ${fmtUsd(state.cash)} cash is now available.`,"info","market");save();render();
 }
+/* Spending it. The coins leave, a code arrives, and the only thing the operation gains is
+   the experience of having used the money as money. That is the joke and it is also the
+   point: a fortune you never spend is a number, and the people who did spend it in 2013 are
+   the reason anyone knows what these things were worth. */
+function giftCardVendor(id){return GIFT_CARD_VENDORS.find(v=>v.id===id)||null}
+function giftCardXpFor(usd){return GIFT_CARD_XP_BASE*Math.log2(1+Math.max(0,usd)/25)}
+function buyGiftCard(id,usd){
+  const vendor=giftCardVendor(id);
+  if(!vendor)return;
+  if(state.time<at(vendor.date))return showToast("Not available yet",`${vendor.name} does not take bitcoin until ${dateFmt(at(vendor.date),true)}.`);
+  if(state.time<MARKET)return showToast("No exchange rate yet","Nobody can price a gift card in bitcoin before bitcoin has a price.");
+  usd=Math.max(5,Math.round(Number(usd)||0));
+  const price=priceAt(state.time),btc=usd/price;
+  const held=state.wallets.hot||0;
+  if(btc>held)return showToast("Not enough in the hot wallet",`A ${fmtUsd(usd)} card costs ${fmtBtc(btc)} at today's price; you hold ${fmtBtc(held)} hot.`);
+  state.wallets.hot=Math.max(0,held-btc);
+  state.giftCards.spentBtc+=btc;state.giftCards.spentUsd+=usd;state.giftCards.cards+=1;
+  const xp=giftCardXpFor(usd);
+  awardXp(xp,"spend");
+  log(`Spent bitcoin at ${vendor.name}`,`-${fmtBtc(btc)} for a ${fmtUsd(usd)} card · +${Math.round(xp)} XP`,"trade");
+  showToast("You actually spent some",
+    `${fmtBtc(btc)} became a ${fmtUsd(usd)} code. You are ${Math.round(xp)} XP wiser and ${fmtBtc(btc)} lighter.`,"info","market");
+  save();render();
+}
+/* The pizza line. What everything you ever spent would be worth if you had not. */
+function giftCardHindsight(t=state.time){
+  const spent=state.giftCards?.spentBtc||0;
+  if(spent<=0)return null;
+  return {btc:spent,thenUsd:state.giftCards.spentUsd,nowUsd:spent*priceAt(t),cards:state.giftCards.cards};
+}
 function transfer(from,to,fraction){
   if(venueFrozen(from))return showToast("Withdrawals frozen",`${walletName(from)} has paused withdrawals until ${dateFmt(state.ops.venueFreezes[from])}.`);
   fraction=clamp(Number(fraction)||0,0.01,1);const gross=state.wallets[from]*fraction;if(gross<=0)return;

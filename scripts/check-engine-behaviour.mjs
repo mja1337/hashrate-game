@@ -454,6 +454,37 @@ rule("moving coins between wallets conserves them", () => {
   assert(Math.abs(r.before - r.after - r.fee) < 1e-12, "coins were created or destroyed by a transfer");
 });
 
+/* ---- SPENDING: the one path where coins leave and nothing financial comes back ---- */
+
+rule("spending on a gift card takes the coins, pays experience, and respects its dates", () => {
+  const r = json(`(()=>{
+    ${SITE(``)}
+    state.time=at("2013-12-01");state.facility="warehouse";state.region="na";state.hardware={};
+    state.wallets={hot:20,cold:0,mtgox:0,exchange:0,frozen:0,bitfinex:0,quadriga:0,etf:0,frontier:0};
+    state.giftCards={spentBtc:0,spentUsd:0,cards:0};state.xp=normalizeXp(state.xp);
+    const price=priceAt(state.time);
+    const before={hot:state.wallets.hot,xp:state.xp.total,spend:state.xp.sources.spend};
+    buyGiftCard("gyft",100);
+    const after={hot:state.wallets.hot,xp:state.xp.total,spend:state.xp.sources.spend,
+      spentBtc:state.giftCards.spentBtc,cards:state.giftCards.cards};
+    // a vendor that does not exist yet, and a date before anything had a price
+    state.time=at("2012-01-01");const beforeEarly=state.wallets.hot;buyGiftCard("gyft",25);
+    const earlyMoved=state.wallets.hot!==beforeEarly;
+    state.time=at("2010-01-01");const beforeMarket=state.wallets.hot;buyGiftCard("gyft",25);
+    const preMarketMoved=state.wallets.hot!==beforeMarket;
+    return {before,after,price,earlyMoved,preMarketMoved,
+      curve:[10,100,5000].map(u=>giftCardXpFor(u))};})()`);
+  close(r.before.hot - r.after.hot, 100 / r.price, 1e-9, "the coins taken do not match the card's price in bitcoin");
+  close(r.after.spentBtc, 100 / r.price, 1e-9, "the ledger of what was spent does not match what left the wallet");
+  assert(r.after.cards === 1, "the card was not recorded");
+  assert(r.after.xp > r.before.xp, "spending bitcoin taught the operator nothing");
+  assert(r.after.spend > r.before.spend, "the experience was awarded but not attributed to spending");
+  assert(!r.earlyMoved, "coins were spent at a vendor that did not take bitcoin yet");
+  assert(!r.preMarketMoved, "a gift card was priced in bitcoin before bitcoin had a price");
+  assert(r.curve[2] < r.curve[0] * 30,
+    `experience scales too close to linearly with spend (${r.curve.map(Math.round).join(", ")}), so buying one enormous card would be the whole game`);
+});
+
 /* ---- CUSTODY: where coins sit has to matter ---- */
 
 rule("cold storage is safe and a hot wallet is not", () => {

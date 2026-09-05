@@ -10,7 +10,8 @@ function normalizeXp(raw){
   const xp=raw&&typeof raw==="object"?raw:{},src=xp.sources&&typeof xp.sources==="object"?xp.sources:{};
   const num=(v,fallback=0)=>Number.isFinite(Number(v))?Math.max(0,Number(v)):fallback;
   const out={total:num(xp.total),bestDifficulty:num(xp.bestDifficulty),shares:num(xp.shares),
-    sources:{shares:num(src.shares),record:num(src.record),deploy:num(src.deploy),repair:num(src.repair)}};
+    sources:{shares:num(src.shares),record:num(src.record),deploy:num(src.deploy),repair:num(src.repair),
+      spend:num(src.spend)}};
   out.level=operatorLevel(out.total);out.peakLevel=Math.max(out.level,Math.max(1,Math.floor(num(xp.peakLevel,1))));
   return out;
 }

@@ -95,3 +95,23 @@ const WALLET_SOFTWARE=[
   {id:"modern",name:"Modern Bitcoin Core",date:"2021-11-14",desc:"A fully modern, Taproot-ready release — descriptor wallets, PSBT support and a decade of hardening beyond the original client."}
 ];
 function walletSoftwareTierAt(t){let tier=0;for(let i=WALLET_SOFTWARE.length-1;i>=0;i--){if(t>=at(WALLET_SOFTWARE[i].date)){tier=i;break}}return tier}
+
+/* GIFT CARDS — for years this was how you actually spent bitcoin on anything. Not a payment
+   terminal at the till: a website that took your coins and gave you a code for a shop that
+   had never heard of bitcoin and never needed to. Gyft did it from 2013, eGifter followed,
+   Bitrefill made a business of it, and for a long stretch it was the honest answer to "what
+   can you buy with it".
+
+   You get experience for spending, because you learn something by using the thing rather
+   than only accumulating it. You get nothing else. The ledger keeps a note of what those
+   coins would be worth now, which is its own kind of lesson and the reason anyone still
+   talks about a pizza. */
+const GIFT_CARD_VENDORS=[
+  {id:"gyft",name:"Gyft",date:"2013-05-01",desc:"One of the first places that would take bitcoin and hand back a code for a shop that had never heard of it."},
+  {id:"egifter",name:"eGifter",date:"2013-11-01",desc:"Added bitcoin during the first boom, when a lot of people were suddenly looking for something to buy."},
+  {id:"bitrefill",name:"Bitrefill",date:"2015-06-01",desc:"Started with mobile top-ups and grew into the widest catalog of things you could actually pay for."},
+  {id:"bitpayvisa",name:"Prepaid card top-up",date:"2016-09-01",desc:"Loads a prepaid card instead of a single retailer's code. Closest thing to simply spending it."},
+];
+/* Experience scales with what you spent, with heavy diminishing returns: buying a
+   twenty-dollar card teaches you most of what buying a five-thousand-dollar one does. */
+const GIFT_CARD_XP_BASE=14;
