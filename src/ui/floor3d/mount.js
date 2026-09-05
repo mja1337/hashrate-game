@@ -19,7 +19,8 @@
    Nothing here is required for the game to work. Every failure path ends at the SVG floor. */
 
 const FLOOR3D_SCRIPTS=["vendor/three.floor.js","src/ui/floor3d/silhouettes.js",
-  "src/ui/floor3d/scenery.js","src/ui/floor3d/scene.js","src/ui/floor3d/model.js"];
+  "src/ui/floor3d/cooling.js","src/ui/floor3d/scenery.js","src/ui/floor3d/scene.js",
+  "src/ui/floor3d/model.js"];
 
 let floor3dState="idle";      // idle | loading | ready | unsupported | failed
 let floor3dRenderer=null,floor3dCanvas=null,floor3dCamera=null;
@@ -69,7 +70,9 @@ function floor3dSignatureNow(){
   const parts=[state.facility,state.region,floor3dWanted()?"3d":"2d",
     state.power?"on":"off",typeof thermalPowerAvailable==="function"&&thermalPowerAvailable()?"cool":"hot",
     (state.staff||[]).slice().sort().join(","),
-    Object.keys(state.thermal?.equipment||{}).sort().map(k=>k+state.thermal.equipment[k]).join(",")];
+    Object.keys(state.thermal?.equipment||{}).sort().map(k=>k+state.thermal.equipment[k]).join(","),
+    (state.thermal?.orders||[]).map(o=>o.id+(o.qty||1)).sort().join(","),
+    typeof immersionTotal==="function"?"imm"+immersionTotal():""];
   for(const b of floorBatches())parts.push(b.id+b.status+b.qty);
   return parts.join("|");
 }

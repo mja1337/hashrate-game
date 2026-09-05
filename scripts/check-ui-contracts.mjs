@@ -650,6 +650,22 @@ assert(inline.includes("state.thermal.orders.push({id,qty:1,due:state.time+days*
 assert(inline.includes("thermal:{temperature:22,orders:[]") && inline.includes("state.thermal.orders=Array.isArray(state.thermal.orders)"), "Cooling orders are missing from the initial state or from the save migration");
 assert(inline.includes("const projected=fleet(trial);if(projected.potentialKw>projected.cap)"), "The cooling headroom check must use peak draw: cooling is thermostatic, so a cold room draws almost nothing and a live-draw check passes however much plant is on order");
 assert(inline.includes("function miningFloorCooling()") && inline.includes("${miningFloorCooling()}<div class=\"floor-units\""), "Installed cooling is not drawn on the live mining floor");
+
+/* The 3D floor used to grow generic wall vents from the size of the room, so a box fan and a
+   cooling tower looked identical and buying plant changed nothing on screen. Every rung of
+   the ladder now needs its own silhouette, and adding an eighth kind of plant should fail
+   here until it is drawn rather than silently rendering as nothing. */
+const coolingArt = await readFile(new URL("src/ui/floor3d/cooling.js", root), "utf8");
+const mountSource = await readFile(new URL("src/ui/floor3d/mount.js", root), "utf8");
+// Matched against the SHAPES dispatch table specifically, not against any mention of the id:
+// a first version accepted the id appearing in an unrelated lookup map, and passed happily
+// when the plant it named was no longer drawn at all.
+const undrawn = [...operationsSource.matchAll(/\{id:"(\w+)",name:"[^"]+",date:"[\d-]+",minTier:/g)]
+  .map(m => m[1]).filter(id => !new RegExp(`(?:^|\\n)\\s*${id}\\(c\\)\\{`).test(coolingArt));
+assert(undrawn.length === 0, `Cooling plant with no 3D silhouette, so buying it changes nothing on the floor: ${undrawn.join(", ")}`);
+assert(!/const vents=p\.id===/.test(await readFile(new URL("src/ui/floor3d/scenery.js", root), "utf8")), "The 3D floor is back to deriving a generic vent count from the size of the room rather than drawing the plant actually installed");
+assert(mountSource.includes("src/ui/floor3d/cooling.js"), "The 3D cooling module is not in the lazy-load list, so the floor will throw when it is drawn");
+assert(mountSource.includes("immersionTotal"), "The 3D floor signature ignores how many miners are submerged, so converting to immersion will not redraw the tanks");
 assert(inline.includes('<i class="cooling"></i> Cooling plant') && inline.includes('<i class="cooling-pending"></i> Cooling on order'), "The mining-floor legend does not explain the cooling sprites");
 assert(css.includes(".floor-cooling-row{") && css.includes(".floor-cooling.pending{") && css.includes(".floor-cooling-row{top:58px;left:8px"), "Floor cooling sprites are missing their styling or their phone layout, where the facility caption spans the room and a right-aligned row collides with it");
 assert(inline.includes('detail:"Cooling install"'), "A cooling install does not appear in the Dashboard build queue");

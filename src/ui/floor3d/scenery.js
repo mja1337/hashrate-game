@@ -4,7 +4,8 @@
    and the staff you have actually hired. Ported unchanged from the floor prototype.
 
    None of it runs simulation logic. The crew are sprites standing where the roster says they
-   are; the plant is drawn from the cooling equipment installed. Nothing here decides
+   are. Cooling plant moved to its own module once it stopped being generic dressing and
+   started being drawn from what the operation actually installed. Nothing here decides
    anything. */
 
 /* Static site dressing and staff. No vehicles or people run simulation logic.
@@ -59,8 +60,6 @@ const FloorScenery=(()=>{
       box([w,2.9,.16],[0,1.45,-d/2],C.wall);box([.16,2.9,d],[-w/2,1.45,0],C.wall);
       box([w,.2,.2],[0,.25,-d/2+.1],C.orange);box([.2,.2,d],[-w/2+.1,.25,0],C.orange);
       for(let x=-w/2+.5;x<w/2;x+=3.6){box([.16,2.75,.22],[x,1.4,-d/2+.14],C.steel);box([2.2,.07,.12],[x+.9,2.55,-d/2+.26],0xe0f3ec,-1,true);}
-      const vents=p.id==='home'?1:p.id==='garage'?2:6;
-      for(let i=0;i<vents;i++){const x=(i-(vents-1)/2)*(w-2)/vents;box([1.1,1.05,.35],[x,1.75,-d/2+.32],C.steel);fan(x,1.75,-d/2+.53,.39,-1,s.cooling&&s.power);}
       if(p.id==='garage'||p.id==='workshop'){
         const x=w/2-2.2;box([2.5,2.35,.08],[x,1.2,-d/2+.12],0x485f68);
         for(let y=.2;y<2.4;y+=.16)box([2.45,.025,.035],[x,y,-d/2+.18],C.edge);
@@ -166,6 +165,9 @@ const FloorScenery=(()=>{
       if(role==='fieldtech')box([.34,.19,.2],[x-.28,.57,z],C.red);
       else box([.24,.3,.04],[x+.28,.92,z+.18],role==='logistics'?C.wood:C.dark);
     }
+    /* The plant the operation actually bought, drawn last so it can place itself around
+       everything else that is already standing in the room. */
+    FloorCooling.populate(s,api,site);
     label('HASHRATE / '+p.year,[-w/2+2.8,3.22,-d/2+.16],4.7,.6);
     return {...site,crew};
   }

@@ -41,6 +41,22 @@ const FloorModel=(()=>{
     if(!owned.length)return HARDWARE[0];
     return owned.reduce((best,h)=>(state.hardware[h.id]||0)>(state.hardware[best.id]||0)?h:best,owned[0]);
   }
+  /* Every installed and on-order piece of plant, in the order the ladder defines them, so
+     the room can be dressed with the equipment actually bought rather than a generic vent
+     count derived from how big the site is. Quantities are real: the renderer decides how
+     many it can legibly draw, not this. */
+  function cooling(){
+    const equipment=state.thermal?.equipment||{},running=typeof thermalPowerAvailable==="function"?thermalPowerAvailable():true;
+    const installed=COOLING_EQUIPMENT.filter(item=>(equipment[item.id]||0)>0)
+      .map(item=>({id:item.id,name:item.name,qty:Math.max(0,Math.floor(equipment[item.id])),coolingKw:item.coolingKw,units:item.units||0,running}));
+    const orders={};
+    for(const order of (state.thermal?.orders||[]))orders[order.id]=(orders[order.id]||0)+Math.max(1,Number(order.qty)||1);
+    const pending=COOLING_EQUIPMENT.filter(item=>orders[item.id]).map(item=>({id:item.id,name:item.name,qty:orders[item.id]}));
+    /* How full the tanks are, for the tanks that hold miners. */
+    const submerged=typeof immersionTotal==="function"?immersionTotal():0;
+    const slots=typeof immersionCapacity==="function"?immersionCapacity():0;
+    return{installed,pending,running,submerged,slots};
+  }
   function installedCooling(){
     const installed=COOLING_EQUIPMENT.filter(item=>(state.thermal?.equipment?.[item.id]||0)>0);
     return installed.length?installed[installed.length-1]:null;
@@ -86,5 +102,5 @@ const FloorModel=(()=>{
       showStaff:true,selected:0};
   }
 
-  return {presets:FLOOR_SITES,definitions,batches,metrics,crew,describe,site};
+  return {presets:FLOOR_SITES,definitions,batches,metrics,crew,cooling,describe,site};
 })();
