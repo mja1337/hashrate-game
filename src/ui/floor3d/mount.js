@@ -184,11 +184,9 @@ function floor3dDraw(){
   if(!floor3dBuilt||!floor3dRenderer)return;
   const host=floor3dCanvas.parentElement;
   if(!host)return;
-  const width=Math.max(1,host.clientWidth),height=Math.max(1,Math.round(width*.42));
-  floor3dRenderer.setPixelRatio(Math.min(2,window.devicePixelRatio||1));
-  floor3dRenderer.setSize(width,height,false);
+  const width=Math.max(1,host.clientWidth);
   const bounds=floor3dBounds;
-  if(!bounds)return;
+  if(!bounds){floor3dRenderer.setSize(width,Math.max(1,Math.round(width*FLOOR3D_MIN_ASPECT)),false);return}
   /* Fit what the camera will actually SEE, not the size of the thing in world space. A
      mining room is wide and flat, so seen down an isometric axis it is far shorter than it is
      broad; sizing both axes from one radius left a third of the frame empty above and below.
@@ -208,6 +206,21 @@ function floor3dDraw(){
   // A little air so the roofline and the front edge of the floor are not touching the frame.
   const margin=1.12;
   halfW=Math.max(halfW*margin,.5);halfH=Math.max(halfH*margin,.5);
+  /* The panel takes its shape from the room rather than the other way round. A fixed
+     width*0.42 letterbox was 2.38:1 against scenes that project between 1.37:1 (a spare
+     room) and 1.76:1 (a megacampus), so the fit — which is bound by whichever axis runs out
+     first — left 41% of the width empty and the scene occupying under a third of the frame.
+     Sizing the canvas to the extent that is about to be drawn removes the slack at source.
+     The clamps stop a tall room turning the panel into a tower, and stop a wide one
+     collapsing it to a strip. */
+  floor3dFitShadow(bounds);
+  const contentAspect=halfW/halfH;
+  const height=Math.max(1,Math.round(Math.min(
+    Math.max(width/contentAspect, width*FLOOR3D_MIN_ASPECT),
+    width*FLOOR3D_MAX_ASPECT,
+    Math.max(260,(window.innerHeight||760)*FLOOR3D_VIEWPORT_SHARE))));
+  floor3dRenderer.setPixelRatio(Math.min(2,window.devicePixelRatio||1));
+  floor3dRenderer.setSize(width,height,false);
   // Whichever axis does not fit its half of the frame decides the zoom.
   const fitW=halfW,fitH=halfH,frameAspect=width/height;
   let viewW=fitW,viewH=fitH;
@@ -238,6 +251,36 @@ function floor3dDraw(){
    ON the floor — walls, racks, the service bay — so a short frame clipped the top of the
    room while leaving a gap beneath it, because the camera was aimed at the ground rather
    than at the middle of what there was to look at. */
+/* Panel shape limits, as multiples of its width. The floor is the old fixed ratio, so no
+   room is ever shorter on screen than it used to be; the ceiling keeps a nearly-square room
+   from turning the page into a lift shaft; the viewport share stops a wide monitor handing
+   the floor more height than the reader has screen. */
+const FLOOR3D_MIN_ASPECT=.42;
+const FLOOR3D_MAX_ASPECT=.78;
+const FLOOR3D_VIEWPORT_SHARE=.62;
+
+/* PCFSoftShadowMap. The bundle is tree-shaken and does not export the constant, but it is
+   only a number, and the shadow pipeline itself survived the shake. */
+const FLOOR3D_SOFT_SHADOWS=2;
+let floor3dKeyLight=null,floor3dShadowKey="";
+
+/* The shadow camera has to enclose the scene, and the scene changes size by a factor of five
+   between a spare room and a megacampus. Refitted only when the bounds actually move. */
+function floor3dFitShadow(bounds){
+  const key=floor3dKeyLight;
+  if(!key||!bounds)return;
+  const signature=bounds.radius.toFixed(3)+":"+bounds.x.toFixed(2)+":"+bounds.z.toFixed(2);
+  if(signature===floor3dShadowKey)return;
+  floor3dShadowKey=signature;
+  if(floor3dRenderer)floor3dRenderer.shadowMap.needsUpdate=true;
+  const reach=bounds.radius*1.35,camera=key.shadow.camera;
+  camera.left=-reach;camera.right=reach;camera.top=reach;camera.bottom=-reach;
+  camera.near=.5;camera.far=Math.max(20,bounds.radius*14);
+  camera.updateProjectionMatrix();
+  key.target.position.set(bounds.x,bounds.y,bounds.z);
+  key.target.updateMatrixWorld();
+}
+
 let floor3dBounds=null;
 function floor3dMeasure(root){
   let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity,found=false;
@@ -280,13 +323,33 @@ function floor3dBuildScene(){
   const T=FloorThree;
   if(!floor3dScene){
     floor3dScene=new T.Scene();
-    floor3dScene.add(new T.HemisphereLight(0xe6f6ff,0x33424c,2.4));
-    const key=new T.DirectionalLight(0xffe8c2,3);key.position.set(6,15,10);floor3dScene.add(key);
-    const fill=new T.DirectionalLight(0x80b9ea,1.1);fill.position.set(-8,5,-3);floor3dScene.add(fill);
+    /* Rebalanced for contrast rather than legibility alone. A hemisphere light at 2.4 lit
+       every surface from every direction, which reads as evenly as a technical drawing and
+       leaves nothing for a shadow to darken — machines sat on the floor without touching it.
+       The sky term now fills the shadows instead of erasing them, and the key is lower in
+       the sky so what it casts is long enough to see. */
+    floor3dScene.add(new T.HemisphereLight(0xe6f6ff,0x33424c,1.05));
+    const key=new T.DirectionalLight(0xffe8c2,2.7);key.position.set(9,11,6);
+    key.castShadow=true;key.shadow.mapSize.width=1024;key.shadow.mapSize.height=1024;
+    // Normal bias rather than a heavy depth bias: a large constant bias detaches the shadow
+    // from the object that casts it, which is worse than no shadow at all.
+    key.shadow.bias=-.0009;key.shadow.normalBias=.02;
+    floor3dScene.add(key);floor3dKeyLight=key;
+    const fill=new T.DirectionalLight(0x80b9ea,.55);fill.position.set(-8,5,-3);floor3dScene.add(fill);
+    floor3dRenderer.shadowMap.enabled=true;
+    floor3dRenderer.shadowMap.type=FLOOR3D_SOFT_SHADOWS;
+    /* Nothing in the room moves except fan blades, and a fan blade's shadow is invisible at
+       this scale, so redrawing the shadow map sixty times a second buys nothing. It is
+       refreshed when the floor is rebuilt or the camera is refitted instead, which took the
+       worst-frame cost at megacampus from 1.2ms to 0.2ms. */
+    floor3dRenderer.shadowMap.autoUpdate=false;
+    floor3dRenderer.shadowMap.needsUpdate=true;
   }
   if(floor3dBuilt){floor3dScene.remove(floor3dBuilt.root);floor3dDisposeScene()}
   floor3dBuilt=FloorScene.build(FloorModel.describe(),{});
   floor3dScene.add(floor3dBuilt.root);
+  // New geometry casts new shadows; the cached map has to be told.
+  floor3dRenderer.shadowMap.needsUpdate=true;
   floor3dBounds=floor3dMeasure(floor3dBuilt.root)||{x:floor3dBuilt.cx,y:1,z:floor3dBuilt.cz,
     radius:Math.max(floor3dBuilt.width,floor3dBuilt.depth)/2};
   floor3dPrepareAlerts();

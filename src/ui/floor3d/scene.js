@@ -70,7 +70,10 @@ const FloorScene=(()=>{
       materials.push(material);
       const mesh=new T.InstancedMesh(geo[bucket.kind],material,bucket.items.length);
       bucket.items.forEach((a,i)=>{mesh.setMatrixAt(i,a.matrix);mesh.setColorAt(i,new T.Color(a.color));});
-      mesh.userData.batchIds=bucket.items.map(a=>a.batch);mesh.instanceMatrix.needsUpdate=true;mesh.instanceColor.needsUpdate=true;mesh.computeBoundingSphere();root.add(mesh);
+      mesh.userData.batchIds=bucket.items.map(a=>a.batch);mesh.instanceMatrix.needsUpdate=true;mesh.instanceColor.needsUpdate=true;mesh.computeBoundingSphere();
+      // Unlit pieces are status lights and signage: they should not darken the floor.
+      if(!bucket.unlit){mesh.castShadow=true;mesh.receiveShadow=true}
+      root.add(mesh);
       if(bucket.fan)fanMeshes.push({mesh,items:bucket.items});
     }
     if(opts.labels!==false&&typeof document!=='undefined')for(const [i,sign] of signs.entries()){
