@@ -30,13 +30,24 @@ const FloorScene=(()=>{
     /* `metal` picks a second lit material rather than a second colour: brushed aluminium and
        a painted steel frame reflect differently, and no per-instance colour can express that.
        It costs one extra draw call per geometry that uses it, which is the whole budget. */
-    function part(kind,size,pos,color=C.steel,rot=[0,0,0],batch=-1,unlit=false,fan=false,metal=false){
-      const key=kind+':'+unlit+':'+fan+':'+metal;if(!buckets.has(key))buckets.set(key,{kind,unlit,fan,metal,items:[]});
+    /* `glow` is the closest this renderer can get to a light that gives off light. The
+       bundle is tree-shaken with no post-processing in it, so there is no bloom pass and no
+       amount of emissive will bleed past an object's own silhouette. What does read as glow
+       is the way a real one is photographed: a small bright core with a larger, dimmer,
+       additively blended halo sitting behind it. One extra bucket covers every colour,
+       because additive blending still honours the per-instance colour. */
+    function part(kind,size,pos,color=C.steel,rot=[0,0,0],batch=-1,unlit=false,fan=false,metal=false,glow=false){
+      const key=kind+':'+unlit+':'+fan+':'+metal+':'+glow;if(!buckets.has(key))buckets.set(key,{kind,unlit,fan,metal,glow,items:[]});
       dummy.position.set(...pos);dummy.scale.set(...size);dummy.rotation.set(...rot);dummy.updateMatrix();
       buckets.get(key).items.push({matrix:dummy.matrix.clone(),color,batch,pos,size,rot});
     }
     const box=(size,pos,col,batch=-1,unlit=false)=>part('box',size,pos,col,[0,0,0],batch,unlit);
     const metal=(size,pos,col,batch=-1,rot=[0,0,0])=>part('box',size,pos,col,rot,batch,false,false,true);
+    /* A lamp is a core and its halo. Callers ask for a light, not for two boxes. */
+    function lamp(size,pos,col,batch=-1,spread=2.4){
+      part('box',size,pos,col,[0,0,0],batch,true);
+      part('box',[size[0]*spread,size[1]*spread,size[2]*spread],pos,col,[0,0,0],batch,true,false,false,true);
+    }
     const tube=(size,pos,col,rot=[0,0,0],batch=-1,shiny=false)=>part('cylinder',size,pos,col,rot,batch,false,false,shiny);
     /* A fan reads as a fan when it has a recessed housing, a wire guard and a hub the blades
        actually attach to. Seven blades rather than three, because three is a ceiling fan. */
@@ -50,7 +61,7 @@ const FloorScene=(()=>{
       for(let i=0;i<4;i++)part('box',[r*2.02,.022,.022],[x,y,z+facing*.062],C.edge,[0,0,i*Math.PI/4],id,false,false,true);
     }
     const label=(text,pos,width,height=.3)=>signs.push({text,pos,width,height});
-    const site=FloorScenery.populate(s,{box,part,fan,label,metal,tube,C});
+    const site=FloorScenery.populate(s,{box,part,fan,label,metal,tube,lamp,C});
     rows.forEach(b=>{
       const {x,z}=b,statusColor=colors[b.status],accent=opts.heat?(b.status==='online'?(stats.heatRatio>1?C.red:C.orange):C.dark):statusColor;
       box([1.68,.013,1.3],[x,.088,z],0x34464d,b.id);
@@ -58,14 +69,19 @@ const FloorScene=(()=>{
         for(const dz of [-.72,.72])box([1.8,.025,.055],[x,.11,z+dz],C.orange,b.id,true);
         for(const dx of [-.87,.87])box([.055,.025,1.5],[x+dx,.11,z],C.orange,b.id,true);
       }
-      FloorMiners.render(b.hardware||h,b,{box,part,fan,metal,tube,C,accent});
+      FloorMiners.render(b.hardware||h,b,{box,part,fan,metal,tube,lamp,C,accent});
       if(b.status==='fault'||b.status==='repair'){
-        box([.36,.25,.1],[x,2.48,z],statusColor,b.id,true);box([.035,.11,.02],[x,2.5,z+.07],C.dark,b.id);
+        lamp([.36,.25,.1],[x,2.48,z],statusColor,b.id,1.9);
+        box([.035,.11,.02],[x,2.5,z+.07],C.dark,b.id);
         if(b.status==='fault')box([.035,.025,.02],[x,2.4,z+.07],C.dark,b.id);
       }
     });
     for(const bucket of buckets.values()){
-      const material=bucket.unlit?new T.MeshBasicMaterial({color:0xffffff})
+      const material=bucket.glow
+        // 2 is AdditiveBlending. The constant is not exported by the tree-shaken bundle, but
+        // it is only a number, and depth writes are off so haloes never occlude each other.
+        ?new T.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.34,blending:2,depthWrite:false})
+        :bucket.unlit?new T.MeshBasicMaterial({color:0xffffff})
         :new T.MeshStandardMaterial({color:0xffffff,roughness:bucket.metal?.34:.78,metalness:bucket.metal?.78:.12});
       materials.push(material);
       const mesh=new T.InstancedMesh(geo[bucket.kind],material,bucket.items.length);
@@ -73,6 +89,9 @@ const FloorScene=(()=>{
       mesh.userData.batchIds=bucket.items.map(a=>a.batch);mesh.instanceMatrix.needsUpdate=true;mesh.instanceColor.needsUpdate=true;mesh.computeBoundingSphere();
       // Unlit pieces are status lights and signage: they should not darken the floor.
       if(!bucket.unlit){mesh.castShadow=true;mesh.receiveShadow=true}
+      // Haloes are additive light, so they draw after everything they sit in front of.
+      if(bucket.glow)mesh.renderOrder=2;
+      mesh.userData.lamp=!!bucket.unlit;
       root.add(mesh);
       if(bucket.fan)fanMeshes.push({mesh,items:bucket.items});
     }

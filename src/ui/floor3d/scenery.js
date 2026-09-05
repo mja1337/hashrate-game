@@ -60,7 +60,7 @@ const FloorScenery=(()=>{
     if(!p.outdoor){
       box([w,2.9,.16],[0,1.45,-d/2],C.wall);box([.16,2.9,d],[-w/2,1.45,0],C.wall);
       box([w,.2,.2],[0,.25,-d/2+.1],C.orange);box([.2,.2,d],[-w/2+.1,.25,0],C.orange);
-      for(let x=-w/2+.5;x<w/2;x+=3.6){box([.16,2.75,.22],[x,1.4,-d/2+.14],C.steel);box([2.2,.07,.12],[x+.9,2.55,-d/2+.26],0xe0f3ec,-1,true);}
+      for(let x=-w/2+.5;x<w/2;x+=3.6){box([.16,2.75,.22],[x,1.4,-d/2+.14],C.steel);api.lamp([2.2,.07,.12],[x+.9,2.55,-d/2+.26],0xe0f3ec,-1,1.7);}
       if(p.id==='garage'||p.id==='workshop'){
         const x=w/2-2.2;box([2.5,2.35,.08],[x,1.2,-d/2+.12],0x485f68);
         for(let y=.2;y<2.4;y+=.16)box([2.45,.025,.035],[x,y,-d/2+.18],C.edge);
@@ -75,10 +75,15 @@ const FloorScenery=(()=>{
     if(p.id!=='home'){
       box([w-1,.13,.48],[0,2.85,-d/2+.65],C.steel);
       for(let x=-w/2+1;x<w/2-1;x+=.55)box([.05,.035,.6],[x,2.94,-d/2+.65],C.edge);
-      for(let k=0;k<3;k++)box([w-1,.025,.035],[0,2.95,-d/2+.5+k*.12],k===0?C.orange:0x233640);
+      /* Colour carries meaning on a real floor: orange is power, blue is data, bare copper
+         is earth. Three grey bundles told you there was cabling and nothing else. */
+      for(let k=0;k<3;k++)box([w-1,.025,.035],[0,2.95,-d/2+.5+k*.12],k===0?C.orange:k===1?0x4a9fe0:0x8a6a3c);
     }
     box([.8,1.75,.48],[-w/2+.7,.95,d/2-.65],C.steel);
-    box([.57,.34,.04],[-w/2+.7,1.42,d/2-.38],s.power?C.green:C.dark,-1,true);
+    if(s.power)api.lamp([.57,.34,.04],[-w/2+.7,1.42,d/2-.38],C.green,-1,1.5);
+    else box([.57,.34,.04],[-w/2+.7,1.42,d/2-.38],C.dark,-1,true);
+    // Emergency stop, red and unmissable, because that is what one looks like.
+    part('cylinder',[.09,.05,.09],[-w/2+.7,1.12,d/2-.4],0xd4392f,[Math.PI/2,0,0]);
     for(let i=0;i<3;i++)box([.12,.16,.04],[-w/2+.49+i*.21,.8,d/2-.38],C.orange);
     // Roofs removed on the live containers so racks and their status stay legible.
     if(p.id==='container')for(let row=0;row<3;row++){
@@ -160,7 +165,9 @@ const FloorScenery=(()=>{
     for(const person of crew){
       const {x,z,color,role}=person;
       for(const dx of [-.105,.105]){box([.135,.51,.15],[x+dx,.38,z],C.steel);box([.15,.095,.27],[x+dx,.125,z+.055],C.dark);}
-      box([.38,.46,.23],[x,.88,z],color);box([.39,.043,.025],[x,.88,z+.13],0xe6e6b8);
+      box([.38,.46,.23],[x,.88,z],color);
+      // Hi-vis, on both bands, because that is what anyone on an industrial floor wears.
+      for(const y of [.94,.84])box([.39,.045,.025],[x,y,z+.13],0xd8e84a);
       cylinder([.13,.23,.13],[x,1.23,z],0xc19b7d);cylinder([.155,.09,.155],[x,1.4,z],role==='treasurer'?C.steel:0xe4ddb1);
       cylinder([.18,.025,.18],[x,1.365,z],role==='treasurer'?C.steel:0xe4ddb1);
       part('box',[.12,.38,.13],[x-.25,.84,z],color,[0,0,.22]);part('box',[.12,.32,.13],[x+.25,.9,z+.035],color,[-.38,0,-.35]);

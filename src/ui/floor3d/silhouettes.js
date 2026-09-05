@@ -50,7 +50,14 @@ const FloorMiners=(()=>{
     const M=(size,pos,color,rot=[0,0,0])=>api.metal(size,[x+pos[0],pos[1],z+pos[2]],color,id,rot);
     const T=(size,pos,color,rot=[0,0,0],shiny=false)=>api.tube(size,[x+pos[0],pos[1],z+pos[2]],color,rot,id,shiny);
     const F=(dx,y,dz,r,facing=1)=>fan(x+dx,y,z+dz,r,id,on,facing);
-    const led=(dx,y,dz,w=.05)=>box([w,.035,.024],[x+dx,y,z+dz],accent,id,true);
+    /* Status lights are lamps, not coloured squares: a bright core with an additive halo.
+       Wide strips get a tighter spread, because a halo scaled off a 1.3-wide strip would be
+       a bar of fog rather than a light. */
+    const led=(dx,y,dz,w=.05,spread=w>.4?1.5:2.8)=>api.lamp([w,.035,.024],[x+dx,y,z+dz],accent,id,spread);
+    const screen=(size,pos,col,rot=null)=>{
+      if(rot)part('box',size,[x+pos[0],pos[1],z+pos[2]],col,rot,id,true);
+      else api.lamp(size,[x+pos[0],pos[1],z+pos[2]],col,id,1.35);
+    };
     const desk=(height=.78)=>{B([1.6,.09,1.1],[0,height,0],C.wood);for(const dx of [-.66,.66])for(const dz of [-.43,.43])M([.08,height,.08],[dx,height/2,dz],C.steel);};
     /* A short length of cable leaving a machine and dropping out of sight. Nothing in a
        working room is unplugged, and the absence of any cabling was half of why the old
@@ -61,9 +68,12 @@ const FloorMiners=(()=>{
       for(let j=0;j<levels;j++){M([1.54,.04,1.15],[0,.28+j*.66,0],0x5d737a);
         for(const dz of [-.52,.52])M([1.54,.03,.03],[0,.5+j*.66,dz],0x44585f);}
       M([1.48,.12,.09],[0,2.13,.53],C.steel);led(0,2.13,.59,1.3);
-      // Busway down the back of the rack, which is what the machines actually plug into.
+      // Busway down the back of the rack, which is what the machines actually plug into,
+      // and a data spine beside it. Orange is power, blue is data, here as everywhere else.
       M([.12,1.9,.12],[.79,1,-.5],0x30444c);
-      for(let j=0;j<levels;j++)B([.16,.09,.05],[.79,.42+j*.66,-.43],C.dark);
+      for(let j=0;j<levels;j++)B([.16,.09,.05],[.79,.42+j*.66,-.43],C.orange);
+      M([.07,1.9,.07],[-.79,1,-.5],0x2b4150);
+      for(let j=0;j<levels;j++)B([.11,.06,.04],[-.79,.46+j*.66,-.44],0x4a9fe0);
     };
     if(p.type==='laptop'){
       desk();
@@ -73,7 +83,8 @@ const FloorMiners=(()=>{
       for(let r=0;r<5;r++)for(let k=0;k<12;k++)B([.045,.012,.03],[-.31+k*.056,.9,-.02+r*.055],0x2c3a3f);
       B([.24,.014,.13],[0,.9,.26],0x33444a);
       part('box',[.9,.6,.04],[x,1.16,z-.2],C.dark,[-.16,0,0],id);
-      part('box',[.79,.49,.012],[x,1.16,z-.176],on?0x1d4f4a:0x11191c,[-.16,0,0],id,true);
+      part('box',[.79,.49,.012],[x,1.16,z-.176],on?0x2f8f7f:0x11191c,[-.16,0,0],id,true);
+      if(on)part('box',[.95,.62,.02],[x,1.16,z-.19],0x2f8f7f,[-.16,0,0],id,true,false,false,true);
       part('box',[.2,.02,.008],[x,1.3,z-.212],C.steel,[-.16,0,0],id);
       for(const dx of [-.4,.4])B([.05,.02,.05],[dx,.845,.28],C.dark);
       drop(.44,.87,-.16,.42);led(.36,.885,.4);
@@ -87,7 +98,7 @@ const FloorMiners=(()=>{
       B([.28,.5,.01],[.62,1.2,.05],0x22323a);
       F(.44,1.42,.37,.115);led(.44,.88,.38);
       M([.65,.45,.05],[-.28,1.18,-.18],C.steel);
-      B([.56,.35,.012],[-.28,1.18,-.146],on?0x1e4d40:0x121a1c);
+      screen([.56,.35,.012],[-.28,1.18,-.146],on?0x2c8a76:0x121a1c);
       M([.06,.18,.06],[-.28,.9,-.18],C.edge);M([.22,.02,.16],[-.28,.815,-.18],C.steel);
       B([.58,.018,.2],[-.28,.868,.23],C.dark);
       for(let k=0;k<10;k++)B([.04,.012,.16],[-.53+k*.055,.878,.23],0x2c3a3f);
@@ -212,7 +223,7 @@ const FloorMiners=(()=>{
         M([.012,.022,p.d*.52],[sx*(p.w/2+.005),y-p.h*.22+k*.06,0],0x8b9ca2);
       // Controller board on the roof: Ethernet socket, reset, two status LEDs.
       M([p.w*.34,.05,.2],[-p.w*.2,y+p.h/2+.03,-p.d*.18],C.dark);
-      B([.075,.045,.06],[-p.w*.2+.06,y+p.h/2+.05,-p.d*.18+.09],0x2f6f7d);
+      B([.075,.045,.06],[-p.w*.2+.06,y+p.h/2+.05,-p.d*.18+.09],0x4a9fe0);
       led(-p.w*.2-.05,y+p.h/2+.06,-p.d*.18+.1,.03);
       if(p.psu){
         M([.22,.13,p.d*.82],[p.w/2-.09,y+p.h/2+.085,0],C.steel);

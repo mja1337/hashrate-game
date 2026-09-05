@@ -81,6 +81,12 @@ function floor3dEnsureRenderer(){
   if(floor3dRenderer)return true;
   try{
     floor3dRenderer=new FloorThree.WebGLRenderer({antialias:true,alpha:false,powerPreference:"low-power"});
+    /* Filmic roll-off rather than a hard clip. With additive haloes stacking on top of lit
+       surfaces, linear output blows the bright end out to flat white; ACES compresses it so
+       a lamp keeps a hot core and a coloured edge instead of becoming a white rectangle. */
+    floor3dRenderer.toneMapping=FloorThree.ACESFilmicToneMapping;
+    // ACES compresses the midtones, so the exposure and the lights come up to meet it.
+    floor3dRenderer.toneMappingExposure=1.5;
     floor3dRenderer.setClearColor(0x101b24);
     floor3dRenderer.outputColorSpace=FloorThree.SRGBColorSpace;
     floor3dCanvas=floor3dRenderer.domElement;
@@ -140,8 +146,12 @@ function floor3dPrepareAlerts(){
     if(alert)floor3dAlertMap.set(batch.id,alert);
   }
   if(!floor3dBuilt)return;
+  /* Only the lights pulse. Blending the whole chassis toward red made a faulted machine
+     look repainted rather than alarmed — the shape said "this machine is red", not "this
+     machine needs you". Restricting the pulse to the unlit pieces means the status LED, the
+     rack strip and the marker above it beat while the aluminium stays aluminium. */
   floor3dBuilt.root.traverse(node=>{
-    if(!node.isInstancedMesh||!node.instanceColor)return;
+    if(!node.isInstancedMesh||!node.instanceColor||!node.userData.lamp)return;
     floor3dBaseColours.push({mesh:node,base:Float32Array.from(node.instanceColor.array),
       ids:node.userData.batchIds||[]});
   });
@@ -156,11 +166,15 @@ function floor3dPulse(time){
       if(!alert)continue;
       const wave=(Math.sin(time*.001*alert.speed*Math.PI)+1)/2;
       const mix=alert.depth*wave;
+      /* A warning light gets brighter, it does not merely change hue. Values above 1 are
+         legitimate here: the output is tone-mapped, so the peak rolls off to a hot core
+         rather than clipping to a flat white rectangle. */
+      const gain=1+alert.depth*wave*1.1;
       target.setHex(alert.colour);
       const o=i*3;
-      mesh.instanceColor.array[o]  =base[o]  +(target.r-base[o])  *mix;
-      mesh.instanceColor.array[o+1]=base[o+1]+(target.g-base[o+1])*mix;
-      mesh.instanceColor.array[o+2]=base[o+2]+(target.b-base[o+2])*mix;
+      mesh.instanceColor.array[o]  =(base[o]  +(target.r-base[o])  *mix)*gain;
+      mesh.instanceColor.array[o+1]=(base[o+1]+(target.g-base[o+1])*mix)*gain;
+      mesh.instanceColor.array[o+2]=(base[o+2]+(target.b-base[o+2])*mix)*gain;
       touched=true;
     }
     if(touched)mesh.instanceColor.needsUpdate=true;
@@ -328,14 +342,14 @@ function floor3dBuildScene(){
        leaves nothing for a shadow to darken — machines sat on the floor without touching it.
        The sky term now fills the shadows instead of erasing them, and the key is lower in
        the sky so what it casts is long enough to see. */
-    floor3dScene.add(new T.HemisphereLight(0xe6f6ff,0x33424c,1.05));
-    const key=new T.DirectionalLight(0xffe8c2,2.7);key.position.set(9,11,6);
+    floor3dScene.add(new T.HemisphereLight(0xe6f6ff,0x33424c,1.3));
+    const key=new T.DirectionalLight(0xffe8c2,3.2);key.position.set(9,11,6);
     key.castShadow=true;key.shadow.mapSize.width=1024;key.shadow.mapSize.height=1024;
     // Normal bias rather than a heavy depth bias: a large constant bias detaches the shadow
     // from the object that casts it, which is worse than no shadow at all.
     key.shadow.bias=-.0009;key.shadow.normalBias=.02;
     floor3dScene.add(key);floor3dKeyLight=key;
-    const fill=new T.DirectionalLight(0x80b9ea,.55);fill.position.set(-8,5,-3);floor3dScene.add(fill);
+    const fill=new T.DirectionalLight(0x80b9ea,.7);fill.position.set(-8,5,-3);floor3dScene.add(fill);
     floor3dRenderer.shadowMap.enabled=true;
     floor3dRenderer.shadowMap.type=FLOOR3D_SOFT_SHADOWS;
     /* Nothing in the room moves except fan blades, and a fan blade's shadow is invisible at
