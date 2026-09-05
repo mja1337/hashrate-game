@@ -1080,6 +1080,55 @@ rule("a runbook shortens an outage and a generator carries a short one", () => {
   assert(r.dual.net < r.plain.net, `a second upstream left connectivity risk at ${r.dual.net}`);
 });
 
+
+/* ---- THE PRICE CHART: no reading ahead ---- */
+
+/* This is a historical replay. A chart that sampled past the simulation's own clock would
+   hand the player the answer to the only question the game asks, so the series is clipped
+   rather than faded — there is nothing drawn to read ahead from. */
+rule("the price chart never samples past the simulation's clock", () => {
+  const r = json(`(()=>{
+    const out=[];
+    for(const [when,range] of [["2011-06-01","all"],["2014-03-01","all"],
+        ["2017-12-01","1y"],["2021-11-08","all"],["2021-11-08","90d"]]){
+      ${SITE(``)}
+      state.time=at(when);state.priceChartRange=range;
+      const series=priceChartSeries();
+      out.push({when,range,points:series.length,
+        last:series.length?series[series.length-1][0]:null,
+        first:series.length?series[0][0]:null,now:state.time});
+    }
+    return out;})()`);
+  for (const row of r) {
+    assert(row.points > 2, `${row.when} at range ${row.range} produced ${row.points} points`);
+    assert(row.last <= row.now, `${row.when} at range ${row.range} plotted a point beyond the current date`);
+    assert(row.first <= row.last, `${row.when} at range ${row.range} runs backwards`);
+  }
+});
+
+rule("a shorter chart range is a window on the same series, not a different one", () => {
+  const r = json(`(()=>{
+    ${SITE(``)}
+    state.time=at("2021-11-08");
+    const read=range=>{state.priceChartRange=range;const s=priceChartSeries();
+      return{first:s[0][0],last:s[s.length-1][0],points:s.length};};
+    return{all:read("all"),year:read("1y"),quarter:read("90d")};})()`);
+  assert(r.year.first > r.all.first, "the one-year range starts no later than the whole history");
+  assert(r.quarter.first > r.year.first, "the ninety-day range starts no later than the one-year range");
+  assert(r.all.last === r.year.last && r.year.last === r.quarter.last, "the ranges end on different dates");
+  assert(r.quarter.points > 2, "the shortest range collapsed to nothing");
+});
+
+/* Before a market existed there was no price, and the chart has to say so rather than draw
+   a flat line at whatever the first recorded quote happens to be. */
+rule("the chart shows nothing before bitcoin had a price", () => {
+  const points = json(`(()=>{
+    ${SITE(``)}
+    state.time=at("2009-06-01");state.priceChartRange="all";
+    return priceChartSeries().length;})()`);
+  assert(points === 0, `a 2009 chart plotted ${points} points before any market existed`);
+});
+
 if (failures.length) {
   console.error(`Engine behaviour: ${failures.length} of ${checked} rules failed\n`);
   for (const failure of failures) console.error(`  ✗ ${failure}`);

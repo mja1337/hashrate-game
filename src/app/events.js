@@ -34,6 +34,7 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(a==="order-parts")orderParts(id,Number(v));
   else if(a==="service-hw")serviceHardware(id);
   else if(a==="service-part")serviceHardwarePart(id,part);
+  else if(a==="price-range"){state.priceChartRange=v;save();render(false)}
   else if(a==="floor3d-zoom"){if(typeof floor3dZoomBy==="function")floor3dZoomBy(v==="in"?1.35:1/1.35)}
   else if(a==="floor3d-reset"){if(typeof floor3dResetView==="function")floor3dResetView()}
   else if(a==="mine-section"){state.mineSection=v;save();renderMineContent();window.scrollTo({top:0,behavior:"smooth"})}

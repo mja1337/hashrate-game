@@ -44,6 +44,9 @@ const FILES = [
   "src/engine/maintenance.js",
   "src/engine/pools.js",
   "src/engine/actions.js",
+  /* The price chart is a UI module, but the property worth guarding — that it never samples
+     past the simulation's own clock — is pure data and testable without a DOM. */
+  "src/ui/enhance/price-chart.js",
 ];
 
 /* `seedSave` writes a save into the shimmed localStorage BEFORE the scripts run, so the

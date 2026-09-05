@@ -37,6 +37,7 @@ const expectedScripts = [
   "src/ui/tabs/method-chapters.js",
   "src/ui/tabs/method.js",
   "src/ui/enhance/mine-market.js",
+  "src/ui/enhance/price-chart.js",
   "src/ui/floor3d/mount.js",
   "src/ui/enhance/keys.js",
   "src/ui/enhance/custody.js",
