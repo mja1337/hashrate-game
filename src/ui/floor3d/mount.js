@@ -97,6 +97,74 @@ function floor3dEnsureRenderer(){
   }
 }
 
+/* WHAT A MACHINE IN TROUBLE LOOKS LIKE.
+
+   Colour alone is a poor alarm on a floor of two hundred boxes — it reads as decoration.
+   Movement does not, which is why anything that needs a decision pulses and everything
+   healthy sits still. Four states, told apart because they need four different responses:
+
+     red      faulted; it has stopped earning and wants a part
+     amber    condition inside the last band before the whole type goes offline at 65%
+     blue     the grid has cut the site, or a policy has
+     violet   the site is hashing but cannot reach the network
+
+   A machine that is simply switched off does not pulse. That is a decision you already made
+   and not a problem to solve. */
+const FLOOR3D_ALERTS={
+  fault:  {colour:0xd9483c, speed:2.9, depth:.85},
+  ailing: {colour:0xe0a53a, speed:1.7, depth:.62},
+  power:  {colour:0x4f8fd6, speed:1.1, depth:.70},
+  network:{colour:0x9b6fd4, speed:1.4, depth:.58},
+};
+function floor3dAlertFor(batch){
+  if(!batch)return null;
+  if(batch.status==="fault")return FLOOR3D_ALERTS.fault;
+  if(batch.reason==="grid"||batch.reason==="sitepower")return FLOOR3D_ALERTS.power;
+  if(batch.reason==="network")return FLOOR3D_ALERTS.network;
+  if(batch.ailing&&batch.status!=="repair")return FLOOR3D_ALERTS.ailing;
+  return null;
+}
+
+/* The assembler already stamps every instance with the batch it belongs to, so the pulse can
+   be applied over the top of a finished scene without the renderer knowing anything about
+   maintenance. Base colours are captured once; each frame writes base blended toward the
+   alert colour and nothing else is touched. */
+let floor3dBaseColours=null,floor3dAlertMap=null;
+function floor3dPrepareAlerts(){
+  floor3dBaseColours=[];floor3dAlertMap=new Map();
+  for(const batch of FloorModel.batches()){
+    const alert=floor3dAlertFor(batch);
+    if(alert)floor3dAlertMap.set(batch.id,alert);
+  }
+  if(!floor3dBuilt)return;
+  floor3dBuilt.root.traverse(node=>{
+    if(!node.isInstancedMesh||!node.instanceColor)return;
+    floor3dBaseColours.push({mesh:node,base:Float32Array.from(node.instanceColor.array),
+      ids:node.userData.batchIds||[]});
+  });
+}
+function floor3dPulse(time){
+  if(!floor3dBaseColours||!floor3dAlertMap||!floor3dAlertMap.size)return;
+  const target=new FloorThree.Color();
+  for(const {mesh,base,ids} of floor3dBaseColours){
+    let touched=false;
+    for(let i=0;i<ids.length;i++){
+      const alert=floor3dAlertMap.get(ids[i]);
+      if(!alert)continue;
+      const wave=(Math.sin(time*.001*alert.speed*Math.PI)+1)/2;
+      const mix=alert.depth*wave;
+      target.setHex(alert.colour);
+      const o=i*3;
+      mesh.instanceColor.array[o]  =base[o]  +(target.r-base[o])  *mix;
+      mesh.instanceColor.array[o+1]=base[o+1]+(target.g-base[o+1])*mix;
+      mesh.instanceColor.array[o+2]=base[o+2]+(target.b-base[o+2])*mix;
+      touched=true;
+    }
+    if(touched)mesh.instanceColor.needsUpdate=true;
+  }
+}
+function floor3dAnythingWrong(){return !!(floor3dAlertMap&&floor3dAlertMap.size)}
+
 function floor3dStop(){if(floor3dRaf){cancelAnimationFrame(floor3dRaf);floor3dRaf=0}}
 function floor3dDisposeScene(){
   if(floor3dBuilt&&floor3dBuilt.dispose)floor3dBuilt.dispose();
@@ -107,13 +175,17 @@ function floor3dDraw(){
   if(!floor3dBuilt||!floor3dRenderer)return;
   const host=floor3dCanvas.parentElement;
   if(!host)return;
-  const width=Math.max(1,host.clientWidth),height=Math.max(1,Math.round(width*.62));
+  const width=Math.max(1,host.clientWidth),height=Math.max(1,Math.round(width*.42));
   floor3dRenderer.setPixelRatio(Math.min(2,window.devicePixelRatio||1));
   floor3dRenderer.setSize(width,height,false);
-  const span=Math.max(floor3dBuilt.width,floor3dBuilt.depth)*.72,aspect=width/height;
+  /* Framing. The span decides how much empty room sits around the floor; .72 left the site
+     swimming in it. Fitted to the larger of the two footprint axes with a small margin, and
+     divided down when the frame is wide so a letterbox does not push the site away. */
+  const footprint=Math.max(floor3dBuilt.width,floor3dBuilt.depth),aspect=width/height;
+  const span=footprint*.54/Math.max(1,Math.sqrt(aspect/1.6));
   floor3dCamera.left=-span*aspect;floor3dCamera.right=span*aspect;
   floor3dCamera.top=span;floor3dCamera.bottom=-span;
-  floor3dCamera.position.set(floor3dBuilt.cx+span*1.1,span*1.25,floor3dBuilt.cz+span*1.1);
+  floor3dCamera.position.set(floor3dBuilt.cx+footprint,footprint*.86,floor3dBuilt.cz+footprint);
   floor3dCamera.lookAt(floor3dBuilt.cx,0,floor3dBuilt.cz);
   floor3dCamera.updateProjectionMatrix();
   floor3dRenderer.render(floor3dScene,floor3dCamera);
@@ -131,6 +203,7 @@ function floor3dBuildScene(){
   if(floor3dBuilt){floor3dScene.remove(floor3dBuilt.root);floor3dDisposeScene()}
   floor3dBuilt=FloorScene.build(FloorModel.describe(),{});
   floor3dScene.add(floor3dBuilt.root);
+  floor3dPrepareAlerts();
 }
 
 /* Called after every repaint of the Mine tab. Re-attaches the surviving canvas, rebuilds the
@@ -147,10 +220,12 @@ function mountFloor3d(){
   floor3dDraw();
   floor3dStop();
   const still=typeof reducedMotion==="function"&&reducedMotion();
-  if(!still&&floor3dBuilt&&floor3dBuilt.animated){
+  if(!still&&floor3dBuilt&&(floor3dBuilt.animated||floor3dAnythingWrong())){
     const step=time=>{
       if(document.hidden||!floor3dCanvas.parentElement){floor3dRaf=0;return}
-      floor3dBuilt.animate(time);floor3dDraw();
+      if(floor3dBuilt.animated)floor3dBuilt.animate(time);
+      floor3dPulse(time);
+      floor3dDraw();
       floor3dRaf=requestAnimationFrame(step);
     };
     floor3dRaf=requestAnimationFrame(step);

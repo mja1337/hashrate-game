@@ -55,7 +55,8 @@ const FloorModel=(()=>{
      how many sprites a type earns, and which of them are faulted — was done by the engine. */
   function batches(){
     return floorBatches().map((b,i)=>({id:i,qty:b.qty,status:STATUS[b.status]||"online",
-      hardware:b.hardware,label:b.label,clickable:b.clickable}));
+      hardware:b.hardware,label:b.label,clickable:b.clickable,
+      condition:b.condition,ailing:b.ailing,reason:b.reason}));
   }
 
   /* How close the room is to the heat it can shed. The renderer tints by this; the figure is

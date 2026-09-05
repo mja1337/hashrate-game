@@ -77,13 +77,24 @@ function floorSprite(id){
    that disagree. */
 function floorBatches(){
   const owned=HARDWARE.filter(h=>(state.hardware[h.id]||0)>0),total=owned.reduce((sum,h)=>sum+(state.hardware[h.id]||0),0),tier=facilityTier(),limit=[12,28,72,110,130,150,170,190][tier-1]||110,siteOff=!thermalPowerAvailable();
+  /* Why a machine is not earning, told apart rather than lumped together. A fleet that is
+     manually off, one the grid has cut and one that cannot reach the network are three
+     different problems with three different fixes, and a floor that draws them the same way
+     is hiding the only thing worth knowing. */
+  const gridDown=gridCutOff()||!!state.policyLock,netDown=typeof connectivityOutage==="function"&&connectivityOutage();
+  const siteReason=gridDown?"grid":siteOff?"sitepower":null;
   const out=[];
   for(const h of owned){
     const n=state.hardware[h.id],shown=Math.max(1,Math.min(n,Math.round(limit*n/Math.max(1,total)))),per=Math.max(1,Math.ceil(n/shown)),rs=hardwareRepairState(h),job=activeServiceJob(h.id),dominantPart=job?.part||Object.entries(rs.faultsByPart).sort((a,b)=>b[1]-a[1])[0]?.[0];
+    /* A type goes offline entirely below 65% condition, so the band just above it is the
+       last chance to act before the whole line stops earning. */
+    const condition=maintenanceCondition(h),ailing=condition<75&&condition>=65;
     for(let i=0;i<shown;i++){
       const first=i*per,qty=Math.min(per,n-first);if(qty<=0)continue;
       const status=first<rs.repairing?(rs.servicing?"repair":"broken"):first<rs.repairing+rs.paused||siteOff?"paused":hardwareOfflineReason(h)?"broken":"online",label=status==="online"?"hashing":status==="paused"?(siteOff?"site power off":"manually off"):status==="repair"?`technician repair${job?.part?` · ${sparePart(job.part)?.name||job.part}`:""}${Number.isFinite(job?.stage)&&job.stage<REPAIR_STAGES.length?` · ${REPAIR_STAGES[job.stage].name}`:""}`:`faulted${dominantPart?` · ${PART_FAULT_LABELS[dominantPart]||dominantPart}`:""}`;
-      out.push({hardware:h,id:h.id,index:i,qty,status,label,job,part:dominantPart,clickable:status==="broken"||status==="repair"});
+      out.push({hardware:h,id:h.id,index:i,qty,status,label,job,part:dominantPart,condition,ailing,
+        reason:status==="paused"?(siteReason||"manual"):netDown&&status==="online"?"network":null,
+        clickable:status==="broken"||status==="repair"});
     }
   }
   return out;

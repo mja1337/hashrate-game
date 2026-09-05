@@ -180,6 +180,26 @@ assert(inline.includes("creditFor=c=>c.id===\"curtail\""),
   "The energy tariff desk quotes curtailment without its credit, so contracts cannot be compared");
 assert(inline.includes("method-demand-response"), "Method does not document demand response");
 
+// TROUBLE HAS TO BE VISIBLE. A machine that needs a decision pulses; one that is simply
+// switched off does not, because that is a decision already made. Four states because they
+// need four different responses: a part, a service, paying the grid, or the network.
+assert(/const FLOOR3D_ALERTS=\{[\s\S]{0,400}fault:[\s\S]{0,400}ailing:[\s\S]{0,400}power:[\s\S]{0,400}network:/.test(inline),
+  "The 3D floor no longer tells faults, wear, power loss and network loss apart");
+assert(inline.includes("function floor3dAlertFor(batch)"), "Nothing decides which machines raise an alarm");
+assert(/if\(batch\.status==="fault"\)return FLOOR3D_ALERTS\.fault/.test(inline),
+  "A faulted machine does not raise the fault alarm");
+assert(inline.includes('batch.ailing&&batch.status!=="repair"'),
+  "A machine already being repaired still pulses as if it needed attention");
+assert(inline.includes("mesh.instanceColor.needsUpdate=true"),
+  "The pulse never reaches the GPU, so nothing on the floor would move");
+// The model has to carry the reason, or the floor cannot tell the four apart.
+assert(/const condition=maintenanceCondition\(h\),ailing=condition<75&&condition>=65/.test(inline),
+  "The batch model no longer marks hardware approaching the 65% offline threshold");
+assert(/reason:status==="paused"\?\(siteReason\|\|"manual"\)/.test(inline),
+  "The batch model no longer distinguishes why a machine stopped");
+assert(inline.includes('const gridDown=gridCutOff()||!!state.policyLock'),
+  "A grid disconnection is not told apart from a machine somebody switched off");
+
 // THE 3D FLOOR is an alternative view, never a replacement. Four things have to stay true:
 // the flat floor is the default and stays in the markup, the library is not loaded until
 // somebody asks for it, the canvas outlives the repaints that destroy everything around it,

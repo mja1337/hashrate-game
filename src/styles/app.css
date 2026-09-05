@@ -161,5 +161,7 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--orange);outline-off
 .floor-view-switch{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px}
 .floor-view-switch>span{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
 .floor-view-switch small{flex-basis:100%;margin:0}
-.floor-3d-mount{position:relative;width:100%;border-radius:10px;overflow:hidden;background:#101b24;min-height:180px}
+/* The mount is exactly as tall as the canvas inside it. A min-height left a band of empty
+   background under the floor at narrow widths, which reads as the view failing to fill. */
+.floor-3d-mount{position:relative;width:100%;border-radius:10px;overflow:hidden;background:#101b24;line-height:0}
 .floor-3d-canvas{display:block;width:100%;height:auto}
