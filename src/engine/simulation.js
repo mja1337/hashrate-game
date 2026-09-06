@@ -13,7 +13,7 @@ const initialState=()=>{const seed=Math.floor(Math.random()*4294967296);return{
   lightning:{locked:0,earned:0},
   giftCards:{spentBtc:0,spentUsd:0,cards:0},floorView:"3d",
   hardware:{laptop:1},poweredDownHardware:{},facility:"home",region:"na",thermal:{temperature:22,orders:[],equipment:{}},overdrive:false,settlementSaleMode:false,autoRepair:false,node:0,nodeStorage:50,nodePruned:false,nodeMode:"archival",nodeSync:{primaryLag:0,primaryPeak:0,backupLag:0,backupPeak:0},backupNode:{enabled:false,outageUntil:0},mode:"solo",pool:"f2pool",
-  skills:[],points:0,startingGrant:false,seen:[],activeEvent:null,pendingLosses:[],lossResume:false,storyPause:true,shoppingPause:false,speculations:[],powerRateShock:null,hardwareGlut:null,hardwareAlerts:{seen:[],queue:[],active:null,resumeSpeed:0},hardwareToastSeen:[],exposureWarned:[],
+  skills:[],points:0,startingGrant:false,seen:[],activeEvent:null,pendingLosses:[],poolAccount:{balance:0,frozen:0,threshold:.01,destination:"hot",paidTotal:0,feesPaid:0,payouts:0,lastPayout:0},lossResume:false,storyPause:true,shoppingPause:false,speculations:[],powerRateShock:null,hardwareGlut:null,hardwareAlerts:{seen:[],queue:[],active:null,resumeSpeed:0},hardwareToastSeen:[],exposureWarned:[],
   treasuryPolicy:"cover",pendingSettlement:null,endReason:null,arrearsDue:0,gridCutAnnounced:false,marketPressure:{usd:0,at:0},
   operator:{eras:{},periodMined:0,periodUptime:0,periodDays:0,lastRevenueUsd:0,totalMonths:0,solventMonths:0,profitableMonths:0,competitiveMonths:0,bridgeLoans:0,restructures:0},
   xp:{total:0,level:1,peakLevel:1,bestDifficulty:0,shares:0,sources:{shares:0,record:0,deploy:0,repair:0,spend:0}},
@@ -95,6 +95,7 @@ state.procurementOrders=Array.isArray(state.procurementOrders)?state.procurement
 state.inactiveHardware=state.inactiveHardware&&typeof state.inactiveHardware==="object"?state.inactiveHardware:{};
 HARDWARE.forEach(h=>state.inactiveHardware[h.id]=Math.max(0,Math.floor(Number(state.inactiveHardware[h.id])||0)));
 state.commissioningJobs=Array.isArray(state.commissioningJobs)?state.commissioningJobs.filter(job=>HARDWARE.some(h=>h.id===job.id)&&Number(job.qty)>0&&Number.isFinite(Number(job.due))):[];
+if(typeof poolAccount==="function")poolAccount();
 state.retirementJobs=Array.isArray(state.retirementJobs)?state.retirementJobs.filter(job=>HARDWARE.some(h=>h.id===job.id)&&Number(job.qty)>0&&Number.isFinite(Number(job.due))):[];
 state.decommissionedHardware=state.decommissionedHardware&&typeof state.decommissionedHardware==="object"?state.decommissionedHardware:{};
 HARDWARE.forEach(h=>state.decommissionedHardware[h.id]=Math.max(0,Math.floor(Number(state.decommissionedHardware[h.id])||0)));
@@ -546,6 +547,7 @@ function tick(silent=false){
   advanceProcurement();advanceCoolingInstalls();
   advanceRetirements();
   advanceStagedIntake();
+  advancePoolPayouts();
   advanceFleetLifecycle();
   const crossed=EVENTS.filter(e=>at(e.date)>prev&&at(e.date)<=next&&!state.seen.includes(e.id)).sort((a,b)=>at(a.date)-at(b.date));
   crossed.forEach(e=>{state.seen.push(e.id);applyEvent(e)});
@@ -558,14 +560,20 @@ function tick(silent=false){
   const rate=powerRate(r,next),minerWatts=state.power&&state.debt<=0&&!state.policyLock&&!fleetGrounded()?fs.w*contractLoadFactor():0,nodeWatts=nodeHostPowered()?nodeW:0,dailyCosts={energy:dailyEnergyCostForWatts(minerWatts+nodeWatts,next,r)-curtailmentCreditDaily(minerWatts,next,r),rent:f.rent/30.4375,internet:internetMonthlyCost()/30.4375,staff:staffMonthlyCost()/30.4375,insurance:insuranceMonthlyCost()/30.4375,nodeNetwork:totalNodeMonthlyOverhead()/30.4375},daily=Object.values(dailyCosts).reduce((sum,value)=>sum+value,0);
   Object.entries(dailyCosts).forEach(([key,value])=>state.billLedger[key]=(state.billLedger[key]||0)+value);state.bill+=daily;state.powerSpent+=daily;
   if(state.mode==="pool"&&!poolClosed(state.pool)&&!poolEligible()){const lostPool=poolData();state.mode="solo";log(`${lostPool.name} no longer available`,`Requires ${SKILLS.find(x=>x.id===lostPool.requires)?.name||lostPool.requires} · failed over to solo mining`,"operations");if(!silent)showToast("Pool unavailable",`${lostPool.name} needs ${SKILLS.find(x=>x.id===lostPool.requires)?.name||lostPool.requires}. Your fleet has failed over to solo mining rather than quietly mining solo while the tab still said pool.`,"bad","pools")}
-  if(state.mode==="pool"&&poolClosed(state.pool)){const closedPool=poolData();state.mode="solo";log(`${closedPool.name} shut down`,"Failed over to solo mining","operations");if(!silent)showToast("Pool shut down",`${closedPool.name} has ceased operating. Your fleet has failed over to solo mining.`,"bad","pools")}
+  if(state.mode==="pool"&&poolClosed(state.pool)){const closedPool=poolData();state.mode="solo";
+    /* A pool that shuts down does not post you what it was holding. Whatever had not reached
+       the payout threshold was on its books, not in your wallet, and this is where that
+       distinction stops being a paragraph and becomes a number. */
+    const stranded=seizePoolBalance(`${closedPool.name} ceased operating.`);
+    log(`${closedPool.name} shut down`,`Failed over to solo mining${stranded?` · ${fmtBtc(stranded)} of unpaid balance stranded`:""}`,"operations");
+    if(!silent&&!stranded)showToast("Pool shut down",`${closedPool.name} has ceased operating. Your fleet has failed over to solo mining, and your balance there had already been paid out.`,"bad","pools")}
   if(operating()){
     const lambda=expectedBlocksPerDayForHash(fs.hash,next)*Math.min(1,r.rely+(hasSkill("monitoring")?.01:0))*contractUptimeFactor()*connectivityMiningFactor()*nodeMiningFactor();
     let blocks,payout;
     if(state.mode==="pool"&&availablePool()&&poolEligible()){blocks=lambda;payout=poolPayoutFor(lambda,next)}
     else{blocks=poisson(lambda);payout=blocks*blockRewardAt(next)}
     if(firmwareHijacked())payout*=.65;
-    if(payout>0){state.wallets.hot+=payout;state.mined+=payout;state.operator.periodMined+=payout;state.blocks+=blocks;if(blocks>=1)log(state.mode==="pool"?"Pool payout":blocks>1?`Block reward ×${blocks} (today)`:"Block reward (today)",`+${fmtBtc(payout)}`)}
+    if(payout>0){creditMiningIncome(payout);state.mined+=payout;state.operator.periodMined+=payout;state.blocks+=blocks;if(blocks>=1)log(state.mode==="pool"?"Pool payout":blocks>1?`Block reward ×${blocks} (today)`:"Block reward (today)",`+${fmtBtc(payout)}`)}
     state.uptimeDays++;state.operator.periodUptime++;
     advanceOperatorXp(blocks,silent);
   }else advanceOperatorXp(0,silent);

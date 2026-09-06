@@ -34,8 +34,61 @@ function pools(){
     ${poolHistoryExplorer()}
     <section class="card span-12"><div class="card-head"><h2>Choose payout method</h2><div class="meta">SOLO OR ONE ACTIVE POOL</div></div><div class="card-pad pool-method-grid"><article class="venue ${state.mode==="solo"?"active":""}"><div class="risk high">HIGH VARIANCE · 0% FEE</div><h3>Solo mining</h3><p>Keep the full reward when your fleet finds a block, but accept potentially long dry spells.</p><button class="action small ${state.mode==="solo"?"":"primary"}" data-action="mode" data-value="solo" ${state.mode==="solo"?"disabled":""}>${state.mode==="solo"?"Current method":"Switch to solo"}</button></article>${eligible.map(p=>`<article class="venue ${state.mode==="pool"&&state.pool===p.id?"active":""}">${(()=>{const terms=poolTermsAt(p.id,state.time),sc=POOL_SCHEMES[terms.scheme]||POOL_SCHEMES.fpps,eff=poolFeeAt(p.id,state.time),rows=p.schemes||[],prior=rows.filter(r=>at(r[0])<=state.time),moved=prior.length>1?prior[prior.length-1]:null,earlier=prior.length>1?prior[prior.length-2]:null;
       return `<div class="risk ${eff<=.005?"low":eff>=.03?"high":"medium"}">${sc.name} · ${(eff*100).toFixed(2)}% EFFECTIVE FEE</div><h3>${p.name}</h3><p>${sc.desc}</p><div class="trade-sub">${terms.scheme==="pps"?"Transaction fees stay with the pool":"Transaction fees passed through"} · ${["pplns","tides","score","prop"].includes(terms.scheme)?"variance carried by you":terms.scheme==="ppsplus"?"slight variance on fees only":"variance absorbed by the pool"}${moved&&earlier?` · moved from ${(POOL_SCHEMES[earlier[1]]||{}).name||earlier[1]} in ${new Date(at(moved[0])).getUTCFullYear()}`:""}</div>`})()}<button class="action small ${state.mode==="pool"&&state.pool===p.id?"":"primary"}" data-action="pool" data-value="${p.id}" ${state.mode==="pool"&&state.pool===p.id?"disabled":""}>${state.mode==="pool"&&state.pool===p.id?"Current pool":"Mine with this pool"}</button></article>`).join("")}</div></section>
+    ${payoutCustodyCard()}
     ${poolDashboard()}
     ${rivalLandscapeCard()}
     ${networkShareCard()}
   </div>`
+}
+
+/* WHERE THE COINS GO, on the tab where the coins are earned.
+
+   This card exists on Pools rather than in Custody deliberately. The custody decision a miner
+   cannot avoid is the payout address, and they meet it here, on the day they choose a pool —
+   not in a tab they may never open. Everything it says is true of real pool mining and none of
+   it is decoration: the balance is a debt, the threshold is a trade, and the destination
+   decides who is holding your income while you sleep. */
+function payoutCustodyCard(){
+  const a=poolAccount(),dest=payoutDestination(),fee=payoutNetworkFee();
+  const pooled=state.mode==="pool";
+  const price=state.time>=MARKET?priceAt(state.time):0;
+  const daily=operating()?expectedDay():0;
+  /* An estimate is only worth showing while it means something. A fleet that is stopped, or
+     hashing at a rate that would take nine hundred years to clear the threshold, needs to be
+     told that rather than shown a number with eight digits in it. */
+  const rawDays=pooled&&daily>0?Math.ceil((a.threshold-a.balance)/daily):Infinity;
+  const daysToPayout=Number.isFinite(rawDays)&&rawDays<=3650?Math.max(0,rawDays):null;
+  const payoutOutOfReach=pooled&&a.balance<a.threshold&&daysToPayout===null;
+  const feeShare=a.threshold>0?fee/a.threshold:0;
+  const destinations=payoutDestinations();
+  return `<section class="card span-12 payout-card"><div class="card-head"><h2>Where your mining income arrives</h2><div class="meta">${pooled?"POOL BALANCE · NOT YET YOURS":"SOLO · PAID DIRECT TO YOUR ADDRESS"}</div></div>
+    <div class="card-pad">
+      <p class="lead">${pooled
+        ? `Pool mining credits an account <em>at the pool</em>. ${poolData().name} holds those coins in its own wallet under its own keys, and sends them on when your balance crosses your payout threshold. Until it does, you are an unsecured creditor of a company you have never met.`
+        : `Solo mining pays the coinbase output of any block you find straight to an address you control. No threshold, no withdrawal fee, and nobody who can decide not to pay you — which is the half of the solo trade-off that the variance usually hides.`}</p>
+      <div class="intro-grid">
+        <div class="intro-fact"><b class="${a.balance>0?"down":""}">${fmtBtc(a.balance)}</b><span>${pooled?"held by the pool right now":"never held by a pool"}</span></div>
+        <div class="intro-fact"><b>${fmtBtc(a.threshold)}</b><span>payout threshold${daysToPayout!==null?` · about ${fmtNum(daysToPayout)}d away`:payoutOutOfReach?" · out of reach at this hash rate":""}</span></div>
+        <div class="intro-fact"><b>${fmtBtc(a.paidTotal)}</b><span>paid out over ${fmtNum(a.payouts)} payment${a.payouts===1?"":"s"}</span></div>
+        <div class="intro-fact"><b>${fmtBtc(a.feesPaid)}</b><span>spent on withdrawal fees</span></div>
+      </div>
+      ${payoutOutOfReach?`<p class="modal-note" style="color:var(--orange2)">At the current hash rate this balance will not reach ${fmtBtc(a.threshold)} in any reasonable time, so it stays with the pool indefinitely. A lower threshold would pay it out — and would spend ${fmtBtc(fee)} of it doing so.</p>`:""}
+      ${a.frozen>0?`<p class="modal-note" style="color:var(--red)">${fmtBtc(a.frozen)} is stranded in a pool that stopped paying. It is a claim, not a balance.</p>`:""}
+      <div class="card-head"><h3>Payout threshold</h3><div class="meta">COST AGAINST COUNTERPARTY EXPOSURE</div></div>
+      <p class="modal-note">Every payout is an on-chain transaction and costs ${fmtBtc(fee)}${price?` (about ${fmtUsd(fee*price)})`:""}. A low threshold pays you often and spends that fee often — at ${fmtBtc(a.threshold)} it is <strong>${(feeShare*100).toFixed(2)}%</strong> of each payment. A high threshold saves the fee and lends the pool more of your money for longer. There is no right answer; there is a side to pick.</p>
+      <div class="payout-thresholds">${PAYOUT_THRESHOLDS.map(v=>`<button class="action small ${v===a.threshold?"primary":""}" data-action="payout-threshold" data-value="${v}" ${v===a.threshold?"disabled":""}>${fmtBtc(v)}<small>${((fee/v)*100).toFixed(2)}% to fees</small></button>`).join("")}</div>
+      <div class="card-head"><h3>Payout destination</h3><div class="meta">THE ONE CUSTODY DECISION A MINER CANNOT AVOID</div></div>
+      <div class="payout-destinations">${destinations.map(d=>{
+        const blocked=payoutDestinationBlockReason(d.id),active=d.id===a.destination;
+        return `<article class="payout-destination ${active?"active":""} ${d.kind==="venue"?"custodial":"self"} ${blocked?"locked":""}">
+          <div class="risk ${d.kind==="venue"?"high":d.id==="cold"?"low":"medium"}">${d.kind==="venue"?"SOMEBODY ELSE HOLDS IT":d.id==="cold"?"YOUR KEYS · OFFLINE":"YOUR KEYS · ONLINE"}</div>
+          <h4>${d.name}</h4><p>${d.summary}</p><small>${d.teaches}</small>
+          <button class="action small ${active?"":"primary"}" data-action="payout-destination" data-value="${d.id}" ${active||blocked?"disabled":""} ${blocked?`title="${escapeHtml(blocked)}"`:""}>${active?"Income arrives here":"Send income here"}</button>
+        </article>`}).join("")}</div>
+      <p class="modal-note">${dest.kind==="venue"
+        ? `Your income is currently paid to ${dest.name}, which means it is ready to sell and it is not yours. If that venue fails, it takes the balance and the income stream with it.`
+        : dest.id==="cold"
+        ? "Your income is currently paid into cold storage. It is as safe as your backups are, and it cannot pay a bill this afternoon without a transfer first."
+        : "Your income is currently paid into your hot wallet: spendable immediately, and held by a key that is online to sign."}</p>
+    </div></section>`;
 }

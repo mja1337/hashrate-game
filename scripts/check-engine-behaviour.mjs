@@ -51,7 +51,101 @@ const SITE = (overrides = "") => `
      facility tier feeds connectivity risk, power capacity and rent, so a rule that moved site
      used to quietly change the baseline for every rule after it. */
   state.facility="home";state.region="na";state.facilityUpgradeJob=null;state.relocationJob=null;
+  /* And neither is history. These accumulate across rules and change how a tick behaves:
+     an event already marked seen does not fire again, an alert already queued does not queue,
+     and both change how many draws a day takes from the random stream. A rule that ticks for
+     years therefore used to move the sample every rule after it saw — which is how a
+     connectivity rule started failing because a payout rule was added above it. */
+  state.seen=[];state.hardwareAlerts={seen:[],queue:[],active:null,resumeSpeed:0};
+  state.secondary={stock:{},month:""};state.pendingLosses=[];state.lossResume=false;
+  state.poolAccount={balance:0,frozen:0,threshold:.01,destination:"hot",paidTotal:0,feesPaid:0,payouts:0,lastPayout:0};
   ${overrides}`;
+
+/* ---- MINING INCOME ARRIVES THROUGH CUSTODY ---- */
+
+rule("pool income is held by the pool until it clears the threshold", () => {
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.facility="warehouse";state.region="texas";
+    state.hardware={};state.hardware.s19=60;state.wallets.hot=0;state.wallets.cold=0;
+    state.mode="pool";state.pool="foundry";state.skills=["pool"];
+    state.poolAccount={balance:0,frozen:0,threshold:.01,destination:"hot",paidTotal:0,feesPaid:0,payouts:0,lastPayout:0};
+    state.thermal={temperature:22,orders:[],equipment:{axial:6}};`)}
+    const trace=[];
+    for(let d=0;d<40;d++){tick(true);trace.push({pool:poolAccount().balance,hot:state.wallets.hot,paid:poolAccount().payouts})}
+    return{trace,threshold:poolAccount().threshold,fee:payoutNetworkFee(),
+      totals:{paid:poolAccount().paidTotal,fees:poolAccount().feesPaid,payouts:poolAccount().payouts}}})()`);
+  const earned = r.trace.some(t => t.pool > 0 || t.hot > 0);
+  assert(earned, "the fleet earned nothing over 40 days, so this rule proves nothing");
+  /* The whole point: there is a day on which the miner has been paid nothing and the pool is
+     holding real money. That is the state the game never used to represent. */
+  const holding = r.trace.find(t => t.pool > 0 && t.paid === 0);
+  assert(holding, "income never sat with the pool; it went straight to the wallet as it used to");
+  assert(r.totals.payouts > 0, `no payout was ever made over 40 days at a ${r.threshold} threshold`);
+  assert(r.totals.fees > 0, "payouts cost no network fee, so the threshold trade-off does not exist");
+  /* Every payout crosses the threshold, and the fee comes out of the payment. */
+  const firstPaid = r.trace.findIndex(t => t.paid === 1);
+  assert(firstPaid > 0 && r.trace[firstPaid - 1].pool >= 0, "the first payout did not follow a held balance");
+  assert(r.trace[firstPaid].hot > 0, "a payout was recorded but nothing reached the wallet");
+});
+
+rule("solo mining has no pool balance and no withdrawal fee", () => {
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.facility="warehouse";state.region="texas";
+    state.hardware={};state.hardware.s19=60;state.wallets.hot=0;state.wallets.cold=0;state.mode="solo";
+    state.poolAccount={balance:0,frozen:0,threshold:.01,destination:"hot",paidTotal:0,feesPaid:0,payouts:0,lastPayout:0};
+    state.thermal={temperature:22,orders:[],equipment:{axial:6}};`)}
+    for(let d=0;d<120;d++)tick(true);
+    return{pool:poolAccount().balance,fees:poolAccount().feesPaid,hot:state.wallets.hot,mined:state.mined}})()`);
+  assert(r.mined > 0, "solo mining earned nothing over 120 days, so this rule proves nothing");
+  /* The half of the solo trade-off the game never showed: nobody holds it and nobody charges
+     you to send it. The coinbase pays an address you control. */
+  assert(r.pool === 0, `solo mining accrued ${r.pool} in a pool balance`);
+  assert(r.fees === 0, "solo mining paid a pool withdrawal fee");
+  assert(r.hot > 0, "solo mining income never reached the wallet");
+});
+
+rule("the payout destination decides who is holding the income", () => {
+  const r = json(`(()=>{
+    const run=dest=>{
+      ${SITE(`state.time=at("2021-06-01");state.facility="warehouse";state.region="texas";
+        state.hardware={};state.hardware.s19=60;state.wallets.hot=0;state.wallets.cold=0;
+        state.wallets.exchange=0;state.mode="pool";state.pool="foundry";state.skills=["pool"];
+        state.thermal={temperature:22,orders:[],equipment:{axial:6}};`)}
+      state.poolAccount={balance:0,frozen:0,threshold:.005,destination:dest,paidTotal:0,feesPaid:0,payouts:0,lastPayout:0};
+      for(let d=0;d<60;d++)tick(true);
+      return{hot:state.wallets.hot,cold:state.wallets.cold,exchange:state.wallets.exchange,
+        payouts:poolAccount().payouts};
+    };
+    return{hot:run("hot"),exchange:run("exchange"),
+      coldBlocked:(()=>{${SITE(`state.time=at("2021-06-01");state.custody=blankCustody();`)}
+        return payoutDestinationBlockReason("cold")})()}})()`);
+  assert(r.hot.payouts > 0 && r.hot.hot > 0, "paying to the hot wallet did not reach the hot wallet");
+  assert(r.exchange.payouts > 0 && r.exchange.exchange > 0 && r.exchange.hot === 0,
+    "paying to an exchange put the income somewhere else");
+  /* Cold storage is not a place you can be paid until you have built somewhere to be paid to.
+     This is the moment the custody tab stops being optional. */
+  assert(/custody/i.test(r.coldBlocked),
+    "cold storage can be chosen as a payout destination without a wallet that can receive into it");
+});
+
+rule("a pool that stops paying takes what it was holding", () => {
+  const r = json(`(()=>{${SITE(`state.time=at("2026-07-01");state.facility="warehouse";state.region="texas";
+    state.hardware={};state.hardware.s19=60;state.wallets.hot=0;state.mode="pool";state.pool="poolin";
+    state.skills=["pool"];state.pendingLosses=[];
+    state.poolAccount={balance:0,frozen:0,threshold:.5,destination:"hot",paidTotal:0,feesPaid:0,payouts:0,lastPayout:0};
+    state.thermal={temperature:22,orders:[],equipment:{axial:6}};`)}
+    // A high threshold means a large balance is still on the pool's books when it closes.
+    for(let d=0;d<8;d++)tick(true);
+    const before=poolAccount().balance,hotBefore=state.wallets.hot;
+    for(let d=0;d<20;d++)tick(true);
+    return{before,hotBefore,after:poolAccount().balance,frozen:poolAccount().frozen,
+      mode:state.mode,losses:(state.pendingLosses||[]).map(l=>l.cause)}})()`);
+  assert(r.before > 0, "the pool was holding nothing when it closed, so this rule proves nothing");
+  assert(r.mode === "solo", "the fleet did not fail over when the pool closed");
+  assert(r.after === 0, "the pool kept paying after it shut down");
+  /* What is lost is exactly what the operator chose to leave there — the threshold argument
+     made concrete — and it is reported as a coin loss rather than a log line. */
+  assert(r.frozen > 0 && r.frozen < r.before, `${r.frozen} of ${r.before} survived as a claim; it must be a fraction`);
+  assert(r.losses.includes("poolfail"), "a stranded pool balance was not reported as a loss");
+});
 
 /* ---- CAPACITY GATES THE LOADING BAY, NOT THE TILL ---- */
 
@@ -386,36 +480,43 @@ rule("every connectivity plan is the best choice somewhere", () => {
 });
 
 rule("a failover link's outages are measured in hours, not days", () => {
-  // Measured by running the clock, not by reading the plan table: the table can declare a
-  // failover the tick never applies, and a source match cannot see that gap.
-  //
-  // The assertion is on the LENGTH of each outage rather than on total downtime, because the
-  // two arms consume the random stream differently and so do not see the same incidents.
-  // Comparing aggregate downtime made this rule pass with the failover deleted, purely
-  // because one arm drew fewer outages than the other.
+  /* Measured by running the clock, not by reading the plan table: the table can declare a
+     failover the tick never applies, and a source match cannot see that gap.
+
+     Measured over MANY SHORT RUNS rather than one long one. The connectivity branch only fires
+     on days the grid branch did not, so a single 2,900-day run yielded nought to two outages
+     per arm depending on where the shared random stream happened to be — which meant an
+     unrelated change elsewhere in the tick could decide whether this rule had any evidence at
+     all. It did exactly that when mining income stopped landing in the hot wallet every day:
+     the hot-wallet risk check began short-circuiting, the stream shifted, and this rule lost
+     its sample. Ten independent seeds give it enough outages per arm and a verdict
+     that does not move. */
   const measured = json(`(()=>{
     const out={};
     for(const plan of ["fixed","sim"]){
-      ${SITE(``)}
-      // Kazakhstan from 2018 leaves 2,900 days inside the campaign at a 5.5% monthly fault
-      // rate, so both arms see several incidents even as other systems draw on the same
-      // random stream and shift the sample.
-      state.time=at("2018-06-01");state.facility="warehouse";state.region="kazakhstan";
-      state.hardware={s9:100};state.connectivity=plan;state.seed=12345;state.rng=12345;
-      const spells=[];let days=0;const startedAt=state.time;
-      for(let d=0;d<2900;d++){
-        const before=state.ops.outageUntil;
-        tick();
-        if(state.time>startedAt+days*DAY)days++;
-        if(state.ops.outageUntil&&state.ops.outageUntil!==before&&state.ops.outageUntil>state.time)
-          spells.push((state.ops.outageUntil-state.time)/DAY);
+      const spells=[];let days=0;
+      for(let seed=1;seed<=10;seed++){
+        ${SITE(``)}
+        // A container yard in a jurisdiction with a poor record: the highest connectivity
+        // fault rate the game offers, so both arms actually see incidents.
+        state.time=at("2021-06-01");state.facility="container";state.region="kazakhstan";
+        state.hardware={s19:200};state.connectivity=plan;
+        state.seed=seed*7919;state.rng=seed*7919;
+        const startedAt=state.time;
+        for(let d=0;d<300;d++){
+          const before=state.ops.outageUntil;
+          tick();
+          if(state.ops.outageUntil&&state.ops.outageUntil!==before&&state.ops.outageUntil>state.time)
+            spells.push((state.ops.outageUntil-state.time)/DAY);
+        }
+        days+=(state.time-startedAt)/DAY;
       }
       out[plan]={spells,days};
     }
     return out;})()`);
   for (const plan of ["fixed", "sim"]) {
     assert(measured[plan].days > 2500, `the ${plan} arm only advanced ${measured[plan].days} days, so this rule proves nothing`);
-    assert(measured[plan].spells.length > 1, `the ${plan} arm saw ${measured[plan].spells.length} outages in 2,900 days, so this rule proves nothing`);
+    assert(measured[plan].spells.length >= 4, `the ${plan} arm saw ${measured[plan].spells.length} outages, which is too few to average`);
   }
   // Compared as a ratio of mean duration rather than against a fixed number of days: the
   // base outage length scales with a jurisdiction's fault rate, so in a bad one even a

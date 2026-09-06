@@ -210,6 +210,23 @@ assert(inline.includes('const gridDown=gridCutOff()||!!state.policyLock'),
 assert(inline.includes("if(!placeHardwareOrder(id,qty))state.cash+=cost;") && inline.includes("if(!placeHardwareOrder(id,qty,cost))state.wallets.hot+=cost;"),
   "A purchase path takes payment and ignores whether the order was actually accepted");
 
+/* MINING INCOME ARRIVES THROUGH CUSTODY.
+   Custody was a tab you visited once. The way to teach it is not to explain it — it is to make
+   every day of mining pass through it, which is why the payout card lives on Pools, where the
+   income is earned and where the one custody decision a miner cannot avoid is actually met. */
+assert(inline.includes("function payoutCustodyCard()") && inline.includes("function creditMiningIncome(") && inline.includes("function advancePoolPayouts("),
+  "The payout card, the income router or the payout tick has gone");
+assert(!/state\.wallets\.hot\+=payout/.test(inline) && inline.includes("if(payout>0){creditMiningIncome(payout);"),
+  "Mining income appears in the hot wallet again, so custody stops being part of mining");
+assert(inline.includes('data-action="payout-destination"') && inline.includes('data-action="payout-threshold"'),
+  "The player can no longer choose where income lands or how much the pool holds first");
+assert(inline.includes("THE ONE CUSTODY DECISION A MINER CANNOT AVOID") && inline.includes("SOMEBODY ELSE HOLDS IT"),
+  "The payout card no longer names what a custodial destination actually means");
+/* An estimate is only worth showing while it means something: a stopped fleet must be told so
+   rather than shown a nine-digit countdown. */
+assert(inline.includes("rawDays<=3650") && inline.includes("out of reach at this hash rate"),
+  "The time-to-payout estimate is unguarded, so a stopped fleet reads a meaningless number");
+
 /* RETIRING IS WORK, AND THE PIPELINE RUNS BOTH WAYS.
    Machines on their way out are as much a part of what the floor is doing as machines on their
    way in, and a fleet that is half-retired is a hash rate still falling. */

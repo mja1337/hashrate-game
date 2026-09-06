@@ -41,7 +41,7 @@ function reportCoinLoss(entry){
   if(btc<=0&&!entry.always)return;
   const price=state.time>=MARKET?priceAt(state.time):0;
   lossQueue().push({
-    id:`${entry.cause||"loss"}-${state.time}-${lossQueue().length}`,
+    id:`${entry.cause||"loss"}-${state.time}-${lossQueue().length}`,cause:entry.cause||"loss",
     title:entry.title,kind:entry.kind||"stolen",btc,
     usd:price>0?btc*price:0,quoted:price>0,
     from:entry.from||"self-held keys",
@@ -127,8 +127,18 @@ const VENUE_FAILURES={
 };
 function applyVenueFailure(fx){
   const spec=VENUE_FAILURES[fx];if(!spec)return false;
+  /* If the operator was having their mining income paid straight to this venue, the failure
+     takes the income stream too — the destination has to move, and they should be told rather
+     than discovering it when the next payout vanishes. */
+  const account=typeof poolAccount==="function"?poolAccount():null;
+  const wasDestination=account&&account.destination===spec.wallet;
+  if(wasDestination){account.destination="hot";
+    log("Payout destination reset",`${walletName(spec.wallet)} can no longer receive · mining income now arrives in the hot wallet`,"custody")}
   const held=state.wallets[spec.wallet]||0;
-  if(held<=0)return true;
+  if(held<=0){
+    if(wasDestination&&typeof showToast==="function")showToast("Your payout address just failed",`${walletName(spec.wallet)} is gone, and it was where your mining income was being paid. Income now arrives in your hot wallet until you choose somewhere else.`,"bad","pools");
+    return true;
+  }
   const lost=held*spec.lost,frozen=held*spec.frozen;
   state.wallets[spec.wallet]=Math.max(0,held-lost-frozen);
   if(frozen>0)state.wallets.frozen+=frozen;
@@ -136,7 +146,8 @@ function applyVenueFailure(fx){
   reportCoinLoss({
     title:spec.title,kind:"counterparty",btc:lost,recovered:frozen,cause:fx,
     from:`your ${walletName(spec.wallet)} balance`,
-    what:spec.what,why:spec.why,remedy:spec.remedy,tab:"custody"
+    what:spec.what+(wasDestination?" Your mining income was being paid to this venue; it now arrives in your hot wallet until you choose somewhere else.":""),
+    why:spec.why,remedy:spec.remedy,tab:"custody"
   });
   return true;
 }
