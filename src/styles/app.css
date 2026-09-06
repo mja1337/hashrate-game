@@ -159,6 +159,57 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--orange);outline-off
 .toast-repeated{border-left-width:3px}
 .venue.closing{border-color:#6f5a31}
 .migration-banner{border-color:#3a5f7a}.migration-banner strong{color:var(--blue)}
+/* ---- SKILL TREE LATTICE ---- */
+.tech-tree-card{overflow:hidden}
+.tech-tree-scroll{overflow-x:auto;overflow-y:hidden;padding:4px 12px 14px}
+.tech-tree-lattice{position:relative;display:grid;
+  grid-template-columns:repeat(var(--tech-cols),minmax(112px,1fr));
+  grid-template-rows:repeat(var(--tech-rows),86px);
+  gap:14px 10px;min-width:calc(var(--tech-cols) * 122px);padding-top:26px}
+.tech-branch-heads{position:absolute;top:0;left:0;right:0;display:grid;
+  grid-template-columns:repeat(var(--tech-cols),minmax(112px,1fr));gap:0 10px;pointer-events:none}
+.tech-branch-head{display:flex;justify-content:space-between;gap:8px;padding:0 4px 4px;
+  border-bottom:1px solid var(--line);font:9px var(--mono);letter-spacing:.08em;text-transform:uppercase}
+.tech-branch-head b{color:var(--orange2)}.tech-branch-head span{color:var(--dim)}
+/* One SVG behind the whole lattice: the edges that matter are the ones that cross branches. */
+.tech-wires{position:absolute;inset:26px 0 0 0;width:100%;height:calc(100% - 26px);pointer-events:none;z-index:0}
+/* non-scaling-stroke makes stroke-width a SCREEN measurement, so this is pixels rather than
+   the fractions of a grid cell the viewBox would otherwise imply. At .02 it was sub-pixel and
+   the entire wiring diagram was invisible. */
+.tech-edge{fill:none;stroke:#33454e;stroke-width:1.5;vector-effect:non-scaling-stroke;stroke-linejoin:round}
+.tech-edge.live{stroke:#6d8f9c;stroke-width:2}
+.tech-edge.done{stroke:var(--orange);stroke-width:2.25;opacity:.9}
+.tech-node{position:relative;z-index:1;display:flex;align-items:stretch}
+.tech-node-face{position:relative;display:flex;flex-direction:column;justify-content:center;gap:3px;
+  width:100%;padding:8px 9px;border:1px solid var(--line);background:#0b1113;color:var(--muted);
+  font:inherit;text-align:left;cursor:default}
+.tech-node-face b{color:var(--text);font-size:11px;line-height:1.25}
+.tech-node-cost{font:9px var(--mono);color:var(--dim)}
+.tech-node-mark{position:absolute;top:6px;right:8px;font-style:normal;font:11px var(--mono);color:var(--dim)}
+.tech-unlocked .tech-node-face{border-color:var(--orange);background:#17140d}
+.tech-unlocked .tech-node-mark{color:var(--orange)}
+.tech-ready .tech-node-face{border-color:var(--green);background:#0c1712;cursor:pointer}
+.tech-ready .tech-node-face:hover{background:#102019}
+.tech-ready .tech-node-mark{color:var(--green)}
+.tech-short .tech-node-face{border-color:#6f5a31}
+.tech-locked .tech-node-face{opacity:.5}
+.tech-node-face:focus-visible{outline:2px solid var(--orange);outline-offset:1px}
+/* Detail on demand, so the lattice stays a lattice. */
+.tech-node-detail{position:absolute;left:0;top:calc(100% + 6px);z-index:5;width:230px;padding:10px;
+  border:1px solid var(--line);background:#0c1213;box-shadow:0 8px 22px rgba(0,0,0,.55);
+  opacity:0;visibility:hidden;transition:opacity .12s}
+.tech-node:hover .tech-node-detail,.tech-node:focus-within .tech-node-detail{opacity:1;visibility:visible}
+.tech-node-detail b{display:block;color:var(--text);font-size:11px}
+.tech-node-detail p{margin:4px 0 6px;color:var(--muted);font-size:10px;line-height:1.5}
+.tech-node-detail span{display:block;color:var(--dim);font:9px var(--mono);line-height:1.6}
+.tech-node-detail em{display:block;margin-top:6px;color:var(--orange2);font-style:normal;font:9px var(--mono)}
+.tech-legend{display:flex;gap:14px;flex-wrap:wrap;padding:0 14px 14px;color:var(--dim);font:9px var(--mono)}
+.tech-key{display:inline-block;width:9px;height:9px;margin-right:4px;border:1px solid var(--line);vertical-align:-1px}
+.tech-key.unlocked{border-color:var(--orange);background:#17140d}
+.tech-key.ready{border-color:var(--green);background:#0c1712}
+.tech-key.short{border-color:#6f5a31}
+.tech-key.locked{opacity:.5}
+
 .mine-section:has(.mine-section-badge.halted){border-color:#6f5a31}
 .mine-section-badge.bad{color:var(--orange)}
 /* The active section is filled and flagged, not merely underlined: an underline alone was

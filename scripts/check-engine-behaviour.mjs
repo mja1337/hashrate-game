@@ -65,6 +65,79 @@ const SITE = (overrides = "") => `
   state.poolAccount={balance:0,frozen:0,threshold:.01,destination:"hot",paidTotal:0,feesPaid:0,payouts:0,lastPayout:0};
   ${overrides}`;
 
+/* ---- THE SKILL TREE IS A GRAPH, AND HAS TO BE A VALID ONE ---- */
+
+rule("every skill descends from a foundation, and the graph has no cycles", () => {
+  const r = json(`(()=>{${SITE(`state.skills=[];`)}
+    const byId=Object.fromEntries(SKILLS.map(s=>[s.id,s]));
+    const roots=SKILLS.filter(s=>!skillRequirements(s).length).map(s=>s.id);
+    const dangling=[],cyclic=[],unreachable=[];
+    for(const skill of SKILLS){
+      for(const id of skillRequirements(skill))if(!byId[id])dangling.push(skill.id+"->"+id);
+      /* Collect every ancestor. Visiting a node twice by DIFFERENT paths is convergence, not a
+         cycle — salvage reaching benchskills through both diagnostics and parts sourcing is
+         exactly what makes this a graph — so the visited set only stops the walk repeating
+         work. A cycle is a node that is its own ancestor. */
+      const seen=new Set();let frontier=skillRequirements(skill),depth=0,ok=!frontier.length;
+      while(frontier.length&&depth++<40){
+        const next=[];
+        for(const id of frontier){
+          if(seen.has(id))continue;
+          seen.add(id);
+          const parent=byId[id];if(!parent)continue;
+          const up=skillRequirements(parent);
+          if(!up.length)ok=true;else next.push(...up);
+        }
+        frontier=next;
+      }
+      if(seen.has(skill.id))cyclic.push(skill.id);
+      else if(!ok)unreachable.push(skill.id);
+    }
+    const branches=[...new Set(SKILLS.map(s=>s.branch))];
+    const rootsPerBranch=branches.map(b=>[b,SKILLS.filter(s=>s.branch===b&&!skillRequirements(s).length).length]);
+    const multi=SKILLS.filter(s=>skillRequirements(s).length>1).map(s=>s.id);
+    const crossBranch=SKILLS.filter(s=>skillRequirements(s).some(id=>byId[id]&&byId[id].branch!==s.branch)).map(s=>s.id);
+    return{roots,dangling,cyclic,unreachable,rootsPerBranch,multi,crossBranch,total:SKILLS.length}})()`);
+  assert(r.dangling.length === 0, `prerequisites pointing at nothing: ${r.dangling.join(", ")}`);
+  assert(r.cyclic.length === 0, `these depend on themselves through a cycle: ${r.cyclic.join(", ")}`);
+  assert(r.unreachable.length === 0, `these can never be reached from a foundation: ${r.unreachable.join(", ")}`);
+  /* One entry point per branch. Six independent ladders is not a tree, and neither is a branch
+     with three separate starts you can take in any order. */
+  for (const [branch, count] of r.rootsPerBranch)
+    assert(count === 1, `the ${branch} branch has ${count} foundations; it should have exactly one`);
+  /* And the thing that makes it a graph rather than six ladders: nodes that need two parents,
+     and parents in another branch. Without these, nothing you spend in one branch has ever
+     cost you anything in another. */
+  assert(r.multi.length >= 6, `only ${r.multi.length} skills need more than one prerequisite`);
+  /* Named rather than counted. A threshold passes when any one of them is quietly deleted,
+     which is exactly the regression worth catching: each of these edges is a specific claim
+     about what an operation has to have done before it can do something else. */
+  for (const id of ["immersiontuning","practisedhands","curtailment","standbypower","firmwarehygiene"])
+    assert(r.crossBranch.includes(id), `${id} no longer depends on another branch`);
+});
+
+rule("a skill with two prerequisites needs both of them", () => {
+  const r = json(`(()=>{${SITE(`state.time=at("2024-01-01");state.facility="container";state.points=99;`)}
+    const target=SKILLS.find(s=>skillRequirements(s).length>1);
+    const reqs=skillRequirements(target);
+    // One parent only: still refused, and the refusal names what is missing.
+    state.skills=[reqs[0]];
+    const half={gate:skillGateReason(target),met:skillPrereqsMet(target)};
+    unlockSkill(target.id);
+    const afterHalf=state.skills.includes(target.id);
+    // Both parents: allowed.
+    state.skills=reqs.slice();
+    const full={gate:skillGateReason(target),met:skillPrereqsMet(target)};
+    unlockSkill(target.id);
+    return{id:target.id,reqs,half,afterHalf,full,afterFull:state.skills.includes(target.id),
+      names:reqs.map(skillName)}})()`);
+  assert(r.reqs.length > 1, "no multi-prerequisite skill to test");
+  assert(!r.half.met && r.half.gate !== "", `${r.id} counted one of ${r.reqs.length} prerequisites as enough`);
+  assert(r.half.gate.includes(r.names[1]), `the refusal did not name the missing prerequisite: "${r.half.gate}"`);
+  assert(!r.afterHalf, `${r.id} was unlocked with only half its prerequisites`);
+  assert(r.full.met && r.full.gate === "" && r.afterFull, `${r.id} stayed locked with both prerequisites met`);
+});
+
 /* ---- SOME THINGS ARE MOMENTS, NOT A MENU ---- */
 
 rule("a fork trade and a donation drive close when the moment does", () => {

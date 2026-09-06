@@ -8,7 +8,23 @@ function sandboxContinuationNote(){
 function removeClarkReference(){const kicker=document.querySelector(".content .hero-kicker");if(kicker&&kicker.textContent.includes("Clark Moody"))kicker.textContent="Operator ledger"}
 function enhanceEndModal(){const body=document.querySelector(".leaderboard")?.closest(".modal-body");if(!body||body.querySelector('[data-action="continue-run"]')||state.endReason||state.time<END)return;const actions=body.querySelector(".modal-actions");if(!actions)return;actions.insertAdjacentHTML("beforebegin",sandboxContinuationNote());actions.insertAdjacentHTML("beforeend",`<button class="action" data-action="continue-run">Continue for 100 modelled years</button>`)}
 function enhanceLearn(){const grid=document.querySelector(".content .grid");if(grid&&!grid.querySelector(".tab-command-learn"))grid.insertAdjacentHTML("afterbegin",tabCommandVisual("learn"))}
-function enhanceTech(){const grid=document.querySelector(".content .grid");if(grid&&!grid.querySelector(".tab-command-tech"))grid.insertAdjacentHTML("afterbegin",tabCommandVisual("tech"))}
+/* The lattice is wider than the page, so it has its own horizontal scroll — and a repaint
+   rebuilds it, which puts the player back at Compute every time a fault toast lands. At 16x
+   that is several times a second. Remembered here and restored after the rebuild, the same
+   problem and the same answer as the purchase quantity. */
+let techScrollLeft=0;
+function rememberTechScroll(node){
+  if(!node)return;
+  node.addEventListener("scroll",()=>{techScrollLeft=node.scrollLeft},{passive:true});
+}
+function enhanceTech(){
+  const grid=document.querySelector(".content .grid");
+  if(grid&&!grid.querySelector(".tab-command-tech"))grid.insertAdjacentHTML("afterbegin",tabCommandVisual("tech"));
+  const lattice=document.querySelector(".tech-tree-scroll");
+  if(!lattice)return;
+  if(techScrollLeft)lattice.scrollLeft=techScrollLeft;
+  rememberTechScroll(lattice);
+}
 const PAGE_HELP={
   mine:{anchor:"method-hardware",label:"mining hardware",terms:[["Hash rate","How much mining work a machine performs each second. More hash improves its chance of earning a reward."],["Power draw","The electricity a machine uses while running, measured here in watts or kilowatts."],["Efficiency (J/TH)","Energy used for each unit of mining work. Lower is better."]]},
   pools:{anchor:"method-mining",label:"solo and pool rewards",terms:[["Reward variance","How unevenly rewards arrive. Solo results can swing widely; a pool makes them steadier."],["Pool fee","The share a pool keeps before paying miners."],["Payout scheme","The rule a pool uses to turn submitted work into payments, such as FPPS or PPLNS."]]},

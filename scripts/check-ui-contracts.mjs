@@ -210,6 +210,32 @@ assert(inline.includes('const gridDown=gridCutOff()||!!state.policyLock'),
 assert(inline.includes("if(!placeHardwareOrder(id,qty))state.cash+=cost;") && inline.includes("if(!placeHardwareOrder(id,qty,cost))state.wallets.hot+=cost;"),
   "A purchase path takes payment and ignores whether the order was actually accepted");
 
+/* THE SKILL TREE IS DRAWN AS A TREE.
+   Six branches were six lists of cards, each saying "Tier 3" where 3 was its index in an
+   array rather than its depth in anything. The layout is computed from the dependencies now —
+   a row is one past the deepest prerequisite, a column is a slot in its branch — so adding a
+   skill or an edge moves the drawing on its own and there is no second copy of the structure
+   here to fall out of step with the data. */
+const techArt = await readFile(new URL("src/ui/tabs/tech.js", root), "utf8");
+assert(techArt.includes("function techLayout()") && techArt.includes("function skillTier(") && techArt.includes("function techTreeSvg("),
+  "The computed lattice, its depth function or its connectors have gone");
+assert(/const tier=skillTier\(skill\)/.test(techArt) && /row:tier-1/.test(techArt) && !/Tier \$\{index\+1\}/.test(techArt),
+  "A node's row is no longer its dependency depth, so nodes can be drawn above what they depend on");
+assert(techArt.includes('viewBox="0 0 ${cols} ${rows}"') && techArt.includes("preserveAspectRatio=\"none\""),
+  "The connector layer no longer shares the lattice's coordinate system, so wires will not meet nodes");
+/* One SVG behind the whole lattice, because the edges worth drawing are the ones that cross
+   branches; a per-branch SVG cannot draw those. */
+assert(css.includes(".tech-wires{position:absolute") && css.includes(".tech-edge{fill:none"),
+  "The connector layer is not drawn behind the lattice");
+assert(/\.tech-edge\{[^}]*stroke-width:1\.5/.test(css),
+  "The connector stroke is back to a viewBox fraction under non-scaling-stroke, which renders sub-pixel and invisible");
+assert(!inline.includes("function techV2(){") || techArt.includes("function techV2(){"),
+  "Two tech renderers exist again; only one can be the live one");
+/* And the lattice is wider than the page, so a repaint must not send the player back to
+   Compute every time a fault toast lands. */
+assert(inline.includes("let techScrollLeft=0") && inline.includes("if(techScrollLeft)lattice.scrollLeft=techScrollLeft"),
+  "The skill tree's horizontal scroll resets on every repaint again");
+
 /* A MIGRATION IS A SITE-WIDE STOPPAGE AND MUST BE BANNERED LIKE ONE.
    A grid outage got a banner; a relocation did not — yet it powers down every machine for
    days. From Market or Custody the only evidence was 0 H/s in the header with no explanation.

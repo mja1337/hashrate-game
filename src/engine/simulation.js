@@ -177,7 +177,32 @@ function facilityTier(s=state){const tier=FACILITIES.findIndex(x=>x.id===s.facil
 function outageDays(days,s=state){return Math.max(1,Math.round(days*(s.skills?.includes("runbook")?.75:1)))}
 /* A generator carries the first two days. An outage that short never reaches the fleet. */
 function gridOutageDays(days,s=state){return Math.max(0,outageDays(days,s)-(s.skills?.includes("standbypower")?2:0))}
-function skillGateReason(skill){if(skill.req&&!hasSkill(skill.req))return`Requires ${SKILLS.find(x=>x.id===skill.req)?.name||skill.req}`;if(skill.date&&state.time<at(skill.date))return`Unlocks ${dateFmt(at(skill.date),true)}`;if(skill.minFacility&&facilityTier()<skill.minFacility)return`Requires ${FACILITIES[skill.minFacility-1]?.name||`tier ${skill.minFacility} facility`}`;return""}
+/* A SKILL CAN DEPEND ON MORE THAN ONE THING.
+
+   Six independent ladders is not a tree, it is six lists drawn side by side, and it makes the
+   only interesting question — what do I give up to reach that — into no question at all,
+   because nothing in one branch has ever cost you anything in another. A prerequisite is
+   therefore a string OR a list, and the interesting nodes take two: immersion tuning needs the
+   clocking work AND the liquid-cooling competence; practised hands need the parts pipeline AND
+   a service desk to have practised on; firmware hygiene needs to know what custom firmware IS
+   before it can be kept clean.
+
+   Everything that reads a prerequisite goes through skillRequirements, so a single-string
+   entry and a two-entry list cannot drift apart. */
+function skillRequirements(skill){
+  if(!skill||!skill.req)return[];
+  return Array.isArray(skill.req)?skill.req.slice():[skill.req];
+}
+function skillName(id){return SKILLS.find(x=>x.id===id)?.name||id}
+function skillPrereqsMet(skill,s=state){return skillRequirements(skill).every(id=>(s.skills||[]).includes(id))}
+function skillGateReason(skill){
+  const missing=skillRequirements(skill).filter(id=>!hasSkill(id));
+  if(missing.length)return`Requires ${missing.map(skillName).join(" and ")}`;
+  if(skill.date&&state.time<at(skill.date))return`Unlocks ${dateFmt(at(skill.date),true)}`;
+  if(skill.minFacility&&facilityTier()<skill.minFacility)return`Requires ${FACILITIES[skill.minFacility-1]?.name||`tier ${skill.minFacility} facility`}`;
+  return"";
+}
+
 function staffHiringAvailable(s=state){return facilityTier(s)>=3}
 function maintenanceCondition(h,s=state){const value=Number(s.maintenance?.condition?.[h.id]);return Number.isFinite(value)?Math.max(0,Math.min(100,value)):100}
 function hardwareFaultBreakdown(h,s=state){
