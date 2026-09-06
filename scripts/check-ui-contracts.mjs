@@ -210,6 +210,20 @@ assert(inline.includes('const gridDown=gridCutOff()||!!state.policyLock'),
 assert(inline.includes("if(!placeHardwareOrder(id,qty))state.cash+=cost;") && inline.includes("if(!placeHardwareOrder(id,qty,cost))state.wallets.hot+=cost;"),
   "A purchase path takes payment and ignores whether the order was actually accepted");
 
+/* A MIGRATION IS A SITE-WIDE STOPPAGE AND MUST BE BANNERED LIKE ONE.
+   A grid outage got a banner; a relocation did not — yet it powers down every machine for
+   days. From Market or Custody the only evidence was 0 H/s in the header with no explanation.
+   It is a sibling of the incident banner and belongs beside it, in the strip and in the
+   signature that decides when the strip is rebuilt. */
+assert(inline.includes("function migrationStatus()") && inline.includes("migrationBanner"),
+  "A fleet in transit is invisible outside the Facilities tab again");
+assert(/migration\?`\$\{migration\.kind\}:\$\{migration\.due\}`:""/.test(inline),
+  "The migration is not part of the banner signature, so the strip will not repaint when it starts or ends");
+assert(inline.includes("${banner}${migrationBanner}${incidentBanner}"),
+  "The migration banner is not drawn in the banner strip");
+assert(inline.includes("keep accruing while nothing is hashing"),
+  "The migration banner no longer says the costs continue while the income stops, which is the point of it");
+
 /* A CHOSEN QUANTITY MUST SURVIVE A REPAINT. The buy controls are rebuilt from scratch by every
    full render, and mine() was calling them without the selection — so a toast arriving while
    the player was choosing snapped it back to one. Pressing Buy having already chosen forty is
