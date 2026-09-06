@@ -210,6 +210,28 @@ assert(inline.includes('const gridDown=gridCutOff()||!!state.policyLock'),
 assert(inline.includes("if(!placeHardwareOrder(id,qty))state.cash+=cost;") && inline.includes("if(!placeHardwareOrder(id,qty,cost))state.wallets.hot+=cost;"),
   "A purchase path takes payment and ignores whether the order was actually accepted");
 
+/* A CHOSEN QUANTITY MUST SURVIVE A REPAINT. The buy controls are rebuilt from scratch by every
+   full render, and mine() was calling them without the selection — so a toast arriving while
+   the player was choosing snapped it back to one. Pressing Buy having already chosen forty is
+   worse than useless. */
+assert(inline.includes("hardwarePurchaseChoice={}") && inline.includes("hardwarePurchaseChoice[h.id]={qty,currency}"),
+  "The chosen purchase quantity is no longer remembered when it is chosen");
+assert(inline.includes('hardwarePurchaseChoice[h.id]?.qty||1,hardwarePurchaseChoice[h.id]?.currency||"usd"'),
+  "The Mine tab rebuilds the buy controls without the quantity the player chose, resetting it to 1");
+
+/* WHEN THE SAME THING KEEPS HAPPENING, PING LESS. A fleet of five thousand machines breaks
+   constantly, and every fault raised its own toast: each replaced the last, restarted the
+   timer, and re-fired the screen flash. A notice was on screen at all times, none stayed long
+   enough to read, and the flash stopped meaning anything. */
+assert(inline.includes("const TOAST_COALESCE_MS=") && inline.includes("toastRepeats=repeat?toastRepeats+1:0"),
+  "Repeated notices no longer fold together");
+assert(inline.includes('if(kind==="bad"&&state.started&&!repeat)triggerImpactEffect()'),
+  "The impact flash fires on every repeat again, so it marks fleet size rather than trouble");
+assert(inline.includes("function toastLife()") && /TOAST_BASE_MS\+toastRepeats\*/.test(inline),
+  "A folded notice is not given longer on screen, so a burst is still unreadable");
+assert(inline.includes("more like it just now"),
+  "A folded notice does not say how many it stands for, so folding looks like dropped messages");
+
 /* SPENDING FROM COLD IS AN ACT, NOT A CLICK. Cold storage protects coins by making them hard
    to spend, which necessarily includes hard for their owner. A transfer that completes the
    instant it is clicked teaches that cold storage is free safety, which would make choosing

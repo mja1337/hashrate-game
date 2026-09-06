@@ -117,6 +117,10 @@ document.getElementById("app").addEventListener("change",e=>{
     const currency=currencySel.value==="btc"?"btc":"usd",maxQty=Math.max(0,Math.floor(Number(currency==="btc"?wrap.dataset.maxBtc:wrap.dataset.maxFiat)||0));
     if(e.target===currencySel){const options=hardwareQuantityOptions(maxQty);qtySel.innerHTML=options.map(o=>`<option value="${o.qty}">${o.label}</option>`).join("");qtySel.disabled=maxQty<1}
     const qty=Math.max(1,Math.floor(Number(qtySel.value)||1)),unitBtc=hardwareUnitCost(h)/Math.max(1e-9,priceAt(state.time)),costLabel=currency==="btc"?fmtCompactBtc(unitBtc*qty):fmtCompactUsd(hardwareUnitCost(h)*qty);
+    /* Remembered, because a repaint rebuilds this control from scratch. A toast arriving while
+       the player is choosing a quantity used to snap it back to one, which is worse than
+       useless: they press Buy having already chosen forty. */
+    hardwarePurchaseChoice[h.id]={qty,currency};
     btn.dataset.action=currency==="btc"?"buy-hw-btc":"buy-hw";btn.dataset.value=String(qty);btn.disabled=maxQty<1;btn.textContent=`Buy ${fmtCompactNumber(qty)} · ${costLabel}`;
     return;
   }
