@@ -236,6 +236,36 @@ assert(!inline.includes("function techV2(){") || techArt.includes("function tech
 assert(inline.includes("let techScrollLeft=0") && inline.includes("if(techScrollLeft)lattice.scrollLeft=techScrollLeft"),
   "The skill tree's horizontal scroll resets on every repaint again");
 
+/* A BULK PARTS ORDER IS CONFIRMED; A SINGLE FAN IS NOT.
+   Five hundred hashboards is a five-figure commitment against a lead time, which is the kind of
+   spend the rest of the game already stops to confirm. It is its own action rather than a
+   quantity on the ordinary one, so ordering one fan stays one click. */
+assert(inline.includes('"order-parts-bulk"') && /CONFIRMABLE_ACTIONS=new Set\(\[[^\]]*order-parts-bulk/.test(inline),
+  "The bulk parts order no longer goes through the confirmation ticket");
+assert(inline.includes('data-action="order-parts-bulk"') && inline.includes('data-value="500"'),
+  "The Order 500 control is gone from the spare parts card");
+assert(inline.includes('if(transaction.action==="order-parts-bulk")orderParts(transaction.id,transaction.qty)'),
+  "Confirming a bulk parts order does not actually place it");
+/* Two counts a player reads constantly and had to squint at. */
+assert(inline.includes('<div class="part-stock"><b>${fmtNum(state.maintenance.inventory[part.id]||0)}</b>') && css.includes(".part-stock b{"),
+  "Spare part stock is back to a small badge rather than a figure you can read at a glance");
+assert(inline.includes("<b>${fmtNum(owned)}</b> installed") && css.includes(".owned-count b{"),
+  "The installed count on a hardware card is no longer prominent");
+
+/* WHAT THE SITE IS DRAWING, AS A PICTURE. The numbers were spread across a metric tile and a
+   footnote, so working out the headroom meant arithmetic — and the split that matters was
+   invisible. A site at 80% load is a different proposition depending on whether cooling is a
+   tenth of that or a third: one you fix with a better chiller, the other with fewer miners. */
+const powerArt = await readFile(new URL("src/ui/enhance/mine-power.js", root), "utf8");
+assert(powerArt.includes("function powerLoadCard()") && inline.includes("metrics+powerLoadCard()+body"),
+  "The electrical load card is gone from the Mine tab");
+assert(powerArt.includes('class="power-seg miners"') && powerArt.includes('class="power-seg cooling"'),
+  "The load bar no longer separates machine draw from cooling plant draw");
+assert(powerArt.includes('class="power-peak') && /Peak is what has to fit/.test(powerArt),
+  "The peak marker is gone; peak is what has to fit, not today's draw");
+assert(css.includes(".power-bar{position:relative") && css.includes(".power-seg.cooling{"),
+  "The load bar has no styling to separate its segments");
+
 /* A MIGRATION IS A SITE-WIDE STOPPAGE AND MUST BE BANNERED LIKE ONE.
    A grid outage got a banner; a relocation did not — yet it powers down every machine for
    days. From Market or Custody the only evidence was 0 H/s in the header with no explanation.

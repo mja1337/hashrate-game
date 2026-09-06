@@ -160,6 +160,32 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--orange);outline-off
 .venue.closing{border-color:#6f5a31}
 .migration-banner{border-color:#3a5f7a}.migration-banner strong{color:var(--blue)}
 .overcapacity-banner{border-color:var(--red)}.overcapacity-banner strong{color:var(--red)}
+.part-stock{display:flex;align-items:baseline;gap:6px;margin:2px 0 6px}
+.part-stock b{font:600 22px var(--mono);line-height:1;color:var(--text)}
+.part-stock span{color:var(--dim);font:9px var(--mono);text-transform:uppercase;letter-spacing:.08em}
+.owned-count.has-fleet{color:var(--muted)}
+.owned-count b{font:600 15px var(--mono);color:var(--orange2);margin-right:2px}
+/* ---- ELECTRICAL LOAD ---- */
+.power-card .meta.cool{color:var(--green)}.power-card .meta.warm{color:var(--orange2)}
+.power-card .meta.hot{color:var(--orange)}.power-card .meta.critical{color:var(--red)}
+.power-bar{position:relative;display:flex;height:26px;border:1px solid var(--line);background:#0a0f10;overflow:hidden}
+.power-seg{display:block;height:100%;transition:width .25s}
+.power-seg.miners{background:linear-gradient(180deg,#f7a13d,#c97d24)}
+.power-seg.cooling{background:linear-gradient(180deg,#68bafa,#3f83b8)}
+.power-peak{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--edge);box-shadow:0 0 0 1px #0a0f10}
+.power-peak.over{background:var(--red);width:3px}
+.power-split{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:12px 0 4px}
+.power-split>div{display:grid;grid-template-columns:auto 1fr;grid-template-areas:"key label" "val val" "sub sub";gap:2px 6px;padding:8px 10px;background:#0c1213;border:1px solid var(--line)}
+.power-key{grid-area:key;width:9px;height:9px;align-self:center;border:1px solid var(--line)}
+.power-key.miners{background:#f7a13d;border-color:#f7a13d}
+.power-key.cooling{background:#68bafa;border-color:#68bafa}
+.power-key.free{background:#0a0f10}
+.power-key.peak{background:var(--edge);border-color:var(--edge)}
+.power-split span{grid-area:label;color:var(--dim);font:9px var(--mono);text-transform:uppercase;letter-spacing:.06em;align-self:center}
+.power-split strong{grid-area:val;font:600 17px var(--mono);color:var(--text)}
+.power-split strong.down{color:var(--red)}
+.power-split small{grid-area:sub;color:var(--muted);font:9px var(--mono)}
+
 /* ---- SKILL TREE LATTICE ---- */
 .tech-tree-card{overflow:hidden}
 .tech-tree-scroll{overflow-x:auto;overflow-y:hidden;padding:4px 12px 14px}

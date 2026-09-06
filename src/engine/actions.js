@@ -512,9 +512,27 @@ function transfer(from,to,fraction){
   if(from==="cold")return beginColdSpend(to,gross,fee);
   state.wallets[from]-=gross;state.wallets[to]+=btc;log(`Moved BTC: ${walletName(from)} → ${walletName(to)}`,`${fmtBtc(gross)} sent · -${fmtBtc(fee)} fee`);showToast("BTC transfer complete",`${fmtBtc(btc)} reached ${walletName(to)} after a ${fmtBtc(fee)} network fee.`,"info","custody");save();render();
 }
-const CONFIRMABLE_ACTIONS=new Set(["buy-btc","sell-btc","buy-hw","buy-hw-btc","sell-hw","sell-hw-btc","buy-strategy","sell-strategy","buy-node","buy-backup-node"]);
+/* A bulk parts order is its own action rather than a quantity on the ordinary one, so that
+   ordering a single fan stays a single click and ordering five hundred does not. Five hundred
+   hashboards is a five-figure commitment against a lead time — the kind of spend the rest of
+   the game already stops to confirm. */
+const CONFIRMABLE_ACTIONS=new Set(["buy-btc","sell-btc","buy-hw","buy-hw-btc","sell-hw","sell-hw-btc","buy-strategy","sell-strategy","buy-node","buy-backup-node","order-parts-bulk"]);
 function transactionPreview(button){
   const action=button.dataset.action,id=button.dataset.id||null,base={action,id,from:button.dataset.from||null,to:button.dataset.to||null,resumeSpeed:state.speed,quoteTime:state.time};
+  if(action==="order-parts-bulk"){
+    const part=sparePart(id);if(!part)return null;
+    const qty=Math.max(1,Math.floor(Number(button.dataset.value)||1));
+    const unit=sparePartCost(part),cost=unit*qty,lead=partsLeadDays();
+    const have=state.maintenance.inventory[part.id]||0;
+    const onOrder=state.maintenance.orders.filter(o=>(o.type||"fan")===part.id).reduce((sum,o)=>sum+o.qty,0);
+    if(state.cash<cost){showToast("Not enough cash",`${fmtNum(qty)} ${part.name}${qty===1?"":"s"} cost ${fmtUsd(cost)}; you have ${fmtUsd(state.cash)}.`);return null}
+    return{...base,qty,title:`Review bulk parts order · ${part.name}`,kicker:`Bulk order · ${lead}-day lead · quote locked`,
+      give:fmtUsd(cost),giveSub:`${fmtNum(qty)} × ${fmtUsd(unit)} · ${formatPercent(cost/Math.max(1,state.cash)*100)} of liquid cash`,
+      receive:`${fmtNum(qty)} ${part.name}${qty===1?"":"s"}`,receiveSub:`Arrives ${dateFmt(state.time+lead*DAY)} · ${have} in stock now${onOrder?` · ${fmtNum(onOrder)} already on order`:""}`,
+      reference:`${fmtUsd(unit)} each`,fees:`${lead}-day lead time`,
+      after:`${fmtNum(have+onOrder+qty)} on hand or inbound · ${fmtUsd(state.cash-cost)} cash left`,
+      confirmLabel:`Order ${fmtNum(qty)} · ${fmtUsd(cost)}`};
+  }
   if(action==="buy-btc"){
     if(state.time<MARKET)return null;const fraction=actionFraction(button),usd=state.cash*fraction,feeRate=venueTradeFee(id),price=priceAt(state.time);if(usd<1){showToast("Order too small","Increase the selected percentage so the buy order is at least $1.");return null}const isEtf=id==="etf",impact=isEtf?0:tradeImpact(usd,-1),btc=usd*(1-feeRate)/(price*(1+impact));
     return{...base,fraction,title:isEtf?"Review ETF purchase":`Review bitcoin purchase · ${walletName(id)}`,kicker:"Market buy · quote locked",give:fmtUsd(usd),giveSub:`${formatPercent(fraction*100)}% of ${fmtUsd(state.cash)} liquid cash`,receive:isEtf?`${fmtBtc(btc)} equivalent exposure`:fmtBtc(btc),receiveSub:isEtf?"Brokerage exposure · not withdrawable BTC":`Credited to ${walletName(id)}`,reference:`${fmtUsd(price)} per BTC`,fees:`${fmtUsd(usd*feeRate)} · ${(feeRate*100).toFixed(2)}%`,depth:impact>=.001?`${impactNote(impact)} · fills above the quote`:"",after:`${fmtUsd(state.cash-usd)} cash · ${fmtBtc(state.wallets[id]+btc)} position`,confirmLabel:"Confirm buy",confirmClass:"primary"}
@@ -554,7 +572,7 @@ function restoreTransactionSpeed(transaction){state.speed=transaction?.resumeSpe
 function cancelTransactionConfirmation(){const transaction=pendingTransaction;pendingTransaction=null;restoreTransactionSpeed(transaction);render()}
 function confirmTransaction(){
   const transaction=pendingTransaction;if(!transaction)return;pendingTransaction=null;restoreTransactionSpeed(transaction);
-  if(transaction.action==="buy-btc")buyBtc(transaction.id,transaction.fraction);else if(transaction.action==="sell-btc")sellBtc(transaction.id,transaction.fraction);else if(transaction.action==="buy-hw")buyHardware(transaction.id,transaction.requested);else if(transaction.action==="buy-hw-btc")buyHardwareBtc(transaction.id,transaction.requested);else if(transaction.action==="sell-hw")sellHardware(transaction.id,transaction.requested);else if(transaction.action==="sell-hw-btc")sellHardwareBtc(transaction.id,transaction.requested);else if(transaction.action==="buy-strategy")buyStrategy(transaction.id,transaction.fraction);else if(transaction.action==="sell-strategy")sellStrategy(transaction.id,transaction.fraction);else if(transaction.action==="buy-node")buyNode(transaction.requested);else if(transaction.action==="buy-backup-node")buyBackupNode();
+  if(transaction.action==="order-parts-bulk")orderParts(transaction.id,transaction.qty);else if(transaction.action==="buy-btc")buyBtc(transaction.id,transaction.fraction);else if(transaction.action==="sell-btc")sellBtc(transaction.id,transaction.fraction);else if(transaction.action==="buy-hw")buyHardware(transaction.id,transaction.requested);else if(transaction.action==="buy-hw-btc")buyHardwareBtc(transaction.id,transaction.requested);else if(transaction.action==="sell-hw")sellHardware(transaction.id,transaction.requested);else if(transaction.action==="sell-hw-btc")sellHardwareBtc(transaction.id,transaction.requested);else if(transaction.action==="buy-strategy")buyStrategy(transaction.id,transaction.fraction);else if(transaction.action==="sell-strategy")sellStrategy(transaction.id,transaction.fraction);else if(transaction.action==="buy-node")buyNode(transaction.requested);else if(transaction.action==="buy-backup-node")buyBackupNode();
   if(document.querySelector('[data-action="confirm-transaction"]'))render();
 }
 function unlockSkill(id){
