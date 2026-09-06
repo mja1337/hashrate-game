@@ -203,6 +203,13 @@ assert(/reason:status==="paused"\?\(siteReason\|\|"manual"\)/.test(inline),
 assert(inline.includes('const gridDown=gridCutOff()||!!state.policyLock'),
   "A grid disconnection is not told apart from a machine somebody switched off");
 
+/* An order that can be refused must not be an order that was already paid for. placeHardwareOrder
+   reports whether the order stood, and every path that took money before calling it puts the
+   money back when it did not. This is the half a behavioural test cannot reach, because the buy
+   paths clamp to the listing before they ever get there. */
+assert(inline.includes("if(!placeHardwareOrder(id,qty))state.cash+=cost;") && inline.includes("if(!placeHardwareOrder(id,qty,cost))state.wallets.hot+=cost;"),
+  "A purchase path takes payment and ignores whether the order was actually accepted");
+
 /* RETIRING IS WORK, AND THE PIPELINE RUNS BOTH WAYS.
    Machines on their way out are as much a part of what the floor is doing as machines on their
    way in, and a fleet that is half-retired is a hash rate still falling. */

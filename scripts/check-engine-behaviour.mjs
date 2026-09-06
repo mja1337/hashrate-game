@@ -53,6 +53,81 @@ const SITE = (overrides = "") => `
   state.facility="home";state.region="na";state.facilityUpgradeJob=null;state.relocationJob=null;
   ${overrides}`;
 
+/* ---- CAPACITY GATES THE LOADING BAY, NOT THE TILL ---- */
+
+rule("a fleet can be bought beyond the room, and the room takes what it can", () => {
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.facility="workshop";state.region="texas";
+    state.cash=5e6;state.hardware={};state.hardware.s19=20;state.poweredDownHardware={};
+    state.decommissionedHardware={};state.inactiveHardware={};state.procurementOrders=[];
+    state.commissioningJobs=[];state.retirementJobs=[];state.stagedCondition={};
+    state.thermal={temperature:22,orders:[],equipment:{axial:1}};`)}
+    const h=HARDWARE.find(x=>x.id==="s19");
+    const headroom=siteRackHeadroom(h);
+    const offered=hardwarePurchaseLimits(h).fiatMax;
+    buyHardware("s19",60);
+    const ordered=state.procurementOrders.reduce((a,o)=>a+o.qty,0);
+    state.procurementOrders.forEach(o=>{o.due=state.time;o.risk=0;o.partialRisk=0});
+    tick(true);
+    const arrival={staged:state.inactiveHardware.s19||0,job:(state.commissioningJobs[0]||{}).qty||0,
+      installed:state.hardware.s19,hold:stagedHoldReason("s19")};
+    // Free real capacity and let the crew work: the rest must go in without being asked.
+    decommissionHardware("s19",20);
+    const days=state.retirementJobs[0].days;
+    for(let d=0;d<days+8;d++)tick(true);
+    return{headroom,offered,ordered,arrival,
+      end:{staged:state.inactiveHardware.s19||0,installed:state.hardware.s19,
+        stored:state.decommissionedHardware.s19||0}}})()`);
+  assert(r.headroom > 0 && r.headroom < 60, `the site had headroom for ${r.headroom}; the case needs it to be short of the order`);
+  /* The card has to offer it too, or the engine allows something the player can never ask for. */
+  assert(r.offered > r.headroom,
+    `the card offered ${r.offered} against room for ${r.headroom}; capacity is still clamping what may be bought`);
+  assert(r.ordered === 60, `buying 60 against headroom for ${r.headroom} was cut to ${r.ordered}; capacity must not gate the purchase`);
+  /* What fits is taken without being asked, and what does not fit waits rather than being
+     refused. The old behaviour rejected the whole batch because one machine did not fit. */
+  assert(r.arrival.job === r.headroom, `the site accepted ${r.arrival.job} of a delivery it had room for ${r.headroom} of`);
+  assert(r.arrival.staged === 60 - r.headroom, `${r.arrival.staged} were left in storage; expected ${60 - r.headroom}`);
+  assert(/storage/i.test(r.arrival.hold), "nothing explains why the rest of a paid-for delivery is still in its crate");
+  /* And the room opening later is enough on its own. Nobody should have to come back and press
+     a button to accept hardware they have already paid for. */
+  assert(r.end.staged === 0, `${r.end.staged} machines were still in storage after capacity freed up`);
+  assert(r.end.installed === 60 && r.end.stored === 20,
+    `ended with ${r.end.installed} racked and ${r.end.stored} stored; expected 60 and 20`);
+});
+
+rule("the manual commission button racks what fits instead of refusing the batch", () => {
+  /* The auto-intake and the button are two paths to the same decision, and the button was the
+     one that used to reject a whole delivery because one machine did not fit. */
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.facility="workshop";state.region="texas";
+    state.hardware={};state.hardware.s19=20;state.inactiveHardware={s19:60};state.stagedCondition={};
+    state.commissioningJobs=[];state.procurementOrders=[];state.retirementJobs=[];
+    state.thermal={temperature:22,orders:[],equipment:{axial:1}};`)}
+    const h=HARDWARE.find(x=>x.id==="s19");
+    const headroom=siteRackHeadroom(h);
+    activateHardware("s19");
+    return{headroom,job:(state.commissioningJobs[0]||{}).qty||0,staged:state.inactiveHardware.s19||0}})()`);
+  assert(r.headroom > 0 && r.headroom < 60, "the case needs a site with room for some but not all");
+  assert(r.job === r.headroom, `the button commissioned ${r.job} of the ${r.headroom} that fit`);
+  assert(r.staged === 60 - r.headroom, `${r.staged} left in storage; expected ${60 - r.headroom}`);
+});
+
+rule("a refused order returns the money and the listing", () => {
+  /* Ordering used to be capacity-checked before payment, so the one path that can still refuse
+     an order — a second-hand listing that is not deep enough — was free to take the cash and
+     return silently. It is not free any more. */
+  const r = json(`(()=>{${SITE(`state.time=at("2019-06-01");state.facility="warehouse";state.region="texas";
+    state.cash=5e6;state.hardware={};state.inactiveHardware={};state.procurementOrders=[];`)}
+    advanceSecondaryMarket(state.time);
+    const listed=secondaryStock("s9");
+    /* Reached directly, because the buy path clamps to the listing before it gets here — this
+       is the belt-and-braces case, and a defence nobody exercises is a defence nobody has. */
+    const stood=placeHardwareOrder("s9",listed+50);
+    return{listed,stood,stillListed:secondaryStock("s9"),orders:state.procurementOrders.length}})()`);
+  assert(r.listed > 0, "no second-hand stock to test against");
+  assert(r.stood === false, "an order deeper than the listing was accepted anyway");
+  assert(r.stillListed === r.listed, `a refused order consumed ${r.listed - r.stillListed} of the listing it could not fill`);
+  assert(r.orders === 0, "a refused order was still added to the book");
+});
+
 /* ---- A PLANT YOU CAN BUY IS A PLANT YOU CAN LEAVE ---- */
 
 rule("cooling can be cancelled before it lands and sold after it does", () => {
@@ -1081,8 +1156,11 @@ rule("what the hardware card offers is what the purchase actually allows", () =>
       // The shared site setup does not clear these, and orders carry between cases.
       state.procurementOrders=[];state.inactiveHardware={};state.time=at(when);
       const id=Object.keys(fleetShape)[0],h=HARDWARE.find(x=>x.id===id);
+      /* Ask for exactly what the card says is available. Requesting an arbitrary huge number
+         only matched the offer back when capacity clamped both to the same figure; now that
+         capacity gates the intake instead, the offer is what the card must honour. */
       const offered=hardwarePurchaseLimits(h).fiatMax;
-      buyHardware(id,100000);
+      buyHardware(id,offered);
       const allowed=state.procurementOrders.reduce((sum,o)=>sum+o.qty,0);
       out.push({facility,id,overdrive,offered,allowed});
     }

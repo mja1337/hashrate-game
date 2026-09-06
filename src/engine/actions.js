@@ -32,64 +32,78 @@ function hardwarePeakWatts(h,s=state){
   return Math.max(1,h.w)*(s.skills?.includes("undervolt")?.95:1)*(s.overdrive?1.25:1);
 }
 function hardwarePurchaseLimits(h){
-  const reserved=plannedFleetProjection(),cost=Math.max(.000001,hardwareUnitCost(h)),freeWatts=Math.max(0,(reserved.cap-reserved.potentialKw)*1000),freeSpace=Math.max(0,facility().space-reserved.space),cashMax=Math.max(0,Math.floor(state.cash/cost)),powerMax=Math.max(0,Math.floor(freeWatts/Math.max(1,hardwarePeakWatts(h)))),spaceMax=Math.max(0,Math.floor(freeSpace/Math.max(1,h.space))),supplyMax=hardwareSupplyLimit(h),siteMax=Math.min(powerMax,spaceMax,supplyMax),fiatMax=Math.min(cashMax,siteMax),marketOpen=state.time>=MARKET,hotBtcMax=marketOpen?Math.max(0,Math.floor(state.wallets.hot/(cost/priceAt(state.time)))):0;
+/* Free capacity is measured against the INSTALLED fleet. It used to be measured against a
+     projection that counted every outstanding order and every staged crate as already racked,
+     which made sense while ordering was capacity-gated and is exactly wrong now: an order in
+     transit that holds capacity hostage is what would stop crates already in the warehouse
+     from ever going in. The projection is still the right thing for the pipeline card, which
+     is about what is coming; it is the wrong thing for what the room can take today. */
+  const reserved=fleet(),cost=Math.max(.000001,hardwareUnitCost(h)),freeWatts=Math.max(0,(reserved.cap-reserved.potentialKw)*1000),freeSpace=Math.max(0,facility().space-reserved.space),cashMax=Math.max(0,Math.floor(state.cash/cost)),powerMax=Math.max(0,Math.floor(freeWatts/Math.max(1,hardwarePeakWatts(h)))),spaceMax=Math.max(0,Math.floor(freeSpace/Math.max(1,h.space))),supplyMax=hardwareSupplyLimit(h),siteMax=Math.min(powerMax,spaceMax,supplyMax),fiatMax=Math.min(cashMax,supplyMax),marketOpen=state.time>=MARKET,hotBtcMax=marketOpen?Math.max(0,Math.floor(state.wallets.hot/(cost/priceAt(state.time)))):0;
   return{reserved,cost,freeWatts,freeSpace,cashMax,powerMax,spaceMax,supplyMax,siteMax,fiatMax,hotBtcMax,marketOpen,
     channel:hardwareChannel(h),listed:hardwareSupplyLimit(h)};
 }
+/* WHAT THE CARD HAS TO SAY NOW.
+
+   Capacity used to block the order, so this card was written as a refusal: "Facility capacity
+   blocks this order", with power and floor space listed as reasons you could not buy. Capacity
+   no longer blocks anything — it decides how much of a delivery the site accepts on the day it
+   lands. So the same two numbers are still here and they still matter, but as a forecast of
+   what will be racked rather than a wall in front of the till. What can still stop a purchase
+   is money, and what somebody is actually selling. */
 function hardwarePurchaseStatusHtml(h){
-  if(h.permanent)return"";const limits=hardwarePurchaseLimits(h),available=state.time>=at(h.date),siteBinding=limits.siteMax<=limits.cashMax,supplyBinding=siteBinding&&limits.supplyMax<=limits.powerMax&&limits.supplyMax<=limits.spaceMax,powerBinding=siteBinding&&!supplyBinding&&limits.powerMax<=limits.spaceMax,spaceBinding=siteBinding&&!supplyBinding&&limits.spaceMax<=limits.powerMax,cashBinding=limits.cashMax<=limits.siteMax,ordered=state.procurementOrders.reduce((sum,o)=>sum+Number(o.qty||0),0),staged=Object.values(state.inactiveHardware||{}).reduce((sum,n)=>sum+Number(n||0),0);
+  if(h.permanent)return"";
+  const limits=hardwarePurchaseLimits(h),available=state.time>=at(h.date);
+  const supplyBinding=limits.supplyMax<=limits.cashMax,cashBinding=limits.cashMax<limits.supplyMax;
+  const ordered=state.procurementOrders.filter(o=>o.id===h.id).reduce((sum,o)=>sum+Number(o.qty||0),0);
+  const staged=Math.max(0,Math.floor(Number(state.inactiveHardware?.[h.id])||0));
   let tone="",headline="",explanation="";
   if(!available){tone="blocked";headline=`Not purchasable until ${dateFmt(at(h.date))}`;explanation="This generation has been announced but has not reached its release date."}
   else if(limits.fiatMax<1){tone="blocked";
     if(supplyBinding&&limits.supplyMax<1){headline=limits.listed===0?"Nothing listed on the second-hand market":"Sold out for now";
-      explanation=`This generation is no longer sold new. Second-hand supply is whatever other operators are retiring, and there is none listed this month. Listings refresh as machines come off other sites.`}
-    else if(powerBinding&&spaceBinding){headline="Facility capacity blocks this order";explanation=`One miner needs ${(h.w/1000).toFixed(2)} kW and ${h.space} floor units; only ${(limits.freeWatts/1000).toFixed(2)} kW and ${fmtNum(limits.freeSpace)} units remain.`}else if(powerBinding){headline="Not enough electrical capacity";explanation=`One miner needs ${(h.w/1000).toFixed(2)} kW; only ${(limits.freeWatts/1000).toFixed(2)} kW remains.`}else if(spaceBinding){headline="Not enough floor capacity";explanation=`One miner needs ${h.space} floor units; only ${fmtNum(limits.freeSpace)} remain.`}else{headline="Not enough cash for one miner";explanation=`One miner costs ${fmtUsd(limits.cost)}; available cash is ${fmtUsd(state.cash)}.`}}
-  else{const labels=[];if(cashBinding)labels.push("cash");if(powerBinding)labels.push("power");if(spaceBinding)labels.push("floor space");if(supplyBinding)labels.push("what is listed second-hand");tone=limits.fiatMax<=1||siteBinding?"limited":"";headline=`Maximum fiat order: ${fmtCompactNumber(limits.fiatMax)} miner${limits.fiatMax===1?"":"s"}`;explanation=`${labels.map(x=>x[0].toUpperCase()+x.slice(1)).join(" and ")||"Available resources"} ${labels.length===1?"is":"are"} limiting this order.`}
+      explanation="This generation is no longer sold new. Second-hand supply is whatever other operators are retiring, and there is none listed this month. Listings refresh as machines come off other sites."}
+    else{headline="Not enough cash for one miner";explanation=`One miner costs ${fmtUsd(limits.cost)}; available cash is ${fmtUsd(state.cash)}.`}}
+  else{
+    const labels=[];if(cashBinding)labels.push("cash");if(supplyBinding)labels.push("what is listed second-hand");
+    tone=limits.siteMax<limits.fiatMax?"limited":"";
+    headline=`Maximum fiat order: ${fmtCompactNumber(limits.fiatMax)} miner${limits.fiatMax===1?"":"s"}`;
+    explanation=`${labels.map(x=>x[0].toUpperCase()+x.slice(1)).join(" and ")||"Available cash"} ${labels.length===1?"is":"are"} limiting this order.`;
+  }
   const deployment=[];if(h.requires&&!state.skills.includes(h.requires))deployment.push(`needs ${SKILLS.find(x=>x.id===h.requires)?.name||h.requires}`);if(h.minFacility&&facilityTier()<facilityTier({...state,facility:h.minFacility}))deployment.push(`needs ${FACILITIES.find(f=>f.id===h.minFacility)?.name||h.minFacility}`);
-  const reservations=ordered||staged?` ${ordered?`${ordered} ordered`:""}${ordered&&staged?" and ":""}${staged?`${staged} staged`:""} miner${ordered+staged===1?" is":"s are"} already included in these capacity figures.`:"";
-  /* Which market this actually is. A machine four years past release is not sold by the
-     company that built it, and the lead time, the counterparty and the condition all differ
-     — none of which was visible before. */
+  /* The forecast, in the card's own words. This is the sentence that replaces the refusal:
+     buying more than the room holds is allowed, and this says exactly what happens to the
+     remainder rather than leaving the player to find out at the loading bay. */
+  const rackable=Math.max(0,Math.min(limits.powerMax,limits.spaceMax));
+  const intake=available?`<div class="purchase-intake"><b>The site can rack ${fmtCompactNumber(rackable)} more of these today</b><small>${(limits.freeWatts/1000).toFixed(2)} kW and ${fmtNum(limits.freeSpace)} floor units are free. Order as many as you like — whatever fits is racked automatically as it arrives, and the rest waits in storage at no cost until capacity frees up.</small></div>`:"";
+  const pipeline=ordered||staged?`<span class="purchase-pipeline">${ordered?`${fmtCompactNumber(ordered)} on order`:""}${ordered&&staged?" · ":""}${staged?`${fmtCompactNumber(staged)} in storage awaiting room`:""}. Neither reserves capacity: the site accepts what fits on the day it is offered.</span>`:"";
   const terms=procurementTerms(h);
   const band=secondaryConditionRange(h);
   const channelRow=limits.channel==="secondary"
     ? `<div class="purchase-channel secondary"><b>${terms.label}</b><span>${fmtCompactNumber(limits.listed)} listed · arrives in about ${terms.days} days · condition ${band.low}–${band.high}% on arrival${state.hardwareGlut&&state.time<state.hardwareGlut.until?" · a liquidation is clearing stock cheaply":""}</span></div>`
     : `<div class="purchase-channel factory"><b>${terms.label}</b><span>New from ${terms.vendor} · arrives in about ${terms.days} days · condition 100% on arrival</span></div>`;
-  return `<div class="purchase-capacity ${tone}" data-purchase-capacity>${channelRow}<div class="purchase-capacity-head"><b>${headline}</b><small>${explanation}</small></div><div class="purchase-limits"><span>Cash allows<strong>${fmtCompactNumber(limits.cashMax)} units</strong></span><span>Power allows<strong>${fmtCompactNumber(limits.powerMax)} · ${(limits.freeWatts/1000).toFixed(2)} kW free</strong></span><span>Space allows<strong>${fmtCompactNumber(limits.spaceMax)} · ${fmtNum(limits.freeSpace)} free</strong></span>${limits.channel==="secondary"?`<span>Listed allows<strong>${fmtCompactNumber(limits.supplyMax)} · second-hand only</strong></span>`:""}</div><span class="purchase-capacity-note">Each miner uses ${(h.w/1000).toFixed(2)} kW and ${h.space} floor units.${limits.marketOpen?` Hot-wallet BTC funds up to ${fmtCompactNumber(Math.min(limits.hotBtcMax,limits.siteMax))}.`:""}${reservations}${deployment.length?` <strong style="color:var(--red)">It can be ordered, but will remain offline: ${deployment.join(" and ")}.</strong>`:""}${available&&siteBinding?`<br><button class="action small" data-action="tab" data-value="facilities">Open Facilities to add capacity</button>`:""}</span></div>`;
+  return `<div class="purchase-capacity ${tone}" data-purchase-capacity>${channelRow}<div class="purchase-capacity-head"><b>${headline}</b><small>${explanation}</small></div>${intake}<div class="purchase-limits"><span>Cash allows<strong>${fmtCompactNumber(limits.cashMax)} units</strong></span><span>Power racks<strong>${fmtCompactNumber(limits.powerMax)} · ${(limits.freeWatts/1000).toFixed(2)} kW free</strong></span><span>Space racks<strong>${fmtCompactNumber(limits.spaceMax)} · ${fmtNum(limits.freeSpace)} free</strong></span>${limits.channel==="secondary"?`<span>Listed allows<strong>${fmtCompactNumber(limits.supplyMax)} · second-hand only</strong></span>`:""}</div><span class="purchase-capacity-note">Each miner uses ${(h.w/1000).toFixed(2)} kW and ${h.space} floor units.${limits.marketOpen?` Hot-wallet BTC funds up to ${fmtCompactNumber(limits.hotBtcMax)}.`:""} ${pipeline}${deployment.length?` <strong style="color:var(--red)">It can be ordered, but will remain offline: ${deployment.join(" and ")}.</strong>`:""}${available&&rackable<1?`<br><button class="action small" data-action="tab" data-value="facilities">Open Facilities to add capacity</button>`:""}</span></div>`;
 }
-function plannedFleetFits(id,qty){const projection=plannedFleetProjection(id,qty);return projection.potentialKw<=projection.cap&&projection.space<=facility().space}
-/* Trimming a request down to what the site can hold used to walk from the CASH maximum one
-   unit at a time, deep-cloning the entire state on every step. Ask for a thousand miners
-   with a healthy balance and that is hundreds of thousands of clones and a frozen tab — it
-   hung a contract run for two minutes, which is how it was found. Power and floor space are
-   both linear in quantity, so the answer can be computed instead of searched. The short
-   guard loop is only there in case a future projection stops being linear. */
-function fitQuantity(id,qty){
-  const h=HARDWARE.find(x=>x.id===id);
-  if(!h)return 0;
-  qty=Math.min(qty,Math.max(0,hardwarePurchaseLimits(h).siteMax));
-  let guard=0;
-  while(qty>0&&guard++<8&&!plannedFleetFits(id,qty))qty--;
-  return qty;
-}
-function facilityLimitMessage(id){const h=HARDWARE.find(x=>x.id===id),projection=plannedFleetProjection(id,1),f=facility(),powerOver=Math.max(0,projection.potentialKw-projection.cap),spaceOver=Math.max(0,projection.space-f.space),limits=[];if(powerOver>0)limits.push(`${powerOver.toFixed(2)} kW over electrical capacity`);if(spaceOver>0)limits.push(`${spaceOver.toFixed(0)} floor units over capacity`);const reserved=state.procurementOrders.reduce((sum,o)=>sum+Number(o.qty||0),0);return `Cannot reserve 1 × ${h?.name||"miner"}: ${limits.join(" and ")||"facility capacity reached"}. ${reserved?`${reserved} ordered miner${reserved===1?" is":"s are"} already reserving capacity. `:""}Upgrade the facility in Facilities or sell/cancel capacity before ordering.`}
-function placeHardwareOrder(id,qty,btcCost=0){const h=HARDWARE.find(x=>x.id===id),terms=procurementTerms(h);if(!plannedFleetFits(id,qty))return showToast("Facility limit","Your installed fleet plus outstanding orders would exceed capacity.");
+function placeHardwareOrder(id,qty,btcCost=0){const h=HARDWARE.find(x=>x.id===id),terms=procurementTerms(h);
   /* Buying a listing removes it. Without this the market is a shop window with an infinite
      stockroom behind it, which is what it used to be. */
   if(terms.channel==="secondary"){
     const took=consumeSecondaryStock(id,qty);
-    if(took<qty)return showToast("Not enough listed",`Only ${fmtCompactNumber(took+secondaryStock(id))} ${h?.name||"units"} are listed on the second-hand market right now.`);
+    if(took<qty){
+      // Put back what was taken from the listing, so a refused order changes nothing at all.
+      if(took>0)state.secondary.stock[id]=(state.secondary.stock[id]||0)+took;
+      showToast("Not enough listed",`Only ${fmtCompactNumber(secondaryStock(id))} ${h?.name||"units"} are listed on the second-hand market right now.`);
+      return false;
+    }
   }state.procurementOrders.push({id,qty,due:state.time+terms.days*DAY,risk:terms.risk,partialRisk:terms.partialRisk,vendor:terms.vendor,slips:0,label:terms.label,channel:terms.channel,
     // Drawn once for the batch: these came off one site with one maintenance history.
-    condition:terms.channel==="secondary"?rollSecondaryCondition(h):100});const paid=btcCost>0?fmtBtc(btcCost):fmtUsd(hardwareUnitCost(h)*qty);log(`Ordered ${qty} × ${h.name}`,`-${paid} · ${terms.vendor} · ${terms.days}-day lead time`,"fleet");showToast("Miner order placed",`${qty} × ${h.name} via ${terms.vendor}: ETA ${dateFmt(state.time+terms.days*DAY)} · ${Math.round(terms.risk*100)}% delay risk.`,"info","mine");save();renderMineContent()}
+    condition:terms.channel==="secondary"?rollSecondaryCondition(h):100});const paid=btcCost>0?fmtBtc(btcCost):fmtUsd(hardwareUnitCost(h)*qty);log(`Ordered ${qty} × ${h.name}`,`-${paid} · ${terms.vendor} · ${terms.days}-day lead time`,"fleet");showToast("Miner order placed",`${qty} × ${h.name} via ${terms.vendor}: ETA ${dateFmt(state.time+terms.days*DAY)} · ${Math.round(terms.risk*100)}% delay risk.${hardwarePurchaseLimits(h).siteMax<qty?" The site will rack what it has room for and hold the rest in storage.":""}`,"info","mine");save();renderMineContent();return true}
 function buyHardware(id,requested=1){
   const h=HARDWARE.find(x=>x.id===id);if(!h||h.permanent||state.time<at(h.date))return;
   const unitCost=hardwareUnitCost(h);
   let qty=Math.max(1,Math.floor(Number(requested)||1));qty=Math.min(qty,Math.floor(state.cash/unitCost));
   if(qty<1)return showToast("Not enough cash",`You need ${fmtUsd(unitCost)} for one ${h.name}.`);
-  qty=fitQuantity(id,qty);
-  if(qty<1)return showToast("Facility limit",facilityLimitMessage(id));
-  const cost=unitCost*qty;state.cash-=cost;placeHardwareOrder(id,qty);
+  qty=Math.min(qty,hardwareSupplyLimit(h));
+  if(qty<1)return showToast("None available",`There are no ${h.name} units to buy right now.`);
+  const cost=unitCost*qty;state.cash-=cost;if(!placeHardwareOrder(id,qty))state.cash+=cost;
 }
 function buyHardwareBtc(id,requested=1){
   const h=HARDWARE.find(x=>x.id===id);if(!h||h.permanent||state.time<at(h.date))return;
@@ -97,9 +111,9 @@ function buyHardwareBtc(id,requested=1){
   const unitUsd=hardwareUnitCost(h),unitBtc=unitUsd/priceAt(state.time);
   let qty=Math.max(1,Math.floor(Number(requested)||1));qty=Math.min(qty,Math.floor(state.wallets.hot/unitBtc));
   if(qty<1)return showToast("Not enough hot BTC",`One ${h.name} costs ${fmtBtc(unitBtc)} at today's quoted rate.`);
-  qty=fitQuantity(id,qty);
-  if(qty<1)return showToast("Facility limit",facilityLimitMessage(id));
-  const cost=unitBtc*qty;state.wallets.hot-=cost;placeHardwareOrder(id,qty,cost);
+  qty=Math.min(qty,hardwareSupplyLimit(h));
+  if(qty<1)return showToast("None available",`There are no ${h.name} units to buy right now.`);
+  const cost=unitBtc*qty;state.wallets.hot-=cost;if(!placeHardwareOrder(id,qty,cost))state.wallets.hot+=cost;
 }
 function sellHardware(id,requested=1){
   const h=HARDWARE.find(x=>x.id===id),owned=state.decommissionedHardware?.[id]||0;if(!h||owned<1||h.permanent)return showToast("Power down required",`Power down ${h?.name||"this hardware"} before selling it.`);
@@ -476,7 +490,7 @@ function transactionPreview(button){
     return{...base,fraction,title:isEtf?"Review ETF sale":`Review bitcoin sale · ${walletName(id)}`,kicker:"Market sell · quote locked",give:isEtf?`${fmtBtc(btc)} equivalent exposure`:fmtBtc(btc),giveSub:`${formatPercent(fraction*100)}% of the ${walletName(id)} position`,receive:fmtUsd(usd),receiveSub:"Added to liquid fiat after fees",reference:`${fmtUsd(price)} per BTC`,fees:`${fmtUsd(gross*feeRate)} · ${(feeRate*100).toFixed(2)}%`,depth:impact>=.001?`−${fmtUsd(gross*(1-feeRate)*impact)} · ${impactNote(impact)}`:"",after:`${fmtUsd(state.cash+usd)} cash · ${fmtBtc(state.wallets[id]-btc)} position`,confirmLabel:"Confirm sell",confirmClass:"danger"}
   }
   if(action==="buy-hw"||action==="buy-hw-btc"){
-    const h=HARDWARE.find(item=>item.id===id);if(!h||h.permanent)return null;const payBtc=action==="buy-hw-btc",unitUsd=hardwareUnitCost(h),unit=payBtc?unitUsd/priceAt(state.time):unitUsd,balance=payBtc?state.wallets.hot:state.cash;let qty=Math.min(Math.max(1,Math.floor(Number(button.dataset.value)||1)),Math.floor(balance/unit));while(qty>0&&!plannedFleetFits(id,qty))qty--;if(qty<1){showToast(payBtc?"Not enough hot BTC":"Purchase unavailable",payBtc?`One ${h.name} costs ${fmtBtc(unit)} at the locked quote.`:facilityLimitMessage(id));return null}const cost=unit*qty,terms=procurementTerms(h);
+    const h=HARDWARE.find(item=>item.id===id);if(!h||h.permanent)return null;const payBtc=action==="buy-hw-btc",unitUsd=hardwareUnitCost(h),unit=payBtc?unitUsd/priceAt(state.time):unitUsd,balance=payBtc?state.wallets.hot:state.cash;let qty=Math.min(Math.max(1,Math.floor(Number(button.dataset.value)||1)),Math.floor(balance/unit),hardwareSupplyLimit(h));if(qty<1){showToast(payBtc?"Not enough hot BTC":"Purchase unavailable",payBtc?`One ${h.name} costs ${fmtBtc(unit)} at the locked quote.`:`There are no ${h.name} units available to buy right now.`);return null}const cost=unit*qty,terms=procurementTerms(h);
     return{...base,requested:qty,title:`Review miner purchase · ${h.name}`,kicker:`Hardware buy · ${terms.label}`,give:payBtc?fmtBtc(cost):fmtUsd(cost),giveSub:payBtc?`${fmtUsd(unitUsd*qty)} at ${fmtUsd(priceAt(state.time))}/BTC`:`${qty} × ${fmtUsd(unitUsd)} from liquid fiat`,receive:`${fmtCompactNumber(qty)} × ${h.name}`,receiveSub:`${fmtHash(h.hash*qty)} physical hash · delivery in ${terms.days} days`,reference:payBtc?`${fmtBtc(unit)} each`:`${fmtUsd(unitUsd)} each`,fees:"No modelled checkout fee",after:payBtc?`${fmtBtc(state.wallets.hot-cost)} hot BTC remains`:`${fmtUsd(state.cash-cost)} cash remains`,confirmLabel:"Confirm miner order",confirmClass:"primary"}
   }
   if(action==="sell-hw"||action==="sell-hw-btc"){

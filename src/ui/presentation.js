@@ -34,10 +34,12 @@ function hardwareProfitability(h){
   const activeContribution=reason?0:unitHash*qty,fromHash=owned?Math.max(0,fs.hash-activeContribution):fs.hash,toHash=owned?fs.hash:fs.hash+activeContribution;
   const btcPerUnit=Math.max(0,expectedDailyBtcForHash(toHash)-expectedDailyBtcForHash(fromHash))/qty;
   const energyPerUnit=reason?0:dailyEnergyCostForWatts(unitWatts*contractLoadFactor()),marketOpen=state.time>=MARKET,grossPerUnit=marketOpen?btcPerUnit*priceAt(state.time):null,netPerUnit=grossPerUnit===null?null:grossPerUnit-energyPerUnit;
-  const costPerBtc=btcPerUnit>0?energyPerUnit/btcPerUnit:null,paybackDays=netPerUnit>0?hardwareUnitCost(h)/netPerUnit:null,capacityOk=owned||plannedFleetFits(h.id,1);
+  const costPerBtc=btcPerUnit>0?energyPerUnit/btcPerUnit:null,paybackDays=netPerUnit>0?hardwareUnitCost(h)/netPerUnit:null,capacityOk=owned||siteRackHeadroom(h)>=1;
   let signal="Unpriced",signalClass="profit-neutral";
   if(reason){signal=reason;signalClass="profit-negative"}
-  else if(!capacityOk){signal="No site capacity";signalClass="profit-negative"}
+  /* Not being able to rack it yet is no longer a reason you cannot buy it — the crates wait in
+     storage and go in when there is room — so this reports a delay, not a refusal. */
+  else if(!capacityOk){signal="Waits for site capacity";signalClass="profit-neutral"}
   else if(netPerUnit!==null&&netPerUnit<0){signal=owned?"Shutdown improves cash":"Loss-making";signalClass="profit-negative"}
   else if(netPerUnit!==null){signal=owned?"Keep hashing":"Positive margin";signalClass="profit-positive"}
   return{owned,qty,btcPerUnit,energyPerUnit,grossPerUnit,netPerUnit,costPerBtc,paybackDays,powerPct:fs.cap?unitWatts/1000/fs.cap*100:0,spacePct:facility().space?h.space/facility().space*100:0,signal,signalClass};

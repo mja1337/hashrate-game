@@ -21,10 +21,92 @@ function stageDelivery(id,qty,condition){
   store[id]=total>0?(staged*prior+qty*condition)/total:condition;
   state.inactiveHardware[id]=total;
 }
-function activateHardware(id){const h=HARDWARE.find(x=>x.id===id),qty=Math.max(0,Math.floor(state.inactiveHardware?.[id]||0));if(!h||qty<1)return;const trial=JSON.parse(JSON.stringify(state));trial.hardware[id]=(trial.hardware[id]||0)+qty;if(!fleet(trial).within)return showToast("Commissioning blocked",`${qty} × ${h.name} no longer fits the active facility. Free capacity or upgrade the site.`);const days=Math.max(1,Math.ceil(qty/(hasStaff("fieldtech")?40:20)));state.inactiveHardware[id]=0;
-  const staged=state.stagedCondition?.[id];
-  if(state.stagedCondition)delete state.stagedCondition[id];
-  state.commissioningJobs.push({id,qty,due:state.time+days*DAY,started:state.time,days,done:0,condition:Number.isFinite(staged)?staged:undefined});log(`Commissioning started: ${h.name}`,`${qty} units · ${days} days` ,"fleet");showToast("Machines being commissioned",`${qty} × ${h.name} is being racked, configured and tested over ${days} simulation day${days===1?"":"s"}.`,"info","mine");save();renderMineContent()}
+/* WHAT THE SITE CAN TAKE TODAY.
+
+   Capacity used to be enforced at the till: you could not buy a machine the room had no space
+   or power for. That is not how ordering works, and it made the game refuse a perfectly
+   sensible plan — buy the fleet now while the price is right, take delivery into storage, and
+   commission it when the substation upgrade lands. Worse, it meant a machine already paid for
+   and standing on the floor could be refused as a batch because ONE of them did not fit.
+
+   So the gate moved from the purchase to the intake, where it belongs. You may buy whatever
+   your cash and the market can supply; what the site will accept is decided when the crates
+   arrive, and it is decided per machine rather than per batch. Whatever fits goes in and the
+   rest waits in storage — no decision to make, because there is no decision: a machine that
+   fits is a machine you want hashing.
+
+   Reckoned against what is actually INSTALLED, not against what is on order. Orders and staged
+   crates reserve nothing: an order in transit that held capacity hostage is precisely what
+   stopped the staged units in the warehouse from ever being racked. */
+function siteRackHeadroom(h,s=state){
+  if(!h)return 0;
+  const fs=fleet(s),f=FACILITIES.find(x=>x.id===s.facility)||FACILITIES[0];
+  const freeWatts=Math.max(0,(fs.cap-fs.potentialKw)*1000);
+  const freeSpace=Math.max(0,f.space-fs.space);
+  const byPower=Math.floor(freeWatts/Math.max(1,hardwarePeakWatts(h,s)));
+  const bySpace=h.space>0?Math.floor(freeSpace/h.space):Infinity;
+  return Math.max(0,Math.min(byPower,bySpace));
+}
+function stagedFitCount(id,s=state){
+  const h=HARDWARE.find(x=>x.id===id);if(!h)return 0;
+  const staged=Math.max(0,Math.floor(Number(s.inactiveHardware?.[id])||0));
+  if(!staged)return 0;
+  return Math.max(0,Math.min(staged,siteRackHeadroom(h,s)));
+}
+/* Why a staged batch is still standing in the crate, as a sentence, or "" when it is not. */
+function stagedHoldReason(id,s=state){
+  const h=HARDWARE.find(x=>x.id===id);if(!h)return "";
+  const staged=Math.max(0,Math.floor(Number(s.inactiveHardware?.[id])||0));
+  if(!staged||stagedFitCount(id,s)>=staged)return "";
+  const fs=fleet(s),f=FACILITIES.find(x=>x.id===s.facility)||FACILITIES[0];
+  const shortKw=Math.max(0,(fs.potentialKw+staged*hardwarePeakWatts(h,s)/1000)-fs.cap);
+  const shortSpace=Math.max(0,fs.space+staged*h.space-f.space);
+  const parts=[];
+  if(shortKw>0)parts.push(`${shortKw.toFixed(1)} kW more electrical capacity`);
+  if(shortSpace>0)parts.push(`${fmtNum(Math.ceil(shortSpace))} more floor units`);
+  return parts.length
+    ?`Racking all ${fmtNum(staged)} would need ${parts.join(" and ")}. They stay in storage, cost nothing to hold, and go in on their own as capacity frees up.`
+    :"";
+}
+function startCommissioning(id,qty,auto=false){
+  const h=HARDWARE.find(x=>x.id===id);if(!h||qty<1)return false;
+  const staged=Math.max(0,Math.floor(Number(state.inactiveHardware?.[id])||0));
+  qty=Math.min(qty,staged);if(qty<1)return false;
+  const days=Math.max(1,Math.ceil(qty/(hasStaff("fieldtech")?40:20)));
+  state.inactiveHardware[id]=staged-qty;
+  const condition=state.stagedCondition?.[id];
+  // A part-commissioned batch leaves the rest in the crate, and its history with it.
+  if(state.stagedCondition&&state.inactiveHardware[id]<1)delete state.stagedCondition[id];
+  state.commissioningJobs.push({id,qty,due:state.time+days*DAY,started:state.time,days,done:0,
+    condition:Number.isFinite(condition)?condition:undefined});
+  const held=state.inactiveHardware[id];
+  log(`Commissioning started: ${h.name}`,`${qty} unit${qty===1?"":"s"} · ${days} day${days===1?"":"s"}${held?` · ${held} still in storage`:""}`,"fleet");
+  showToast(auto?"Machines accepted onto the floor":"Machines being commissioned",
+    `${qty} × ${h.name} is being racked, configured and tested over ${days} simulation day${days===1?"":"s"}.${held?` ${fmtNum(held)} more ${held===1?"stays":"stay"} in storage until there is room.`:""}`,
+    "info","mine");
+  renderFullQueued=true;
+  return true;
+}
+function activateHardware(id){
+  const h=HARDWARE.find(x=>x.id===id);if(!h)return;
+  const staged=Math.max(0,Math.floor(Number(state.inactiveHardware?.[id])||0));
+  if(staged<1)return;
+  const qty=stagedFitCount(id);
+  if(qty<1)return showToast("No room for these yet",stagedHoldReason(id)||`${h.name} does not fit the active site. Retire machines, sell cooling plant or move to a larger facility.`,"bad","mine");
+  startCommissioning(id,qty);
+  save();renderMineContent();
+}
+/* Anything staged that now fits goes in by itself, every simulated day. That covers the crate
+   arriving into a site with room, and equally the room appearing later — a retirement
+   finishing, a facility upgrade landing, cooling plant sold off. Nobody should have to come
+   back and press a button to accept hardware they have already paid for. */
+function advanceStagedIntake(){
+  for(const h of HARDWARE){
+    if(!(state.inactiveHardware?.[h.id]>0))continue;
+    const qty=stagedFitCount(h.id);
+    if(qty>0)startCommissioning(h.id,qty,true);
+  }
+}
 /* RETIRING A FLEET IS WORK.
 
    Commissioning a delivery takes days — the crew racks it, configures it and tests it — and
