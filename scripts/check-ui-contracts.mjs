@@ -550,7 +550,46 @@ assert(inline.includes("function feedbackKind(") && inline.includes("function fe
 assert(css.includes(".toast.toast-success{") && css.includes(".toast.toast-blocked{") && inline.includes("Open ${escapeHtml(t.tab)}"), "Success and blocked feedback lack distinct styling or a clear destination action");
 assert(inline.includes("function transactionImpact(transaction)") && inline.includes("Operational consequence") && inline.includes("You give now") && inline.includes("Position afterward"), "Transaction review no longer separates the immediate exchange, operational consequence and resulting position");
 assert(inline.includes("function eventGameplayEffect(e)") && ["What happened","Why it mattered","Effect on your operation","CONTEXT · NOT CAUSATION"].every(label=>inline.includes(label)), "Historical events no longer separate fact, significance, gameplay effect and independent market context");
-assert(inline.includes("Immediate effect: move BTC") && inline.includes("Consequence: the month is recorded as a rescue") && inline.includes("function settlementRescueFeedback(") && inline.includes("Receivership kept the run alive"), "Settlement, rescue or receivership feedback has lost its immediate and lasting consequences");
+assert(inline.includes("Immediate effect: move BTC") && inline.includes("Consequence: the month is recorded as a rescue") && inline.includes("function settlementRescueFeedback(") && inline.includes("Receivership seized part of the treasury"), "Settlement, rescue or receivership feedback has lost its immediate and lasting consequences");
+
+/* LOSING COINS IS NOT A TOAST.
+   Every incident that takes bitcoin off the player permanently must stop the clock and take
+   the screen. A toast is five seconds in a corner, which is the same weight this game gives a
+   parts delivery — and these fire precisely when a large fleet is breaking and the corner is
+   already busy. The modal states what left, from where, why it was possible and what prevents
+   it; the last is the only part the player can still act on. */
+assert(inline.includes("function reportCoinLoss(") && inline.includes("function lossModal()") && inline.includes("function dismissLoss()"),
+  "The coin-loss ledger, its modal or its dismissal has gone");
+/* Reporting a loss stops the clock, so it must request its own repaint: there is no next tick
+   left to notice a flag, and a modal nothing draws is worse than the toast it replaced. */
+assert(/state\.lossResume=true;[\s\S]{0,400}queueRender\(true\)/.test(inline),
+  "A reported loss no longer asks for the repaint that draws it, and the stopped clock leaves nothing to");
+assert(["What happened","Why it was possible","What prevents it"].every(label => inline.includes(label)),
+  "A coin-loss modal no longer separates what left, why it was possible and what prevents it recurring");
+for (const cause of ["hotwallet","entropy","nobackup","phishing","receivership"])
+  assert(inline.includes(`cause:"${cause}"`), `The ${cause} incident no longer reports its loss as a full-screen incident`);
+assert(!/showToast\(\s*"Hot wallet compromised|showToast\(\s*"Coins lost, not stolen|showToast\(\s*"Your coins are being swept|showToast\(\s*"The fake was convincing enough/.test(inline),
+  "A permanent coin loss has been demoted back to a toast");
+assert(inline.includes("function applyVenueFailure(") && ["mtgox","bitfinex","quadriga","ftx"].every(id => new RegExp(`\\b${id}:\\{wallet:`).test(inline)),
+  "Venue failures no longer share one table stating each venue's split between written off and frozen");
+/* The modal has to be able to reach the screen. render() is the only function that draws
+   modals; the tick's repaint reaches for renderMineContent(), which patches the tab body a
+   modal is not inside — so on the Mine tab a stopped clock used to come with no dialog at all.
+   Which modal ought to be showing is therefore part of the repaint decision, and it must be
+   able to preempt a lazy repaint that was already queued. */
+/* A loss and a historical chapter can both have stopped the clock. Only one is drawn — the
+   loss, which is time-critical to read — and whichever is dismissed last restarts the
+   simulation, through one helper rather than a resume flag per handler. */
+assert(inline.includes("function resumeAfterModals()") && /close-event"\)\{state\.activeEvent=null;resumeAfterModals\(\)/.test(inline) && /dismissLoss\(\)\{[\s\S]{0,120}resumeAfterModals\(\)/.test(inline),
+  "Closing an event and closing a loss no longer share one resume, so the pair can leave the clock stopped for good");
+assert(inline.includes('pendingLoss()?lossModal():state.activeEvent?eventModal():""'),
+  "A loss and an event modal must not be stacked on screen at once");
+assert(inline.includes("function modalSignature()") && inline.includes("function modalStateChanged()") && inline.includes("lastModalSignature=modalSignature()"),
+  "The repaint no longer tracks which modal ought to be on screen");
+assert(/const urgent=[^;]*modalSignature\(\)!==lastModalSignature;[\s\S]{0,120}if\(renderQueued&&!\(urgent&&!renderUrgentQueued\)\)return;/.test(inline),
+  "Urgency must be decided before the already-queued check, or a lazy repaint swallows the one that draws the modal");
+assert(inline.includes("if(urgent){renderUrgentQueued=true;setTimeout(paint,0);return}"),
+  "A modal must not wait on the repaint throttle and an animation frame to reach the screen");
 assert(inline.includes("if(state.cash+1e-8>=due){finishMonthlySettlement(") && inline.includes("if(!pending||state.cash+1e-8<pending.due)return false"), "Queueing and finishing a settlement must use the same float tolerance, or cash short by a rounding sliver pauses the run and demands a rescue for a shortfall too small to write as money");
 assert(inline.includes("Mining capacity lost to a fault") && inline.includes("The self-repair caused damage") && inline.includes("Part replacement complete"), "Repair and failure feedback no longer states the capacity effect or recovery state");
 assert(inline.includes('class="run-verdict"') && inline.includes("Final assessment") && inline.includes("Financial resilience") && inline.includes("The defining lesson is"), "The end-of-run recap no longer provides an assessment, operating evidence and a lesson");

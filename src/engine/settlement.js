@@ -81,5 +81,11 @@ function finishMonthlySettlement(kind="cash",automatic=false){
 
 function enterReceivership(){
   const p=state.pendingSettlement;if(!p)return;state.operator.restructures++;const haircut=Math.min(.25,.1+(state.operator.restructures-1)*.05),btcSeized=controlled()*haircut;sellControlledBtc(btcSeized);let machines=0;HARDWARE.filter(h=>!h.permanent).forEach(h=>{const qty=Math.ceil((state.hardware[h.id]||0)*.25);state.hardware[h.id]=Math.max(0,(state.hardware[h.id]||0)-qty);machines+=qty});recordOperatorMonth(p.snapshot,false);state.bill=0;state.billLedger=blankBillLedger();state.debt=0;state.cash=0;state.lastMonth=p.month;state.pendingSettlement=null;state.power=false;clearTimeout(toastTimer);toast=null;log("Receivership",`${Math.round(haircut*100)}% of self-held BTC and ${machines} miners seized`);
-  if(state.operator.restructures>=3){state.ended=true;state.endReason="receivership";state.speed=0;log("Scored campaign ended","third receivership");recordCareerRun()}else state.speed=p.resumeSpeed||state.returnSpeed||0;setTimer();save();render();if(state.operator.restructures<3)setTimeout(()=>showToast("Receivership kept the run alive",`${fmtBtc(btcSeized)} and ${machines} miner${machines===1?" was":"s were"} seized. Mining remains off; this is strike ${state.operator.restructures} of 3.`,"warning","finance"),0);
+  if(state.operator.restructures>=3){state.ended=true;state.endReason="receivership";state.speed=0;log("Scored campaign ended","third receivership");recordCareerRun()}else state.speed=p.resumeSpeed||state.returnSpeed||0;setTimer();save();render();if(state.operator.restructures<3)reportCoinLoss({
+    title:"Receivership seized part of the treasury",kind:"seized",btc:btcSeized,cause:"receivership",
+    from:"self-held keys, sold to settle the bill",
+    what:`${fmtBtc(btcSeized)} of self-held BTC and ${machines} miner${machines===1?"":"s"} were sold out from under the operation to clear a bill it could not pay. Mining remains off until power is restored.`,
+    why:`The monthly settlement went unmet and the operation was restructured rather than closed. This is strike ${state.operator.restructures} of 3; the third ends the scored campaign.`,
+    remedy:"Watch the cash-shortfall warning that appears before a settlement is due. Selling on your own terms, a month early, costs a fraction of what a forced sale does.",
+    tab:"finance"});
 }

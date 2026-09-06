@@ -13,7 +13,7 @@ const initialState=()=>{const seed=Math.floor(Math.random()*4294967296);return{
   lightning:{locked:0,earned:0},
   giftCards:{spentBtc:0,spentUsd:0,cards:0},floorView:"2d",
   hardware:{laptop:1},poweredDownHardware:{},facility:"home",region:"na",thermal:{temperature:22,orders:[],equipment:{}},overdrive:false,settlementSaleMode:false,autoRepair:false,node:0,nodeStorage:50,nodePruned:false,nodeMode:"archival",nodeSync:{primaryLag:0,primaryPeak:0,backupLag:0,backupPeak:0},backupNode:{enabled:false,outageUntil:0},mode:"solo",pool:"f2pool",
-  skills:[],points:0,startingGrant:false,seen:[],activeEvent:null,storyPause:true,shoppingPause:false,speculations:[],powerRateShock:null,hardwareGlut:null,hardwareAlerts:{seen:[],queue:[],active:null,resumeSpeed:0},hardwareToastSeen:[],exposureWarned:[],
+  skills:[],points:0,startingGrant:false,seen:[],activeEvent:null,pendingLosses:[],lossResume:false,storyPause:true,shoppingPause:false,speculations:[],powerRateShock:null,hardwareGlut:null,hardwareAlerts:{seen:[],queue:[],active:null,resumeSpeed:0},hardwareToastSeen:[],exposureWarned:[],
   treasuryPolicy:"cover",pendingSettlement:null,endReason:null,arrearsDue:0,gridCutAnnounced:false,marketPressure:{usd:0,at:0},
   operator:{eras:{},periodMined:0,periodUptime:0,periodDays:0,lastRevenueUsd:0,totalMonths:0,solventMonths:0,profitableMonths:0,competitiveMonths:0,bridgeLoans:0,restructures:0},
   xp:{total:0,level:1,peakLevel:1,bestDifficulty:0,shares:0,sources:{shares:0,record:0,deploy:0,repair:0,spend:0}},
@@ -21,7 +21,7 @@ const initialState=()=>{const seed=Math.floor(Math.random()*4294967296);return{
   blocks:0,mined:0,nodeDays:0,uptimeDays:0,powerSpent:0,nextMilestone:1000,
   connectivity:"fixed",history:[],activity:[],activitySeq:0,log:[{time:START,text:"Client synced to the network tip",amount:"~block "+approxHeight(START)}]
 }};
-let state,loadedHasHardwareAlerts=false,loadedHasHardwareToastSeen=false,activeTab="dashboard",mobileMenuOpen=false,mobileMenuSection="play",activityFilter="all",activityLimit=100,tradePercentages={},custodyLesson="malware",selectedVenue="mtgox",introDifficulty="hard",introStartingCash=STARTING_LIQUIDITY_MIN,pendingTransaction=null,toast=null,toastTimer=null,timer=null,faucet=null,faucetTimer=null,mempoolTimer=null,introStep=0,renderQueued=false,renderFullQueued=false,lastRenderAt=0;
+let state,loadedHasHardwareAlerts=false,loadedHasHardwareToastSeen=false,activeTab="dashboard",mobileMenuOpen=false,mobileMenuSection="play",activityFilter="all",activityLimit=100,tradePercentages={},custodyLesson="malware",selectedVenue="mtgox",introDifficulty="hard",introStartingCash=STARTING_LIQUIDITY_MIN,pendingTransaction=null,toast=null,toastTimer=null,timer=null,faucet=null,faucetTimer=null,mempoolTimer=null,introStep=0,renderQueued=false,renderUrgentQueued=false,renderFullQueued=false,lastRenderAt=0;
 try{const raw=localStorage.getItem(SAVE_KEY);if(raw){const parsed=JSON.parse(raw);loadedHasHardwareAlerts=!!parsed.hardwareAlerts;loadedHasHardwareToastSeen=!!parsed.hardwareToastSeen;state=Object.assign(initialState(),parsed)}else state=initialState()}catch(e){state=initialState()}
 const ACTIVITY_CATEGORIES=["trade","fleet","finance","reward","custody","learning","operations","milestone"];
 function activityCategory(text=""){
@@ -357,7 +357,7 @@ function advanceOperationalRisks(next){
   if(state.ops.powerOutageUntil&&next>=state.ops.powerOutageUntil){state.ops.powerOutageUntil=0;log("Grid power restored",`${region().name} site energized`,`operations`);showToast("Grid restored",`Power is back at ${facility().name}. The fleet can resume hashing.`,"info","facilities")}
   const month=new Date(next).toISOString().slice(0,7);if(state.ops.riskMonth===month)return;state.ops.riskMonth=month;
   advanceCustodyRisks(next);
-  const hotRisk=hotWalletIncidentRisk();if(hotRisk>0&&nextRand()<hotRisk){const lost=state.wallets.hot*(.12+nextRand()*.28);state.wallets.hot=Math.max(0,state.wallets.hot-lost);log("Hot-wallet key compromise",`-${fmtBtc(lost)} · cold storage unaffected`,"custody");showToast("Hot wallet compromised",`${fmtBtc(lost)} was lost from the online wallet. Cold storage and custodial venues were unaffected.`,"bad","custody");renderFullQueued=true}
+  advanceHotWalletRisk();
   if(firmwarePatchDue()&&!firmwareHijacked()&&nextRand()<firmwareHijackRisk()){state.ops.hijackUntil=next+DAY*(10+Math.floor(nextRand()*21));log("ASIC fleet hijacked","35% of hash diverted");showToast("Firmware compromise","Unpatched ASIC firmware is pointing part of your hash rate to an attacker. Patch it now.","bad");}
   const r=region(),outageRisk=connectivityIncidentRisk(),gridRisk=Math.min(.28,Math.max(.004,(1-r.rely)*1.15));
   if(!siteOutage()&&(operating()||nodeHostPowered())&&nextRand()<gridRisk){const raw=1+Math.floor(nextRand()*(2+gridRisk*45)),days=gridOutageDays(raw);
@@ -495,10 +495,7 @@ function applyEvent(e){
     if(hit.length)log("Your purchase is in the leaked records",
       `${hit.length} device order${hit.length===1?"":"s"} bought from Ledger in the affected window`,"custody");
   }
-  if(e.fx==="mtgox"&&state.wallets.mtgox>0){const lost=state.wallets.mtgox*.8,claim=state.wallets.mtgox*.2;state.wallets.mtgox=0;state.wallets.frozen+=claim;log("Mt. Gox failure",`-${fmtBtc(lost)}`)}
-  if(e.fx==="bitfinex"&&state.wallets.bitfinex>0){const lost=state.wallets.bitfinex*.36;state.wallets.bitfinex-=lost;log("Bitfinex security loss",`-${fmtBtc(lost)}`)}
-  if(e.fx==="quadriga"&&state.wallets.quadriga>0){const lost=state.wallets.quadriga*.8,claim=state.wallets.quadriga*.2;state.wallets.quadriga=0;state.wallets.frozen+=claim;log("QuadrigaCX collapse",`-${fmtBtc(lost)}`)}
-  if(e.fx==="ftx"&&state.wallets.frontier>0){const frozen=state.wallets.frontier*.7,lost=state.wallets.frontier*.3;state.wallets.frontier=0;state.wallets.frozen+=frozen;log("Frontier venue failure",`-${fmtBtc(lost)}`)}
+  applyVenueFailure(e.fx);
   if(e.fx==="china"&&state.region==="sichuan"){state.policyLock="Mining prohibited in Sichuan — relocate your fleet";state.power=false;log("Sichuan site closed","policy")}
   if(e.fx==="kazakh"&&state.region==="kazakhstan"){state.policyLock="Kazakhstan internet shutdown — relocate or wait";state.power=false;log("Kazakhstan site offline","network")}
   if(e.fx==="computenorthx"){state.hardwareGlut={discount:.15,until:state.time+DAY*120};log("Compute North liquidation glut","Secondary ASIC prices soften for a season","fleet")}
@@ -603,20 +600,34 @@ function tick(silent=false){
 function queueRender(full=false){
   const now=performance.now();
   renderFullQueued=renderFullQueued||full;
-  if(renderQueued)return;
+  /* A modal opening or closing is not a repaint, it is an answer. A major event stops the
+     clock; the dialog saying why must not sit behind up to 600ms of repaint throttle and then
+     wait for an animation frame — a frame the browser owes a backgrounded tab nothing at all.
+     Urgency is therefore decided BEFORE the already-queued check: a lazy paint scheduled by
+     the previous tick used to swallow the very repaint that puts the dialog on screen, which
+     is what left the timeline stopped with nothing to explain it. */
+  const urgent=typeof modalSignature==="function"&&modalSignature()!==lastModalSignature;
+  if(renderQueued&&!(urgent&&!renderUrgentQueued))return;
+  const paint=()=>{
+    // A superseded rAF callback can still arrive after an urgent paint has run; it has
+    // nothing left to draw.
+    if(!renderQueued)return;
+    const needsFull=renderFullQueued;renderQueued=false;renderUrgentQueued=false;renderFullQueued=false;lastRenderAt=performance.now();
+    /* An incident starting or ending changes the strip above the tab content, which only a
+       full render draws — patching the tab would leave a stale banner counting down to a
+       date already gone. A modal appearing or clearing is the same kind of change for the same
+       reason: renderMineContent() patches the tab body, and a modal is not inside it. On every
+       tab but Mine that fell through to render() and the bug stayed invisible. */
+    if(state.started&&typeof bannerStateChanged==="function"&&bannerStateChanged())render();
+    else if(typeof modalStateChanged==="function"&&modalStateChanged())render();
+    else if(!needsFull&&state.started&&!state.activeEvent&&!state.ended)refreshLive();else renderMineContent();
+  };
+  renderQueued=true;
+  if(urgent){renderUrgentQueued=true;setTimeout(paint,0);return}
   // Faster clocks repaint less often, not more: at 16x the simulation covers
   // eight days a second, so a repaint every frame is unreadable jitter.
   const refreshInterval=state.speed>=16?600:state.speed>=8?420:state.speed>=4?320:250;
   const delay=Math.max(0,refreshInterval-(now-lastRenderAt));
-  renderQueued=true;
-  const paint=()=>{
-    const needsFull=renderFullQueued;renderQueued=false;renderFullQueued=false;lastRenderAt=performance.now();
-    /* An incident starting or ending changes the strip above the tab content, which only a
-       full render draws — patching the tab would leave a stale banner counting down to a
-       date already gone. */
-    if(state.started&&typeof bannerStateChanged==="function"&&bannerStateChanged())render();
-    else if(!needsFull&&state.started&&!state.activeEvent&&!state.ended)refreshLive();else renderMineContent();
-  };
   // Align the DOM write with the display refresh so it never lands mid-paint.
   setTimeout(()=>requestAnimationFrame(paint),delay);
 }

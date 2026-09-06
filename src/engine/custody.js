@@ -356,8 +356,13 @@ function advanceEntropyDrain(next){
   state.wallets.hot=Math.max(0,state.wallets.hot-taken*hotShare);
   state.wallets.cold=Math.max(0,state.wallets.cold-taken*(1-hotShare));
   log("Coldcard entropy theft",`-${fmtBtc(taken)} · swept from a guessable key`,"custody");
-  showToast("Your coins are being swept",
-    `${fmtBtc(taken)} gone. A seed generated on a Coldcard in the affected window is brute-forceable, and no firmware update repairs it. Generate a fresh key on a different signer and move what is left.`,"bad","custody");
+  reportCoinLoss({
+    title:"Your coins are being swept",kind:"stolen",btc:taken,cause:"entropy",
+    from:"self-held keys generated on the affected signer",
+    what:`${fmtBtc(taken)} was swept in this wave. The waves continue for as long as the wallet can still be opened by the weak key alone.`,
+    why:"A seed generated on a Coldcard inside the affected window is brute-forceable. This is not a risk that might happen — it is a key somebody else already has, and the only variable is when they reach you. No firmware update repairs a seed that was already generated.",
+    remedy:"Generate a fresh key on a different signer and move everything that is left to it. Patching the device does nothing; only rotating the seed stops this.",
+    tab:"custody"});
 }
 function advanceCustodyRisks(next){
 const lossRisk=custodyLossRisk();
@@ -378,8 +383,13 @@ if(lossRisk>0&&nextRand()<lossRisk){
     state.wallets.hot=Math.max(0,state.wallets.hot-lost*hotShare);
     state.wallets.cold=Math.max(0,state.wallets.cold-lost*(1-hotShare));
     log("Self-held coins became unrecoverable",`-${fmtBtc(lost)} · no usable backup`,"custody");
-    showToast("Coins lost, not stolen",
-      `${fmtBtc(lost)} is still on the chain and nobody can move it, including you. ${custodySetup().policy.threshold>1?"A multisig needs its configuration backed up as well as its seeds.":"A key with no backup is a key you only borrow."}`,"bad","custody");
+    reportCoinLoss({
+      title:"Coins lost, not stolen",kind:"unrecoverable",btc:lost,cause:"nobackup",
+      from:"self-held keys",
+      what:`A signing device failed and no usable backup existed to rebuild the wallet from. ${fmtBtc(lost)} is still on the chain at an address nobody can spend from.`,
+      why:"Nobody took these. The key that could move them stopped existing, and a key with no backup is a key you only borrow.",
+      remedy:custodySetup().policy.threshold>1?"A multisig needs its wallet configuration backed up as well as its seeds — the descriptor is as necessary as the keys, and restoring without it is not possible.":"Write the seed down and store it away from the device. Then prove the backup works by restoring from it, because a backup you have never tested is a belief, not a backup.",
+      tab:"custody"});
   }
 }
 if(custodyPrivacyExposed()&&((state.wallets.hot||0)+(state.wallets.cold||0))>0&&nextRand()<.055){
@@ -396,8 +406,13 @@ if(custodyPrivacyExposed()&&((state.wallets.hot||0)+(state.wallets.cold||0))>0&&
     state.wallets.hot=Math.max(0,state.wallets.hot-lost*hotShare);
     state.wallets.cold=Math.max(0,state.wallets.cold-lost*(1-hotShare));
     log("Phishing succeeded",`-${fmtBtc(lost)} · a seed was entered into a convincing fake`,"custody");
-    showToast("The fake was convincing enough",
-      `${fmtBtc(lost)} is gone. The device was never compromised; the list of people who owned one was.`,"bad","custody");
+    reportCoinLoss({
+      title:"The fake was convincing enough",kind:"stolen",btc:lost,cause:"phishing",
+      from:"self-held keys",
+      what:`A message impersonating your hardware-wallet vendor asked you to re-enter your recovery seed for a security check. ${fmtBtc(lost)} left within the hour.`,
+      why:"The device was never compromised — the list of people who owned one was. A vendor data leak turns every customer into a known, addressable target, and the approach arrives knowing your name, your address and what you bought.",
+      remedy:"A seed is never entered anywhere but the signing device itself, and no vendor will ever ask for it. A quorum wallet would also have survived this: one key handed over spends nothing.",
+      tab:"custody"});
   } else {
     log("Targeted phishing attempt","Recognised and ignored","custody");
   }
