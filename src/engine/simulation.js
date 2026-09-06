@@ -17,7 +17,7 @@ const initialState=()=>{const seed=Math.floor(Math.random()*4294967296);return{
   treasuryPolicy:"cover",pendingSettlement:null,endReason:null,arrearsDue:0,gridCutAnnounced:false,marketPressure:{usd:0,at:0},
   operator:{eras:{},periodMined:0,periodUptime:0,periodDays:0,lastRevenueUsd:0,totalMonths:0,solventMonths:0,profitableMonths:0,competitiveMonths:0,bridgeLoans:0,restructures:0},
   xp:{total:0,level:1,peakLevel:1,bestDifficulty:0,shares:0,sources:{shares:0,record:0,deploy:0,repair:0,spend:0}},
-  knowledge:0,nextKnowledge:5,learning:null,completedLearning:[],custody:{devices:[],keys:[],policy:"single",assigned:[],configBackedUp:false,orders:[],parts:{},builds:[],exposure:[],seq:0,lastScare:0},maintenance:{condition:{},faults:{},faultsByPart:{},selfRepairs:{},dryFit:{},parts:0,inventory:{fan:0,hashboard:0,powerPcb:0,coolantPump:0,coolingManifold:0,laptopfan:0,asicfan:0,hashboardearly:0,hashboardmodern:0},inventoryMigrated:true,orders:[],serviceJobs:[]},procurementOrders:[],inactiveHardware:{},commissioningJobs:[],decommissionedHardware:{},relocationJob:null,facilityUpgradeJob:null,ops:{firmwarePatchedUntil:0,hijackUntil:0,outageUntil:0,powerOutageUntil:0,venueFreezes:{},riskMonth:""},strategy:{mstr:0,strk:0,strf:0,strd:0,strc:0,yieldEarned:0},sandbox:false,contract:"standard",staff:[],projectLoan:0,insured:false,milestones:[],milestoneLog:[],walletSetup:{done:false,step:0,rolls:[],keyHex:""},immersion:{},mineSection:"floor",priceChartRange:"all",secondary:{stock:{},month:""},stagedCondition:{},planning:{month:""},guidance:{dismissed:[]},walletSoftware:0,donations:[],
+  knowledge:0,nextKnowledge:5,learning:null,completedLearning:[],custody:{devices:[],keys:[],policy:"single",assigned:[],configBackedUp:false,orders:[],parts:{},builds:[],exposure:[],seq:0,lastScare:0},maintenance:{condition:{},faults:{},faultsByPart:{},selfRepairs:{},dryFit:{},parts:0,inventory:{fan:0,hashboard:0,powerPcb:0,coolantPump:0,coolingManifold:0,laptopfan:0,asicfan:0,hashboardearly:0,hashboardmodern:0},inventoryMigrated:true,orders:[],serviceJobs:[]},procurementOrders:[],inactiveHardware:{},commissioningJobs:[],retirementJobs:[],decommissionedHardware:{},relocationJob:null,facilityUpgradeJob:null,ops:{firmwarePatchedUntil:0,hijackUntil:0,outageUntil:0,powerOutageUntil:0,venueFreezes:{},riskMonth:""},strategy:{mstr:0,strk:0,strf:0,strd:0,strc:0,yieldEarned:0},sandbox:false,contract:"standard",staff:[],projectLoan:0,insured:false,milestones:[],milestoneLog:[],walletSetup:{done:false,step:0,rolls:[],keyHex:""},immersion:{},mineSection:"floor",priceChartRange:"all",secondary:{stock:{},month:""},stagedCondition:{},planning:{month:""},guidance:{dismissed:[]},walletSoftware:0,donations:[],
   blocks:0,mined:0,nodeDays:0,uptimeDays:0,powerSpent:0,nextMilestone:1000,
   connectivity:"fixed",history:[],activity:[],activitySeq:0,log:[{time:START,text:"Client synced to the network tip",amount:"~block "+approxHeight(START)}]
 }};
@@ -95,6 +95,7 @@ state.procurementOrders=Array.isArray(state.procurementOrders)?state.procurement
 state.inactiveHardware=state.inactiveHardware&&typeof state.inactiveHardware==="object"?state.inactiveHardware:{};
 HARDWARE.forEach(h=>state.inactiveHardware[h.id]=Math.max(0,Math.floor(Number(state.inactiveHardware[h.id])||0)));
 state.commissioningJobs=Array.isArray(state.commissioningJobs)?state.commissioningJobs.filter(job=>HARDWARE.some(h=>h.id===job.id)&&Number(job.qty)>0&&Number.isFinite(Number(job.due))):[];
+state.retirementJobs=Array.isArray(state.retirementJobs)?state.retirementJobs.filter(job=>HARDWARE.some(h=>h.id===job.id)&&Number(job.qty)>0&&Number.isFinite(Number(job.due))):[];
 state.decommissionedHardware=state.decommissionedHardware&&typeof state.decommissionedHardware==="object"?state.decommissionedHardware:{};
 HARDWARE.forEach(h=>state.decommissionedHardware[h.id]=Math.max(0,Math.floor(Number(state.decommissionedHardware[h.id])||0)));
 state.relocationJob=state.relocationJob&&REGIONS.some(r=>r.id===state.relocationJob.id)&&Number.isFinite(Number(state.relocationJob.due))?state.relocationJob:null;
@@ -543,6 +544,7 @@ function tick(silent=false){
   advanceSecondaryMarket(next);
   advanceMaterialsPlanning(next);
   advanceProcurement();advanceCoolingInstalls();
+  advanceRetirements();
   advanceFleetLifecycle();
   const crossed=EVENTS.filter(e=>at(e.date)>prev&&at(e.date)<=next&&!state.seen.includes(e.id)).sort((a,b)=>at(a.date)-at(b.date));
   crossed.forEach(e=>{state.seen.push(e.id);applyEvent(e)});

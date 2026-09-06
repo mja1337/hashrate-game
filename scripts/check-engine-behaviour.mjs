@@ -1162,14 +1162,48 @@ rule("salvage recovers a fan from every machine retired", () => {
       ${SITE(`state.time=at("2016-06-01");state.facility="warehouse";state.hardware={s9:10};`)}
       state.skills=skills;state.maintenance.inventory.asicfan=0;
       // The shared site setup leaves storage alone, and it accumulates between runs.
-      state.decommissionedHardware={};state.poweredDownHardware={};
+      state.decommissionedHardware={};state.poweredDownHardware={};state.retirementJobs=[];
       decommissionHardware("s9",4);
-      return{fans:state.maintenance.inventory.asicfan,stored:state.decommissionedHardware.s9||0};
+      // Retirement is work now, so the fan comes out when the machine does. Run the clock.
+      const immediate={fans:state.maintenance.inventory.asicfan,stored:state.decommissionedHardware.s9||0,
+        active:state.hardware.s9,jobs:state.retirementJobs.length};
+      for(let d=0;d<8;d++){state.time+=DAY;advanceRetirements()}
+      return{immediate,fans:state.maintenance.inventory.asicfan,stored:state.decommissionedHardware.s9||0,
+        active:state.hardware.s9,jobs:state.retirementJobs.length};
     };
     return{plain:run([]),skilled:run(["salvage"])};})()`);
   assert(r.plain.fans === 0, `retiring machines without the skill produced ${r.plain.fans} fans`);
   assert(r.skilled.fans === 4, `retiring four machines with salvage produced ${r.skilled.fans} fans`);
   assert(r.skilled.stored === 4, "salvage consumed the machines instead of storing them");
+  /* Retiring is work, not a state change: nothing has left the racks on the day it is
+     ordered, and the machines are still the operator's until the crew has pulled them. */
+  assert(r.skilled.immediate.jobs === 1 && r.skilled.immediate.stored === 0 && r.skilled.immediate.active === 10,
+    "retirement still empties the racks instantly instead of scheduling the work");
+  assert(r.skilled.active === 6 && r.skilled.jobs === 0, "the retirement job never finished");
+});
+
+rule("a large retirement empties the racks gradually, not on the last day", () => {
+  const r = json(`(()=>{${SITE(`state.time=at("2018-06-01");state.facility="warehouse";state.region="texas";
+    state.hardware={};state.hardware.s9=400;state.decommissionedHardware={};state.poweredDownHardware={};
+    state.retirementJobs=[];state.commissioningJobs=[];state.procurementOrders=[];state.inactiveHardware={};`)}
+    decommissionHardware("s9",400);
+    const days=state.retirementJobs[0].days,trace=[];
+    /* Driven through tick() rather than by calling the advance directly, so this also proves
+       the job is actually wired into the simulation day. Calling the helper by hand tested
+       that the helper worked and would have passed with the tick call deleted. */
+    for(let d=0;d<days+2;d++){tick(true);
+      trace.push({active:state.hardware.s9,stored:state.decommissionedHardware.s9||0,hash:Math.round(fleet().hash/1e12)});}
+    return{days,trace}})()`);
+  assert(r.days > 1, `retiring 400 machines took ${r.days} day; large-scale work must take time`);
+  const midway = r.trace[Math.floor(r.trace.length / 2) - 1];
+  /* The point of the ramp: halfway through, half the fleet is out and half is still hashing.
+     An instant retirement and a last-day retirement both fail this. */
+  assert(midway.active > 0 && midway.active < 400,
+    `halfway through the job the rack held ${midway.active} of 400 machines, so the work is not gradual`);
+  assert(midway.stored > 0 && midway.stored < 400, "storage fills in one step rather than as the crew works");
+  assert(midway.hash > 0, "hash rate collapsed before the machines were actually pulled");
+  const end = r.trace[r.trace.length - 1];
+  assert(end.active === 0 && end.stored === 400, `the job ended with ${end.active} active and ${end.stored} stored`);
 });
 
 rule("air-gapped signing reduces what a key compromise can reach", () => {

@@ -203,6 +203,20 @@ assert(/reason:status==="paused"\?\(siteReason\|\|"manual"\)/.test(inline),
 assert(inline.includes('const gridDown=gridCutOff()||!!state.policyLock'),
   "A grid disconnection is not told apart from a machine somebody switched off");
 
+/* RETIRING IS WORK, AND THE PIPELINE RUNS BOTH WAYS.
+   Machines on their way out are as much a part of what the floor is doing as machines on their
+   way in, and a fleet that is half-retired is a hash rate still falling. */
+assert(inline.includes("function advanceRetirements()") && inline.includes("state.retirementJobs.push({id,qty,done:0,started:state.time,due:state.time+days*DAY,days})"),
+  "Retirement is instant again, or no longer scheduled as work the crew does over days");
+assert(inline.includes("retirementJobs:[],") && inline.includes("state.retirementJobs=Array.isArray(state.retirementJobs)"),
+  "Retirement jobs have no default or no save migration, so an old save could carry a broken queue");
+assert(inline.includes('detail:"Retiring"') && inline.includes('class="incoming-fleet-row outgoing"'),
+  "Machines on their way out of the fleet are invisible in the build queue or the Mine pipeline");
+/* A one-machine line is a switch, not a fleet. Three greyed-out fleet operations against a
+   single laptop hide the only thing the player wants for the first year of the game. */
+assert(inline.includes('${running?"Stop hashing":"Start hashing"}') && inline.includes("${n===1"),
+  "A single-unit hardware line no longer offers one clear stop/start control");
+
 /* THE FLOOR IS THE 3D FLOOR, and the flat floor is the fallback underneath it. Four things
    have to stay true: nothing offers the flat floor as a choice, the flat floor is still in the
    markup for a browser that cannot draw the real one, the library is not loaded until somebody
