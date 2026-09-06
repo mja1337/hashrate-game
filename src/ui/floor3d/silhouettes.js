@@ -27,21 +27,52 @@
    colours separate generations rather than matching anodising. */
 
 const FloorMiners=(()=>{
+  /* THE CASES ARE THE PUBLISHED DIMENSIONS, TO ONE SCALE.
+
+     These were drawn by eye and the eye was wrong in a consistent direction: every ASIC was
+     far too wide and too flat. An Antminer S19 is 370 × 195.5 × 290 mm — deeper than it is
+     tall, and TALLER THAN IT IS WIDE — and it was being drawn 0.98 wide by 0.55 high, roughly
+     two and a half times too wide for its height. A rack of them read as a shelf of pizza
+     boxes rather than a row of upright machines, which is the single thing that most stopped
+     the floor looking like a photograph of a mine.
+
+     So the table is now the manufacturers' own figures at one scale, MM_UNIT, and the
+     millimetres are written down beside each entry. Anyone changing a case has to change a
+     measurement, and the proportions between machines stay honest for free: an S9 really is a
+     small flat box next to an S19, and an S21 really is only the S19 made longer.
+
+     Air path is the depth (the manufacturer's length), so the fans face front and back and
+     the machine is drawn the way it is racked. */
+  const MM=0.0022;                                   // one millimetre, in floor units
+  const mm=(l,w,h)=>({d:+(l*MM).toFixed(3),w:+(w*MM).toFixed(3),h:+(h*MM).toFixed(3)});
+  /* Every one of these machines is cooled by 120 mm fans — that is the part the whole
+     industry standardised on — so the radius is the fan, not a per-model guess. The models
+     that carry four (two at each end, stacked, because the face is taller than it is wide)
+     are marked with fans:2 rather than an ad-hoc "make the single fan bigger" flag. */
+  const FAN120=60*MM;
   const profiles={
     laptop:{type:'laptop'},cpu:{type:'cpu'},'5870':{type:'gpu'},gpurig:{type:'rig'},fpga:{type:'fpga'},
     avalon:{type:'avalon',color:0xc6bbaa},
     s1:{type:'openasic',color:0x788f83,boards:2},
-    s3:{type:'asic',color:0x849298,w:.93,h:.36,d:.73,fan:.15,fins:4},
+    // Antminer S3 · 331 × 126 × 155 mm
+    s3:{type:'asic',color:0x849298,...mm(331,126,155),fan:FAN120,fins:4},
     s5:{type:'openasic',color:0xc2b8a3,boards:3},
-    s7:{type:'asic',color:0xaaa998,w:.6,h:.43,d:.94,fan:.18,fins:5},
-    s9:{type:'asic',color:0xb7b8ae,w:.55,h:.43,d:1.08,fan:.18,fins:8,psu:true},
-    s17:{type:'asic',color:0x9cabb1,w:.9,h:.61,d:.73,fan:.21,fins:4,dual:true},
-    s19:{type:'asic',color:0xbac0be,w:.98,h:.55,d:.78,fan:.21,fins:7,dual:true,psu:true},
-    s19xp:{type:'asic',color:0xc5c9c1,w:.98,h:.55,d:.8,fan:.21,fins:10,dual:true,psu:true,trim:0x65b7a5},
-    s19hydro:{type:'hydro',color:0x8faeb6,w:1.08,h:.47,d:.85,pipes:2},
-    s21:{type:'asic',color:0xd2d3ca,w:1.16,h:.6,d:.84,fan:.23,fins:8,dual:true,psu:true,trim:0xe4a14d},
-    s21hydro:{type:'hydro',color:0xc6d0d0,w:1.22,h:.51,d:.95,pipes:3},
-    s21xp:{type:'asic',color:0xb0bdc2,w:1.16,h:.6,d:.87,fan:.23,fins:12,dual:true,psu:true,trim:0x70c7dd}
+    // Antminer S7 · 301 × 123 × 155 mm
+    s7:{type:'asic',color:0xaaa998,...mm(301,123,155),fan:FAN120,fins:5},
+    // Antminer S9 · 350 × 135 × 158 mm · APW3 supply sits on the case
+    s9:{type:'asic',color:0xb7b8ae,...mm(350,135,158),fan:FAN120,fins:8,psu:true},
+    // Antminer S17 · 298 × 175 × 304 mm · four fans
+    s17:{type:'asic',color:0x9cabb1,...mm(298,175,304),fan:FAN120,fins:4,fans:2},
+    // Antminer S19 · 370 × 195.5 × 290 mm · four fans · APW12 on the case
+    s19:{type:'asic',color:0xbac0be,...mm(370,195.5,290),fan:FAN120,fins:7,fans:2,psu:true},
+    s19xp:{type:'asic',color:0xc5c9c1,...mm(370,195.5,290),fan:FAN120,fins:10,fans:2,psu:true,trim:0x65b7a5},
+    // Antminer S19 Hydro · 410 × 170 × 209 mm · no fans, so the case is flatter
+    s19hydro:{type:'hydro',color:0x8faeb6,...mm(410,170,209),pipes:2},
+    // Antminer S21 · 400 × 195.5 × 290 mm · the S19 case made longer
+    s21:{type:'asic',color:0xd2d3ca,...mm(400,195.5,290),fan:FAN120,fins:8,fans:2,psu:true,trim:0xe4a14d},
+    // Antminer S21 Hydro · 442 × 196 × 290 mm
+    s21hydro:{type:'hydro',color:0xc6d0d0,...mm(442,196,290),pipes:3},
+    s21xp:{type:'asic',color:0xb0bdc2,...mm(400,195.5,290),fan:FAN120,fins:12,fans:2,psu:true,trim:0x70c7dd}
   };
   function render(h,b,api){
     const {box,part,fan,C}=api,p=profiles[h.id];if(!p)throw Error('Missing visual: '+h.id);
@@ -237,15 +268,28 @@ const FloorMiners=(()=>{
       // Recessed end panels so the fans sit IN the case rather than on it.
       M([p.w-.03,p.h-.03,.03],[0,y,front+.016],0x2b383e);
       M([p.w-.03,p.h-.03,.03],[0,y,back-.016],0x2b383e);
-      // A bigger machine carries a bigger fan, not a second one beside it.
-      const fanR=p.dual?Math.min(p.fan*1.55,Math.min(p.w,p.h)*.46):p.fan;
-      F(0,y,front+.04,fanR);F(0,y,back-.04,fanR,-1);
+      /* Fan count is the machine's own. A 195 × 290 face takes two 120 mm fans STACKED —
+         which is what an S17, S19 or S21 actually carries, four in total — and a 135 × 158
+         face takes one. The previous rule made the single fan bigger instead, which produced
+         a 200 mm fan no manufacturer has ever fitted and hid the most recognisable thing
+         about the modern machines. The radius is clamped to the face so a fan can never
+         overhang the case it is bolted to. */
+      const perEnd=Math.max(1,p.fans||1);
+      const fanR=Math.min(p.fan,p.w*.47,p.h/perEnd*.47);
+      for(let f=0;f<perEnd;f++){
+        const fy=y+(f-(perEnd-1)/2)*(p.h/perEnd);
+        F(0,fy,front+.04,fanR);F(0,fy,back-.04,fanR,-1);
+      }
       if(detail){
         /* Ridges along the roof, the way the extrusion is actually pulled. Kept close to the
            shell colour: a first pass drew them dark and added vertical ribs down both flanks
            as well, and eight dark stripes over a light case turns a machine into a cage. */
-        for(let k=0;k<p.fins;k++){
-          const rx=-p.w/2+.07+k*(p.w-.14)/Math.max(1,p.fins-1);
+        /* Ridge count is capped by the roof it has to fit on. The cases are the published
+           widths now, which are narrower than they were drawn, and twelve ridges across a
+           195 mm roof is not an extrusion, it is a solid block. */
+        const fins=Math.max(3,Math.min(p.fins,Math.floor((p.w-.14)/.045)));
+        for(let k=0;k<fins;k++){
+          const rx=-p.w/2+.07+k*(p.w-.14)/Math.max(1,fins-1);
           M([.02,.018,p.d-.1],[rx,y+p.h/2+.006,0],0x9fb0b4);
         }
         // A louvred band low on each flank, the only break in an otherwise flat side.
@@ -257,9 +301,14 @@ const FloorMiners=(()=>{
         led(-p.w*.2-.05,y+p.h/2+.06,-p.d*.18+.1,.03);
       }
       if(p.psu){
-        M([.22,.13,p.d*.82],[p.w/2-.09,y+p.h/2+.085,0],C.steel);
-        if(detail)for(let k=0;k<5;k++)M([.2,.016,.03],[p.w/2-.09,y+p.h/2+.085,-p.d*.3+k*p.d*.15],C.dark);
-        drop(p.w/2-.09,y+p.h/2+.02,-p.d*.42,.22);
+        /* The supply sits ON the case, not beside it. An APW12 is 285 × 150 × 86 mm against a
+           case 195 wide, so it is a little narrower than the machine and about a third as
+           tall — it was drawn as a fixed 0.22-wide slab, which on a correctly-proportioned
+           195 mm case hung off the side of the machine it is bolted to. */
+        const pw=p.w*.77,ph=Math.max(.07,p.h*.3),pd=p.d*.77;
+        M([pw,ph,pd],[0,y+p.h/2+ph/2,0],C.steel);
+        if(detail)for(let k=0;k<5;k++)M([pw*.92,.016,.03],[0,y+p.h/2+ph*.75,-pd*.38+k*pd*.19],C.dark);
+        drop(pw/2-.04,y+p.h/2+ph*.4,-pd*.46,.22);
       }else drop(p.w/2-.05,y-p.h/2+.02,-p.d*.36,.2);
       if(p.trim)M([p.w,.022,.05],[0,y-p.h/2+.02,front+.035],p.trim);
       // Serial label plate, low on the front, where every one of these machines carries it.

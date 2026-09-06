@@ -37,7 +37,7 @@ const FloorScene=(()=>{
      drawn to a smaller scale — machines and spacing together — the way a floor plan zooms out
      rather than marching its contents through the wall. A big site therefore draws small,
      dense rows, which is what a big site looks like. */
-  const AISLE_X=.36,AISLE_Z=.62,FLOOR_MIN_SCALE=.24,FLOOR_DETAIL_SCALE=.62,FLOOR_DETAIL_UNITS=1000;
+  const AISLE_X=.36,AISLE_Z=.62,FLOOR_MIN_SCALE=.24;
   function layout(s){
     const {p,h}=FloorModel.definitions(s),bs=FloorModel.batches(s);
     const usableW=p.width-(p.width>=18?7:3.8),usableD=p.depth-(p.width>=18?6:3.6);
@@ -74,19 +74,30 @@ const FloorScene=(()=>{
   }
   /* WHETHER THE DETAIL IS WORTH DRAWING.
 
-     Two questions, not one. Scale answers "can it be seen" — below about two-thirds size the
-     roof ridges and the serial plate are smaller than a pixel. Fleet size answers "can it be
-     afforded", and it has to be asked separately: a light industrial unit with a hundred and
-     twenty machines draws its floor small because the room is wide and the batches are many,
-     but it is three thousand instances either way and there is no reason to take its detail
-     away. A five-thousand-machine yard is the case this exists for, and only that case. */
-  function floorDetail(s,scale){
-    if(scale>=FLOOR_DETAIL_SCALE)return true;
+     This asked whether the detail could be SEEN — below about two-thirds scale a roof ridge is
+     sub-pixel — with affordability bolted on as an escape hatch that could only ever turn
+     detail back on. That was the wrong way round, and correcting the case dimensions proved
+     it: narrower machines make narrower racks, more racks fit, the floor draws at a larger
+     scale, and five thousand machines sailed back over the visibility threshold into 459,000
+     instances and a 2.9-second build — the exact multi-second freeze this project has twice
+     been asked to remove.
+
+     Cost is the constraint, so cost is the test, and it is a ceiling rather than a hint. What
+     it counts is machines actually drawn, because that is what instances are proportional to:
+     roughly sixty-five per machine with its ridges, louvres, controller board, serial plate
+     and two thirteen-part fans, against roughly ten without. A thousand machines is about
+     sixty-five thousand instances and seventy milliseconds, which is the budget.
+
+     Nothing here consults scale any more. A floor of two hundred machines drawn small can
+     still be zoomed into, and a floor of five thousand cannot afford the detail at any
+     zoom. */
+  const FLOOR_DETAIL_UNITS=1000;
+  function floorDetail(s){
     const fs=typeof fleet==="function"?fleet():null;
-    return !!fs&&fs.count<=FLOOR_DETAIL_UNITS;
+    return !fs||fs.count<=FLOOR_DETAIL_UNITS;
   }
   function build(s,opts={}){
-    const root=new T.Group(),{h}=FloorModel.definitions(s),stats=FloorModel.metrics(s),rows=layout(s),floorScale=rows.scale||1,detail=floorDetail(s,floorScale),buckets=new Map(),fanMeshes=[],textures=[],materials=[],signs=[];
+    const root=new T.Group(),{h}=FloorModel.definitions(s),stats=FloorModel.metrics(s),rows=layout(s),floorScale=rows.scale||1,detail=floorDetail(s),buckets=new Map(),fanMeshes=[],textures=[],materials=[],signs=[];
     /* Segment counts are the cheapest realism available: every one of these geometries is
        instanced, so raising them costs vertices once and nothing per machine. Twelve-sided
        cylinders read as polygons at fan size, and a four-segment torus is a square ring. */

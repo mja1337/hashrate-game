@@ -203,14 +203,21 @@ assert(/reason:status==="paused"\?\(siteReason\|\|"manual"\)/.test(inline),
 assert(inline.includes('const gridDown=gridCutOff()||!!state.policyLock'),
   "A grid disconnection is not told apart from a machine somebody switched off");
 
-// THE 3D FLOOR is an alternative view, never a replacement. Four things have to stay true:
-// the flat floor is the default and stays in the markup, the library is not loaded until
-// somebody asks for it, the canvas outlives the repaints that destroy everything around it,
-// and every failure path lands back on the flat floor.
-assert(/floorView:"2d"/.test(inline), "The flat floor is no longer the default view");
-assert(inline.includes('state.floorView=state.floorView==="3d"?"3d":"2d"'),
-  "floorView has no save migration, so an unknown value could leave the floor blank");
-assert(inline.includes('data-action="floor-view"'), "The floor view toggle is missing");
+/* THE FLOOR IS THE 3D FLOOR, and the flat floor is the fallback underneath it. Four things
+   have to stay true: nothing offers the flat floor as a choice, the flat floor is still in the
+   markup for a browser that cannot draw the real one, the library is not loaded until somebody
+   opens the floor, the canvas outlives the repaints that destroy everything around it, and
+   every failure path still lands on the flat floor rather than a blank rectangle. */
+assert(/floorView:"3d"/.test(inline) && inline.includes('state.floorView="3d";'),
+  "The 3D floor is not the default, or an old save's flat-floor preference is not migrated onto it");
+assert(!inline.includes('data-action="floor-view"') && !inline.includes("function floorViewToggle(") && !inline.includes('a==="floor-view"'),
+  "The floor view toggle is back — as markup, as a builder or as a handler; the flat floor is a fallback, not a choice");
+assert(inline.includes("function floor3dAvailable()") && inline.includes("function floorViewport()"),
+  "Nothing decides whether the real floor can be drawn, so the fallback cannot be automatic");
+assert(inline.includes('<div class="facility-floor tier-${tier}"${floor3dAvailable()?\' hidden\':\'\'}>'),
+  "The flat floor is no longer kept in the markup for a browser that cannot open a 3D context");
+assert(inline.includes('function floor3dWanted(){return state.floorView==="3d"&&!floor3dUnavailableReason()}'),
+  "The mount still asks which view was chosen rather than whether one can be drawn");
 {
   const head = await readFile(new URL("index.html", root), "utf8");
   assert(!head.includes("vendor/three.floor.js"),
@@ -739,6 +746,35 @@ assert(inline.includes("function miningFloorCooling()") && inline.includes("${mi
    to fit rather than overflow. */
 const sceneArt = await readFile(new URL("src/ui/floor3d/scene.js", root), "utf8");
 const minerArt = await readFile(new URL("src/ui/floor3d/silhouettes.js", root), "utf8");
+/* THE CASES ARE THE PUBLISHED DIMENSIONS.
+
+   These were drawn by eye and the eye was wrong in a consistent direction: every ASIC was far
+   too wide and too flat. An Antminer S19 is 370 x 195.5 x 290 mm — deeper than it is tall and
+   TALLER THAN IT IS WIDE — and it was drawn 0.98 wide by 0.55 high, roughly two and a half
+   times too wide for its height, so a rack read as a shelf of pizza boxes. The table is now
+   the manufacturers' figures at one scale with the millimetres written beside each entry:
+   changing a case means changing a measurement. */
+assert(minerArt.includes("const MM=0.0022;") && /const mm=\(l,w,h\)=>/.test(minerArt),
+  "The case table no longer converts published millimetres to floor units at one scale");
+for (const [id, dims] of [["s9","350,135,158"],["s17","298,175,304"],["s19","370,195.5,290"],["s21","400,195.5,290"]])
+  assert(new RegExp(`${id}:\\{[^}]*\\.\\.\\.mm\\(${dims.replace(/\./g,"\\.")}\\)`).test(minerArt),
+    `${id} is no longer built from its published dimensions`);
+assert(!/w:\.\d+,h:\.\d+,d:\.\d+/.test(minerArt),
+  "A case has gone back to hand-picked proportions instead of its real measurements");
+/* Every one of these machines is cooled by 120 mm fans, and the modern ones carry four — two
+   at each end, stacked, because the face is taller than it is wide. The old rule made the
+   single fan bigger instead, producing a 200 mm fan no manufacturer has ever fitted. */
+assert(minerArt.includes("const FAN120=60*MM;") && !minerArt.includes("dual:true"),
+  "Fan size is no longer the 120 mm part the industry standardised on, or the old dual flag is back");
+assert(/const perEnd=Math\.max\(1,p\.fans\|\|1\);/.test(minerArt) && /for\(let f=0;f<perEnd;f\+\+\)/.test(minerArt) && minerArt.includes("F(0,fy,front+.04,fanR);F(0,fy,back-.04,fanR,-1);"),
+  "A four-fan machine no longer draws two stacked fans at each end");
+assert(minerArt.includes("Math.min(p.fan,p.w*.47,p.h/perEnd*.47)"),
+  "A fan can overhang the case it is bolted to");
+assert(minerArt.includes("const pw=p.w*.77,ph=Math.max(.07,p.h*.3),pd=p.d*.77;"),
+  "The supply is no longer sized to the case it sits on, so it hangs off the side of the machine");
+assert(minerArt.includes("const fins=Math.max(3,Math.min(p.fins,Math.floor((p.w-.14)/.045)));"),
+  "Roof ridge count is not capped by the roof, so a narrow case draws a solid block");
+
 assert(minerArt.includes("function rackFootprint(") && /return\s*\{profiles,render,rackFootprint\}/.test(minerArt),
   "The rack no longer publishes its footprint, so the grid that places racks has to guess it");
 assert(sceneArt.includes("FloorMiners.rackFootprint(h,typical)") && !/const RACK_W\s*=/.test(sceneArt),
@@ -756,8 +792,16 @@ assert(/items\.push\(\{matrix:dummy\.matrix\.clone\(\),color,batch,pos,size,rot,
 /* Level of detail asks two questions, not one: can it be seen, and can it be afforded. A
    hundred-and-twenty-machine workshop draws small because the room is wide, and there is no
    reason to take its detail away for three thousand instances. */
-assert(sceneArt.includes("function floorDetail(s,scale)") && sceneArt.includes("if(scale>=FLOOR_DETAIL_SCALE)return true") && sceneArt.includes("fs.count<=FLOOR_DETAIL_UNITS"),
-  "Level of detail no longer considers whether the detail is affordable, only whether it is visible");
+/* Level of detail is a COST CEILING, not a visibility hint. It was written the other way
+   round — can it be seen, with affordability as an escape hatch that could only turn detail
+   back ON — and correcting the case dimensions proved that wrong: narrower machines make
+   narrower racks, more racks fit, the floor draws larger, and five thousand machines sailed
+   back over the visibility threshold into 459,000 instances and a 2.9-second build. Any
+   reading of scale in this decision is that bug waiting to happen again. */
+assert(sceneArt.includes("function floorDetail(s)") && sceneArt.includes("return !fs||fs.count<=FLOOR_DETAIL_UNITS;"),
+  "Level of detail no longer bounds what it costs to draw");
+assert(!/floorDetail\([^)]*scale[^)]*\)/.test(sceneArt) && !/FLOOR_DETAIL_SCALE/.test(sceneArt),
+  "Level of detail consults the floor scale again, which lets a large fleet buy back its detail by drawing bigger");
 assert(minerArt.includes("const detail=api.detail!==false;") && minerArt.includes("if(detail){") && /\/\* The status LED stays at every scale/.test(minerArt),
   "The coarse silhouette has gone, or it has taken the status LED with it — the one part that carries information rather than texture");
 assert(/const RACK_ACROSS_BY_TIER=\[2,2,3,4,4,6,6,8\]/.test(minerArt) && minerArt.includes("function rackAcrossCap()"),

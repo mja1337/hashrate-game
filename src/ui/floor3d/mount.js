@@ -38,7 +38,9 @@ function floor3dUnavailableReason(){
   if(!floor3dSupported())return "This browser cannot open a 3D context.";
   return "";
 }
-function floor3dWanted(){return state.floorView==="3d"}
+/* There is no longer a view to want. The floor is the 3D floor wherever one can be drawn, so
+   this asks the only remaining question: did it fail, or can it not run here at all. */
+function floor3dWanted(){return state.floorView==="3d"&&!floor3dUnavailableReason()}
 
 /* Loads the library and the view modules once, in order, then paints. A failure here is not
    an error the player has to deal with — it turns the toggle off and says why. */

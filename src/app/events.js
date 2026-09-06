@@ -46,7 +46,6 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(a==="repair-nudge")repairNudgeDial(id,b.dataset.delta);
   else if(a==="focus-service")focusServiceRow(id);
   else if(a==="buy-cooling")buyCooling(id);
-  else if(a==="floor-view"){state.floorView=v==="3d"?"3d":"2d";save();render();}
   else if(a==="gift-card")buyGiftCard(id,Number(v));
   else if(a==="custody-buy")orderCustodyProduct(id,1);
   else if(a==="custody-assemble")assembleCustodyBuild(id);
