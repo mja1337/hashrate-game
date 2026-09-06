@@ -38,11 +38,36 @@ function stageDelivery(id,qty,condition){
    Reckoned against what is actually INSTALLED, not against what is on order. Orders and staged
    crates reserve nothing: an order in transit that held capacity hostage is precisely what
    stopped the staged units in the warehouse from ever being racked. */
+/* WHAT IS ALREADY ON ITS WAY INTO THE RACKS.
+
+   Orders and staged crates reserve nothing — that is deliberate, and it is what lets a fleet
+   bought ahead of a substation upgrade sit in storage until there is room for it. A machine
+   being COMMISSIONED is a different thing entirely: the crew is bolting it in, and it is going
+   to draw power and occupy floor whether or not it has finished doing so yet.
+
+   Leaving those out was a real and expensive mistake. Commissioning takes days, the intake runs
+   every day, and headroom measured against installed machines alone does not shrink while a job
+   is in flight — so the intake started a fresh job every day for the whole length of the last
+   one, each convinced there was room. A site could end up with several times the machines it
+   can carry, at which point fleet().within goes false and the entire operation stops mining
+   with no message anywhere saying why. */
+function committedLoad(s=state){
+  let watts=0,space=0;
+  for(const job of s.commissioningJobs||[]){
+    const h=HARDWARE.find(x=>x.id===job.id);if(!h)continue;
+    const left=Math.max(0,(Number(job.qty)||0)-(Number(job.done)||0));
+    if(!left)continue;
+    watts+=left*hardwarePeakWatts(h,s);
+    space+=left*(h.space||0);
+  }
+  return{watts,space};
+}
 function siteRackHeadroom(h,s=state){
   if(!h)return 0;
   const fs=fleet(s),f=FACILITIES.find(x=>x.id===s.facility)||FACILITIES[0];
-  const freeWatts=Math.max(0,(fs.cap-fs.potentialKw)*1000);
-  const freeSpace=Math.max(0,f.space-fs.space);
+  const pending=committedLoad(s);
+  const freeWatts=Math.max(0,(fs.cap-fs.potentialKw)*1000-pending.watts);
+  const freeSpace=Math.max(0,f.space-fs.space-pending.space);
   const byPower=Math.floor(freeWatts/Math.max(1,hardwarePeakWatts(h,s)));
   const bySpace=h.space>0?Math.floor(freeSpace/h.space):Infinity;
   return Math.max(0,Math.min(byPower,bySpace));

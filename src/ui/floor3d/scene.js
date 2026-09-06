@@ -96,8 +96,38 @@ const FloorScene=(()=>{
     const fs=typeof fleet==="function"?fleet():null;
     return !fs||fs.count<=FLOOR_DETAIL_UNITS;
   }
+  /* A CEILING, BECAUSE THE FLEET HAS NONE.
+
+     Instance count grew with the fleet and stopped nowhere. At a megacampus running fifty-six
+     thousand machines that is a hundred and sixty thousand instances and a quarter-second
+     build — survivable on the machine it was measured on, and a hard render failure on one
+     with less headroom, which is what a player reported. Falling back to the flat floor at
+     that point is the worst outcome available: the largest operation in the game is the one
+     that most wants to be seen.
+
+     So the floor draws to a budget. Machines per rack are reduced until the estimate fits,
+     which costs a representation that was already a representation — nobody was ever drawing
+     fifty-six thousand miners — and never costs the room, the racks, the plant or the fault
+     beacons, which are what the picture is actually for.
+
+     The per-machine figures are measured, not guessed: a detailed ASIC is about sixty-five
+     instances with its ridges, louvres, board, plate and two thirteen-part fans; the coarse
+     silhouette is about ten. */
+  const FLOOR_INSTANCE_BUDGET=120000,FLOOR_PER_MACHINE_DETAIL=65,FLOOR_PER_MACHINE_COARSE=12;
+  /* A rack costs something before it holds anything: uprights, a busway, a data spine and a
+     shelf with rails and indicators for every level. That fixed cost is charged per BATCH, so
+     the budget has to pay it before it can buy machines — an earlier version divided the whole
+     budget by machines alone, concluded a megacampus could afford fifty-seven per rack, and
+     never bound at all. */
+  const FLOOR_PER_RACK=240;
+  function floorUnitCap(batches,detail,relief=1){
+    const per=detail?FLOOR_PER_MACHINE_DETAIL:FLOOR_PER_MACHINE_COARSE;
+    const rows=Math.max(1,batches);
+    const perRack=FLOOR_INSTANCE_BUDGET/(Math.max(1,relief)*rows)-FLOOR_PER_RACK;
+    return Math.max(1,Math.floor(perRack/per));
+  }
   function build(s,opts={}){
-    const root=new T.Group(),{h}=FloorModel.definitions(s),stats=FloorModel.metrics(s),rows=layout(s),floorScale=rows.scale||1,detail=floorDetail(s),buckets=new Map(),fanMeshes=[],textures=[],materials=[],signs=[];
+    const root=new T.Group(),{h}=FloorModel.definitions(s),stats=FloorModel.metrics(s),rows=layout(s),floorScale=rows.scale||1,detail=floorDetail(s),unitCap=floorUnitCap(rows.length,detail,opts.relief||1),buckets=new Map(),fanMeshes=[],textures=[],materials=[],signs=[];
     /* Segment counts are the cheapest realism available: every one of these geometries is
        instanced, so raising them costs vertices once and nothing per machine. Twelve-sided
        cylinders read as polygons at fan size, and a four-segment torus is a square ring. */
@@ -164,7 +194,7 @@ const FloorScene=(()=>{
         for(const dz of [-.72,.72])box([1.8,.025,.055],[x,.11,z+dz],C.orange,b.id,true);
         for(const dx of [-.87,.87])box([.055,.025,1.5],[x+dx,.11,z],C.orange,b.id,true);
       }
-      FloorMiners.render(b.hardware||h,b,{box,part,fan,metal,tube,lamp,C,accent,detail});
+      FloorMiners.render(b.hardware||h,b,{box,part,fan,metal,tube,lamp,C,accent,detail,unitCap});
       if(b.status==='fault'||b.status==='repair'){
         lamp([.36,.25,.1],[x,2.48,z],statusColor,b.id,1.9);
         box([.035,.11,.02],[x,2.5,z+.07],C.dark,b.id);

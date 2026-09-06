@@ -297,11 +297,15 @@ rule("a fleet can be bought beyond the room, and the room takes what it can", ()
       installed:state.hardware.s19,hold:stagedHoldReason("s19")};
     // Free real capacity and let the crew work: the rest must go in without being asked.
     decommissionHardware("s19",20);
-    const days=state.retirementJobs[0].days;
-    for(let d=0;d<days+8;d++)tick(true);
-    return{headroom,offered,ordered,arrival,
+    /* Long enough for the intake to work through in waves, and to prove it then STOPS. The
+       intake has to pace itself: machines being commissioned occupy floor and draw power before
+       the crew has finished bolting them in, so each wave waits for the last to land. */
+    let everOver=false;
+    for(let d=0;d<60;d++){tick(true);if(!fleet().within)everOver=true}
+    return{headroom,offered,ordered,arrival,everOver,
       end:{staged:state.inactiveHardware.s19||0,installed:state.hardware.s19,
-        stored:state.decommissionedHardware.s19||0}}})()`);
+        stored:state.decommissionedHardware.s19||0,
+        within:fleet().within,headroom:siteRackHeadroom(HARDWARE.find(x=>x.id==="s19"))}}})()`);
   assert(r.headroom > 0 && r.headroom < 60, `the site had headroom for ${r.headroom}; the case needs it to be short of the order`);
   /* The card has to offer it too, or the engine allows something the player can never ask for. */
   assert(r.offered > r.headroom,
@@ -312,11 +316,73 @@ rule("a fleet can be bought beyond the room, and the room takes what it can", ()
   assert(r.arrival.job === r.headroom, `the site accepted ${r.arrival.job} of a delivery it had room for ${r.headroom} of`);
   assert(r.arrival.staged === 60 - r.headroom, `${r.arrival.staged} were left in storage; expected ${60 - r.headroom}`);
   assert(/storage/i.test(r.arrival.hold), "nothing explains why the rest of a paid-for delivery is still in its crate");
-  /* And the room opening later is enough on its own. Nobody should have to come back and press
-     a button to accept hardware they have already paid for. */
-  assert(r.end.staged === 0, `${r.end.staged} machines were still in storage after capacity freed up`);
-  assert(r.end.installed === 60 && r.end.stored === 20,
-    `ended with ${r.end.installed} racked and ${r.end.stored} stored; expected 60 and 20`);
+  /* And the room opening later is enough on its own — nobody should have to press a button to
+     accept hardware they have already paid for. But only as far as the room actually goes: a
+     workshop supplies 100 kW and an S19 draws 3.5 kW, so it holds about twenty-nine of them and
+     the balance stays in storage. An earlier version of this rule asserted that all sixty went
+     in, which is precisely the bug it should have caught — the intake was over-committing
+     because machines already being commissioned reserved nothing, and a site that ends up
+     holding more than it can carry stops mining entirely. */
+  assert(r.end.installed > r.headroom, "capacity freeing up did not let any more machines in");
+  assert(r.end.installed + r.end.staged === 60, `${r.end.installed} racked and ${r.end.staged} staged do not account for the 60 bought`);
+  assert(r.end.stored === 20, `${r.end.stored} machines in storage after retiring 20`);
+  assert(r.end.headroom === 0, `the site stopped taking machines with room for ${r.end.headroom} more`);
+  /* The invariant this whole gate exists to protect. */
+  assert(!r.everOver && r.end.within, "the site was allowed to hold more fleet than it can carry, which stops it mining entirely");
+});
+
+rule("machines already being commissioned reserve the capacity they will use", () => {
+  /* THE BUG THIS EXISTS FOR. Commissioning takes days and the intake runs every day. Headroom
+     measured against INSTALLED machines alone does not shrink while a job is in flight, so the
+     intake started a fresh job every day for the whole length of the last one, each convinced
+     there was room. A site ends up holding several times what it can carry, fleet().within goes
+     false, and the entire operation stops mining. A player lost months of a 575,000-machine
+     farm to exactly this. */
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.facility="workshop";state.region="texas";
+    state.hardware={};state.hardware.s19=1;state.inactiveHardware={s19:400};state.stagedCondition={};
+    state.commissioningJobs=[];state.retirementJobs=[];state.procurementOrders=[];
+    state.decommissionedHardware={};state.poweredDownHardware={};
+    state.thermal={temperature:22,orders:[],equipment:{axial:1}};`)}
+    const h=HARDWARE.find(x=>x.id==="s19");
+    const headroomStart=siteRackHeadroom(h);
+    activateHardware("s19");
+    // Mid-job, with the crew still bolting the first wave in, the site must report no room.
+    const midJob={jobs:state.commissioningJobs.length,headroom:siteRackHeadroom(h),
+      committed:committedLoad().watts};
+    let everOver=false,peak=0;
+    for(let d=0;d<60;d++){tick(true);if(!fleet().within)everOver=true;peak=Math.max(peak,state.hardware.s19)}
+    return{headroomStart,midJob,everOver,peak,
+      end:{installed:state.hardware.s19,staged:state.inactiveHardware.s19||0,within:fleet().within}}})()`);
+  assert(r.headroomStart > 0 && r.headroomStart < 400, "the case needs a site with room for some but not all");
+  assert(r.midJob.jobs === 1, "no commissioning job was started");
+  assert(r.midJob.committed > 0, "a job in flight reserves no load at all");
+  assert(r.midJob.headroom === 0,
+    `with a job in flight the site still claims room for ${r.midJob.headroom} more, which is how it over-commits`);
+  /* The invariant. Over sixty days of the intake running daily, the installed fleet must never
+     once exceed what the site can carry. */
+  assert(!r.everOver, "the site was allowed to hold more fleet than it can carry, which stops it mining entirely");
+  assert(r.end.within, "the site ended holding more than it can carry");
+  assert(r.end.installed + r.end.staged === 401, `${r.end.installed} racked and ${r.end.staged} staged do not account for the 401 owned`);
+});
+
+rule("a site that cannot carry its fleet says so", () => {
+  const r = json(`(()=>{${SITE(`state.time=at("2025-06-01");state.facility="megacampus";state.region="iceland";
+    state.power=true;state.debt=0;state.hardware={};state.hardware.s21=575000;
+    state.thermal={temperature:20,orders:[],equipment:{coolingtower:40}};`)}
+    const over={within:fleet().within,operating:operating(),reason:siteStopReason(),earning:earningHash(),physical:fleet().hash};
+    // And when it does fit, it says nothing.
+    state.hardware={s21:20000};
+    return{over,ok:{within:fleet().within,reason:siteStopReason()}}})()`);
+  assert(r.over.within === false && r.over.operating === false, "the case needs a site that cannot carry its fleet");
+  /* A stoppage the game cannot explain is worse than any stoppage it can. */
+  assert(r.over.reason !== "", "a site stopped because its fleet does not fit gives no reason at all");
+  assert(/kW|floor/.test(r.over.reason), `the reason does not say what is over: "${r.over.reason}"`);
+  assert(/retire|sell|larger/i.test(r.over.reason), `the reason does not say what to do about it: "${r.over.reason}"`);
+  /* And the number under "your hash" is what is being earned, not what is installed. A player
+     watched sixteen exahash while their balance did not move. */
+  assert(r.over.earning === 0 && r.over.physical > 0,
+    `a stopped site reported ${r.over.earning} of earning hash against ${r.over.physical} installed`);
+  assert(r.ok.reason === "", `a site that fits still complains: "${r.ok.reason}"`);
 });
 
 rule("the manual commission button racks what fits instead of refusing the batch", () => {

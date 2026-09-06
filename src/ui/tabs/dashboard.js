@@ -28,7 +28,7 @@ function renderHeader(){
     <div class="tick"><div class="label">Difficulty</div><div id="live-difficulty" class="value">${fmtDiff(difficultyAt(state.time))}</div><div class="subvalue">recorded · holds until the next retarget</div></div>
     <div class="tick"><div class="label">Subsidy</div><div id="live-subsidy" class="value">${fmtSubsidy(subsidyAt(state.time))}</div><div class="subvalue">per block</div></div>
     <div class="tick"><div class="label">Fees / block</div><div id="live-fees" class="value">${fmtBtc(feeAt(state.time))}</div><div class="subvalue">7-day network mean</div></div>
-    <div class="tick"><div class="label">Your hash</div><div id="live-your-hash" class="value ${online?"green":""}">${fmtHash(fs.hash)}</div><div id="live-your-status" class="subvalue">${online?"online":"offline"}</div></div>
+    <div class="tick"><div class="label">Your hash</div><div id="live-your-hash" class="value ${online?"green":"red"}">${fmtHash(online?fs.hash:0)}</div><div id="live-your-status" class="subvalue">${online?"online":`offline · ${fmtHash(fs.hash)} idle`}</div></div>
     <div class="tick"><div class="label">Power draw</div><div id="live-power" class="value">${fs.kw.toFixed(2)} kW</div><div id="live-power-rate" class="subvalue">${fmtUsd(mc.rate)}/kWh</div></div>
     <div class="tick"><div class="label">Transactions</div><div id="live-transactions" class="value">${fmtNum(txAt(state.time))}</div><div class="subvalue">7-day recorded mean</div></div>
     <div class="tick"><div class="label">Net worth</div><div id="live-worth" class="value">${fmtUsd(netWorth())}</div><div class="subvalue">mark to market</div></div>

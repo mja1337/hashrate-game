@@ -245,8 +245,24 @@ assert(inline.includes("function migrationStatus()") && inline.includes("migrati
   "A fleet in transit is invisible outside the Facilities tab again");
 assert(/migration\?`\$\{migration\.kind\}:\$\{migration\.due\}`:""/.test(inline),
   "The migration is not part of the banner signature, so the strip will not repaint when it starts or ends");
-assert(inline.includes("${banner}${migrationBanner}${incidentBanner}"),
-  "The migration banner is not drawn in the banner strip");
+assert(inline.includes("${banner}${overCapacityBanner}${migrationBanner}${incidentBanner}"),
+  "The migration or over-capacity banner is not drawn in the banner strip");
+/* A SITE THAT CANNOT HOLD ITS OWN FLEET STOPS EVERYTHING, and used to say nothing at all.
+   fleet().within going false takes operating() with it; a player reported months of a stopped
+   575,000-machine farm with the facilities tab reading OFFLINE and no explanation anywhere. A
+   stoppage the game cannot explain is worse than any stoppage it can. */
+assert(inline.includes("function siteStopReason()") && inline.includes("overCapacityBanner"),
+  "A site stopped because its fleet does not fit says nothing about why");
+/* And every heading that reads like production reports what is being EARNED. fleet().hash is
+   the right number for comparing hardware and the wrong one under "your hash": a player watched
+   sixteen exahash on a site that had been stopped for months and concluded the rewards were
+   broken rather than the site. */
+assert(inline.includes("function earningHash(") && inline.includes("fmtHash(earningHash())") && inline.includes("fmtHash(online?fs.hash:0)"),
+  "A stopped site still reports its installed hash rate as though it were producing it");
+assert(inline.includes("installed but idle") && inline.includes("idle`}"),
+  "The idle figure is no longer shown beside the earning one, so a stopped fleet looks like a lost fleet");
+assert(/typeof fleet==="function"&&!fleet\(\)\.within\?"overcapacity":""/.test(inline),
+  "The over-capacity state is not in the banner signature, so the strip will not repaint when it starts or clears");
 assert(inline.includes("keep accruing while nothing is hashing"),
   "The migration banner no longer says the costs continue while the income stops, which is the point of it");
 
@@ -869,6 +885,27 @@ assert(inline.includes("function miningFloorCooling()") && inline.includes("${mi
    to fit rather than overflow. */
 const sceneArt = await readFile(new URL("src/ui/floor3d/scene.js", root), "utf8");
 const minerArt = await readFile(new URL("src/ui/floor3d/silhouettes.js", root), "utf8");
+/* THE FLOOR DRAWS TO A BUDGET, because the fleet has no ceiling and the renderer does.
+   Instance count grew with the fleet and stopped nowhere: fifty-six thousand machines was a
+   hundred and sixty thousand instances, survivable on one machine and a hard render failure on
+   another — which is what a player hit. What a budget costs is machines drawn per shelf, which
+   was always a representation; what it never costs is the room, the racks, the plant or the
+   fault beacons, which are what the picture is for. */
+assert(sceneArt.includes("const FLOOR_INSTANCE_BUDGET=") && sceneArt.includes("function floorUnitCap("),
+  "The floor has no instance ceiling again, so a large enough fleet will fail to render");
+/* A rack costs something before it holds anything. Dividing the budget by machines alone
+   concluded a megacampus could afford fifty-seven per rack and never bound at all. */
+assert(sceneArt.includes("const FLOOR_PER_RACK=") && /perRack=FLOOR_INSTANCE_BUDGET\/\(Math\.max\(1,relief\)\*rows\)-FLOOR_PER_RACK/.test(sceneArt),
+  "The budget no longer charges the per-rack frame before buying machines, so it will not bind");
+/* And the cap must precede the plan, or a rack is built for six levels and four are left
+   empty — the frame is spent either way. */
+assert(minerArt.includes("const wanted=Math.min(b.qty,api.unitCap??Infinity);") && minerArt.includes("const plan=rackPlan(wanted,p.w)"),
+  "The rack is planned before the budget caps it, so the frame is paid for shelves nothing goes on");
+/* A build that fails gets a smaller one. Falling to the flat floor is the worst outcome
+   available: the largest operation in the game is the one that most wants to be seen. */
+assert(inline.includes("for(const relief of [1,2,4])") && inline.includes("FloorScene.build(FloorModel.describe(),{relief})"),
+  "A failed scene build drops straight to the flat floor instead of retrying smaller");
+
 /* THE CASES ARE THE PUBLISHED DIMENSIONS.
 
    These were drawn by eye and the eye was wrong in a consistent direction: every ASIC was far

@@ -232,7 +232,13 @@ const FloorMiners=(()=>{
       return;
     }
     if(p.type==='hydro'){
-      const plan=rackPlan(b.qty,p.w),units=Math.min(b.qty,plan.slots);
+      /* Capped by the floor's instance budget as well as by the rack, and capped BEFORE the rack is
+      planned rather than after. A frame is most of what a rack costs to draw — four uprights, a
+      busway and a data spine, and a shelf with two rails and two indicators per level — so
+      planning six levels and then leaving four of them empty spends the instances anyway. The
+      rack is built for what it will actually hold. */
+    const wanted=Math.min(b.qty,api.unitCap??Infinity);
+    const plan=rackPlan(wanted,p.w),units=Math.min(wanted,plan.slots);
       laneX=0;rail(plan.levels,plan.height,plan.railW);
       for(let j=0;j<units;j++){
         const level=Math.floor(j/plan.across);
@@ -258,7 +264,13 @@ const FloorMiners=(()=>{
        with a fan at each end, ribbed flanks, a controller on the roof and a cable to a
        busway. What separates the generations is proportion, rib count and how the PSU is
        carried — bolted on top in the S9 era, integrated alongside from the S19 on. */
-    const plan=rackPlan(b.qty,p.w),units=Math.min(b.qty,plan.slots);
+    /* Capped by the floor's instance budget as well as by the rack, and capped BEFORE the rack is
+      planned rather than after. A frame is most of what a rack costs to draw — four uprights, a
+      busway and a data spine, and a shelf with two rails and two indicators per level — so
+      planning six levels and then leaving four of them empty spends the instances anyway. The
+      rack is built for what it will actually hold. */
+    const wanted=Math.min(b.qty,api.unitCap??Infinity);
+    const plan=rackPlan(wanted,p.w),units=Math.min(wanted,plan.slots);
     laneX=0;rail(plan.levels,plan.height,plan.railW);
     for(let j=0;j<units;j++){
       const level=Math.floor(j/plan.across);

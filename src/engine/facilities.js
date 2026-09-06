@@ -53,3 +53,39 @@ function advanceFacilityMove(){
 function facilityIsDownsize(id,s=state){
   return FACILITIES.findIndex(x=>x.id===id)<FACILITIES.findIndex(x=>x.id===s.facility);
 }
+
+/* WHY THE SITE IS NOT MINING, as a sentence, or "" when it is.
+
+   operating() answered this as a single boolean, and one of its terms — fs.within, meaning the
+   installed fleet physically fits the site — could go false and stop the entire operation with
+   no message anywhere. A player reported months of a stopped 575,000-machine farm with the
+   facilities tab saying OFFLINE and nothing saying why. A stoppage the game cannot explain is
+   worse than any stoppage it can. */
+function siteStopReason(){
+  if(state.policyLock)return state.policyLock;
+  if(gridCutOff())return `${fmtUsd(state.debt)} of unpaid bills has disconnected the grid.`;
+  if(!state.power)return "Site power is switched off.";
+  if(powerOutage())return `The regional grid is down until ${dateFmt(state.ops.powerOutageUntil)}.`;
+  if(connectivityOutage())return `The site has no internet until ${dateFmt(state.ops.outageUntil)}.`;
+  if(fleetGrounded())return "The fleet is powered down and in transit between sites.";
+  const fs=fleet(),f=facility();
+  if(!fs.within){
+    const overKw=Math.max(0,fs.kw-fs.cap),overSpace=Math.max(0,fs.space-f.space);
+    const parts=[];
+    if(overKw>0)parts.push(`${fmtNum(Math.ceil(overKw))} kW more than ${f.name} can supply`);
+    if(overSpace>0)parts.push(`${fmtNum(Math.ceil(overSpace))} floor units more than it can hold`);
+    return `The installed fleet needs ${parts.join(" and ")}. Nothing can hash until it fits: retire machines, sell cooling plant, or move to a larger site.`;
+  }
+  if(fs.hash<=0)return "No machine is currently able to hash.";
+  return "";
+}
+
+/* WHAT THE FLEET IS ACTUALLY EARNING WITH, as opposed to what it physically is.
+
+   fleet().hash is the sum of what the installed machines can do. It is the right number for
+   comparing hardware and the wrong number to print under a heading that reads "your hash",
+   because it keeps reporting sixteen exahash at a site that has been stopped for months. A
+   player watched that figure while their BTC balance did not move and reasonably concluded the
+   rewards were broken rather than the site. */
+function earningHash(s=state){return operating()?fleet(s).hash:0}
+

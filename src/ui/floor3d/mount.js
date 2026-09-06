@@ -465,7 +465,26 @@ function floor3dBuildScene(){
     floor3dRenderer.shadowMap.needsUpdate=true;
   }
   if(floor3dBuilt){floor3dScene.remove(floor3dBuilt.root);floor3dDisposeScene()}
-  floor3dBuilt=FloorScene.build(FloorModel.describe(),{});
+  /* A BUILD THAT FAILS GETS A SMALLER ONE, NOT THE FLAT FLOOR.
+
+     Allocating a scene is the one place this can run out of room on a machine with less
+     headroom than the one it was written on, and dropping to the flat floor there is the worst
+     outcome available: the largest operation in the game is the one that most wants to be
+     seen. The budget is halved and the scene rebuilt, twice, before anything gives up — and
+     what a smaller budget costs is machines drawn per shelf, which was always a
+     representation. */
+  floor3dBuilt=null;
+  for(const relief of [1,2,4]){
+    try{ floor3dBuilt=FloorScene.build(FloorModel.describe(),{relief}); break }
+    catch(error){
+      floor3dDisposeScene();
+      if(relief===4){
+        floor3dState="failed";
+        floor3dReason=`The 3D floor could not be built at this fleet size (${error.message}).`;
+        state.floorView="2d";save();render();return;
+      }
+    }
+  }
   floor3dScene.add(floor3dBuilt.root);
   floor3dPickTable=floor3dBuildPickTable(floor3dBuilt.root);
   // New geometry casts new shadows; the cached map has to be told.
