@@ -1,20 +1,43 @@
 "use strict";
 
+/* SPECULATIONS AND DONATIONS ARE MOMENTS, NOT A MENU.
+
+   Both lists were gated on a start date alone, so once a window opened it never shut: in 2026
+   the game was still offering the Bitcoin Cash fork trade and the WikiLeaks donation drive as
+   live options, nine and fifteen years late. That is not how either worked.
+
+   A fork claim is available while the fork is being claimed. A launch punt is a launch punt —
+   the asymmetry that makes it a gamble worth modelling exists for months, and anyone buying
+   SHIB in 2026 is making a different decision from the one this entry describes. Each now
+   carries an `until`, and the window is the period during which the trade actually looked
+   like this.
+
+   Donations are the same shape for a different reason. A relief fund answers something
+   happening now; a legal-defence campaign runs while the case does. Leaving them permanently
+   listed turns a moment somebody had to choose to meet into a chore sitting in a list, which
+   is exactly backwards for the thing the game most wants the player to feel. */
 const SPECULATIONS=[
-  {id:"dice",date:"2012-04-18",name:"Satoshi Dice",kind:"Bitcoin gambling",chance:.34,payout:2.1,desc:"A transparent-looking on-chain dice game offers a quick double-or-nothing-style punt."},
-  {id:"doge",date:"2013-12-06",name:"Dogecoin launch",kind:"Meme coin",chance:.28,payout:3.2,desc:"A viral fork is gathering a community. Most early meme bets fade; this one might run."},
-  {id:"ethereum",date:"2015-07-30",name:"Ethereum launch",kind:"Smart-contract platform",chance:.38,payout:2.7,desc:"A new programmable chain asks you to rotate BTC into an unproven network token."},
-  {id:"monero",date:"2014-04-18",name:"Monero launch",kind:"Privacy coin",chance:.30,payout:2.5,desc:"Privacy technology is compelling, but adoption and regulatory pressure make the trade uncertain."},
-  {id:"bch",date:"2017-08-01",name:"Bitcoin Cash hard fork",kind:"Bitcoin hard-fork claim",chance:.32,payout:2.4,desc:"A contentious block-size fork creates a separate asset. Risk hot-wallet BTC on the fork trade without making it part of the core operation."},
-  {id:"bsv",date:"2018-11-15",name:"Bitcoin SV hard fork",kind:"Bitcoin Cash hard-fork claim",chance:.18,payout:3.6,desc:"A second contentious split offers volatile fork exposure with severe technical, liquidity and counterparty risk."},
-  {id:"solana",date:"2020-03-16",name:"Solana launch",kind:"High-throughput chain",chance:.25,payout:4.0,desc:"A fast new chain is promising scale. The upside is large; the early execution risk is larger."},
-  {id:"shib",date:"2020-08-01",name:"Shiba Inu launch",kind:"Meme coin",chance:.16,payout:7.0,desc:"A meme-token punt with enormous upside on paper and a strong chance of becoming worthless."}
+  // SatoshiDice blocked US players in May 2013 and was sold that summer.
+  {id:"dice",date:"2012-04-18",until:"2013-07-31",name:"Satoshi Dice",kind:"Bitcoin gambling",chance:.34,payout:2.1,desc:"A transparent-looking on-chain dice game offers a quick double-or-nothing-style punt."},
+  {id:"doge",date:"2013-12-06",until:"2014-09-30",name:"Dogecoin launch",kind:"Meme coin",chance:.28,payout:3.2,desc:"A viral fork is gathering a community. Most early meme bets fade; this one might run."},
+  {id:"monero",date:"2014-04-18",until:"2015-06-30",name:"Monero launch",kind:"Privacy coin",chance:.30,payout:2.5,desc:"Privacy technology is compelling, but adoption and regulatory pressure make the trade uncertain."},
+  // Through the DAO fork, after which "a new programmable chain" was a different question.
+  {id:"ethereum",date:"2015-07-30",until:"2016-09-30",name:"Ethereum launch",kind:"Smart-contract platform",chance:.38,payout:2.7,desc:"A new programmable chain asks you to rotate BTC into an unproven network token."},
+  // A fork claim is a claim on a split that has just happened.
+  {id:"bch",date:"2017-08-01",until:"2018-02-28",name:"Bitcoin Cash hard fork",kind:"Bitcoin hard-fork claim",chance:.32,payout:2.4,desc:"A contentious block-size fork creates a separate asset. Risk hot-wallet BTC on the fork trade without making it part of the core operation."},
+  {id:"bsv",date:"2018-11-15",until:"2019-06-30",name:"Bitcoin SV hard fork",kind:"Bitcoin Cash hard-fork claim",chance:.18,payout:3.6,desc:"A second contentious split offers volatile fork exposure with severe technical, liquidity and counterparty risk."},
+  {id:"solana",date:"2020-03-16",until:"2021-09-30",name:"Solana launch",kind:"High-throughput chain",chance:.25,payout:4.0,desc:"A fast new chain is promising scale. The upside is large; the early execution risk is larger."},
+  {id:"shib",date:"2020-08-01",until:"2021-12-31",name:"Shiba Inu launch",kind:"Meme coin",chance:.16,payout:7.0,desc:"A meme-token punt with enormous upside on paper and a strong chance of becoming worthless."}
 ];
 const DONATION_CAMPAIGNS=[
-  {id:"wikileaks",date:"2011-06-14",name:"WikiLeaks publishing fund",kind:"Press freedom",desc:"WikiLeaks turns to Bitcoin donations after conventional payment channels are cut off.",url:"https://wikileaks.org/donate.html"},
-  {id:"ross",date:"2015-02-04",name:"Ross Ulbricht legal-defense fund",kind:"Legal defense",desc:"A Bitcoin-era court case drives a public campaign for legal-defense and appellate support.",url:"https://freeross.org/"},
-  {id:"devfund",date:"2020-01-01",name:"Open-source Bitcoin development",kind:"Protocol resilience",desc:"Support independent work that maintains Bitcoin's open-source infrastructure.",url:"https://brink.dev/"},
-  {id:"ukraine",date:"2022-02-26",name:"Ukraine humanitarian & defense relief",kind:"Humanitarian aid",desc:"Ukraine publishes cryptocurrency donation channels as Russia's invasion creates an urgent funding need.",url:"https://donate.thedigital.gov.ua/"}
+  // The banking blockade, and the months in which Bitcoin was the answer to it.
+  {id:"wikileaks",date:"2011-06-14",until:"2012-12-31",name:"WikiLeaks publishing fund",kind:"Press freedom",desc:"WikiLeaks turns to Bitcoin donations after conventional payment channels are cut off.",url:"https://wikileaks.org/donate.html"},
+  // Conviction through the end of the appellate road.
+  {id:"ross",date:"2015-02-04",until:"2018-06-30",name:"Ross Ulbricht legal-defense fund",kind:"Legal defense",desc:"A Bitcoin-era court case drives a public campaign for legal-defense and appellate support.",url:"https://freeross.org/"},
+  // The years the independent funders were founded and were raising in order to exist at all.
+  {id:"devfund",date:"2020-01-01",until:"2023-12-31",name:"Open-source Bitcoin development",kind:"Protocol resilience",desc:"Support independent work that maintains Bitcoin's open-source infrastructure.",url:"https://brink.dev/"},
+  // The acute months, when the addresses were published and the need was immediate.
+  {id:"ukraine",date:"2022-02-26",until:"2022-12-31",name:"Ukraine humanitarian & defense relief",kind:"Humanitarian aid",desc:"Ukraine publishes cryptocurrency donation channels as Russia's invasion creates an urgent funding need.",url:"https://donate.thedigital.gov.ua/"}
 ];
 const STRATEGY_SECURITIES=[
   {id:"mstr",ticker:"MSTR",name:"Strategy common stock",date:"2020-08-11",base:145,btcBeta:1.65,yield:0,desc:"Equity in the operating company and its leveraged Bitcoin-treasury strategy. No stated fiat income."},

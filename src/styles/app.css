@@ -157,6 +157,7 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--orange);outline-off
 .mine-section-badge.halted{color:var(--orange2);text-transform:uppercase}
 .toast-repeat{display:block;margin-top:4px;color:var(--dim);font-style:normal;font:9px var(--mono)}
 .toast-repeated{border-left-width:3px}
+.venue.closing{border-color:#6f5a31}
 .mine-section:has(.mine-section-badge.halted){border-color:#6f5a31}
 .mine-section-badge.bad{color:var(--orange)}
 /* The active section is filled and flagged, not merely underlined: an underline alone was

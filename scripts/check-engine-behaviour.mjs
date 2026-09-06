@@ -65,6 +65,50 @@ const SITE = (overrides = "") => `
   state.poolAccount={balance:0,frozen:0,threshold:.01,destination:"hot",paidTotal:0,feesPaid:0,payouts:0,lastPayout:0};
   ${overrides}`;
 
+/* ---- SOME THINGS ARE MOMENTS, NOT A MENU ---- */
+
+rule("a fork trade and a donation drive close when the moment does", () => {
+  const r = json(`(()=>{${SITE(`state.donations=[];state.speculations=[];state.wallets.hot=5;`)}
+    const open=d=>{state.time=at(d);return{
+      specs:SPECULATIONS.filter(x=>offerOpen(x)).map(x=>x.id),
+      gifts:DONATION_CAMPAIGNS.filter(x=>offerOpen(x)).map(x=>x.id)}};
+    const y2017=open("2017-10-01"),y2022=open("2022-04-01"),y2026=open("2026-06-01");
+    // Taking a closed offer must change nothing at all.
+    state.time=at("2026-06-01");state.wallets.hot=5;
+    const hot=state.wallets.hot,xp=state.xp.total;
+    takeSpeculation("bch",.1);donateBtc("wikileaks",.1);
+    return{y2017,y2022,y2026,
+      after:{specs:state.speculations.length,gifts:state.donations.length,
+        hot:state.wallets.hot===hot,xp:state.xp.total===xp},
+      dated:SPECULATIONS.concat(DONATION_CAMPAIGNS).filter(x=>!x.until).map(x=>x.id)}})()`);
+  /* Every one of these is a moment. A list where none of them ever close is a list that offers
+     the 2017 fork claim in 2026, which is a different decision from the one described. */
+  assert(r.dated.length === 0, `these never close: ${r.dated.join(", ")}`);
+  assert(r.y2017.specs.includes("bch"), "the Bitcoin Cash fork trade was not available two months after the fork");
+  assert(!r.y2022.specs.includes("bch"), "the fork claim was still on offer five years later");
+  assert(r.y2022.gifts.includes("ukraine") && !r.y2017.gifts.includes("ukraine"),
+    "the Ukraine relief campaign is not tied to when it happened");
+  assert(r.y2026.specs.length === 0 && r.y2026.gifts.length === 0,
+    `the end of the run still offers ${r.y2026.specs.length} trades and ${r.y2026.gifts.length} campaigns`);
+  assert(r.after.specs === 0 && r.after.gifts === 0 && r.after.hot && r.after.xp,
+    "a closed offer could still be taken");
+});
+
+rule("giving coins away is worth real operator XP", () => {
+  const r = json(`(()=>{${SITE(`state.time=at("2022-04-01");state.donations=[];state.wallets.hot=5;
+    state.xp={total:0,level:1,peakLevel:1,bestDifficulty:0,shares:0,sources:{shares:0,record:0,deploy:0,repair:0,spend:0}};`)}
+    const small=(()=>{donateBtc("ukraine",.05);const x=state.xp.total;
+      state.donations=[];state.xp.total=0;state.xp.level=1;state.wallets.hot=5;return x})();
+    const large=(()=>{donateBtc("ukraine",.5);return state.xp.total})();
+    return{small,large,level:state.xp.level,given:state.donations[0].btc,hot:state.wallets.hot}})()`);
+  /* The only use of bitcoin in this game that never comes back as machines, capacity or cash.
+     XP is the one thing the game has with which to say that mattered. */
+  assert(r.small > 100, `a donation paid ${r.small} XP, which is not worth noticing`);
+  assert(r.large > r.small, "giving away more is worth no more than giving away less");
+  assert(r.level > 1, `${r.large} XP did not move the operator past level 1`);
+  assert(r.given > 0 && r.hot < 5, "the donation did not actually cost any bitcoin");
+});
+
 /* ---- MINING INCOME ARRIVES THROUGH CUSTODY ---- */
 
 rule("pool income is held by the pool until it clears the threshold", () => {

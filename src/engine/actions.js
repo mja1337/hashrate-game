@@ -260,17 +260,48 @@ function upgradeFacility(id){
   save();render();
 }
 function takeSpeculation(id,fraction){
-  const s=SPECULATIONS.find(x=>x.id===id);if(!s||state.time<at(s.date)||state.speculations.includes(id))return;
+  const s=SPECULATIONS.find(x=>x.id===id);if(!s||state.speculations.includes(id))return;
+  if(!offerOpen(s))return showToast("That window has closed",`${s.name} was a trade you could take between ${offerWindowLabel(s)}. Taking it now would be a different decision from the one described here.`,"blocked","market");
   const stake=state.wallets.hot*fraction;if(stake<=0)return showToast("No spendable BTC","Speculative launches can only use BTC in your hot wallet.");
   state.wallets.hot-=stake;state.speculations.push(id);
   if(nextRand()<s.chance){const returnBtc=stake*s.payout;state.wallets.hot+=returnBtc;log(`${s.name} paid off`,`+${fmtBtc(returnBtc-stake)}`);showToast("Speculation paid off",`${s.name} returned ${s.payout.toFixed(1)}× your BTC stake.`)}
   else{log(`${s.name} went to zero`,`-${fmtBtc(stake)}`);showToast("Speculation lost",`${s.name} wiped out the BTC you allocated. The stake cannot be recovered.`,"bad")}
   save();render();
 }
+/* A WINDOW THAT CLOSES.
+
+   `announced()` answers "has this happened yet", which is the right question for hardware and
+   facilities — a warehouse does not stop existing. It is the wrong question for a moment. One
+   helper for both lists, so the card that offers a trade and the action that takes it can
+   never disagree about whether the moment has passed. */
+function offerOpen(item,t=state.time){
+  if(!item)return false;
+  if(t<at(item.date))return false;
+  return !item.until||t<=at(item.until);
+}
+function offerWindowLabel(item){
+  return item&&item.until?`${dateFmt(at(item.date),true)} – ${dateFmt(at(item.until),true)}`:"";
+}
+function offerDaysLeft(item,t=state.time){
+  return item&&item.until?Math.max(0,Math.ceil((at(item.until)-t)/DAY)):Infinity;
+}
 function donateBtc(id,fraction){
-  const campaign=DONATION_CAMPAIGNS.find(x=>x.id===id);if(!campaign||state.time<at(campaign.date)||state.donations.some(x=>x.id===id))return;
+  const campaign=DONATION_CAMPAIGNS.find(x=>x.id===id);if(!campaign||state.donations.some(x=>x.id===id))return;
+  if(!offerOpen(campaign))return showToast("That moment has passed",`The ${campaign.name} ran from ${offerWindowLabel(campaign)}. A campaign is a response to something happening at the time; it is not a standing option.`,"blocked","custody");
   const btc=state.wallets.hot*fraction;if(btc<=0)return showToast("No spendable BTC","Donations use BTC from your hot wallet.");
-  state.wallets.hot-=btc;state.donations.push({id,btc,time:state.time});log(`Donated: ${campaign.name}`,`-${fmtBtc(btc)}`);showToast("BTC donated",`${fmtBtc(btc)} sent to ${campaign.name}.`);save();render();
+  /* GIVING COINS AWAY IS THE MOST EXPENSIVE THING AN OPERATOR CAN DO, and the only one the
+     score cannot repay: every other use of BTC in this game comes back as machines, capacity
+     or cash. XP is what the game has to say "that mattered", so a donation pays a great deal
+     of it — scaled by how much of the hot wallet was given rather than by the absolute amount,
+     because a tenth of a small treasury is the same decision as a tenth of a large one, and
+     because otherwise this is a mechanic that only rewards being late and rich. */
+  const share=Math.max(0,Math.min(1,fraction));
+  const xp=Math.round(420*share+180*Math.log2(1+share*8)+140);
+  state.wallets.hot-=btc;state.donations.push({id,btc,time:state.time});
+  awardXp(xp,"spend");
+  log(`Donated: ${campaign.name}`,`-${fmtBtc(btc)} · +${fmtNum(xp)} XP`,"custody");
+  showToast("BTC donated",`${fmtBtc(btc)} sent to ${campaign.name}, and ${fmtNum(xp)} operator XP for it. Nothing else in this game spends bitcoin without expecting it back.`,"milestone","custody");
+  save();render();
 }
 function moveRegion(id){
   const r=REGIONS.find(x=>x.id===id);if(!r||state.time<at(r.date)||id===state.region)return;
