@@ -995,8 +995,42 @@ assert(sceneArt.includes("Math.sqrt(usableW*usableD/(n*pitchX*pitchZ))") && /if\
    Batch parts carry a batch id and scenery carries -1, which is what tells the two apart. */
 assert(sceneArt.includes("const k=batch>=0?floorScale:1;") && sceneArt.includes("dummy.position.set(pos[0]*k,pos[1]*k,pos[2]*k);dummy.scale.set(size[0]*k,size[1]*k,size[2]*k)"),
   "Machine content and the room it stands in are scaling together, or not scaling at all");
-assert(/items\.push\(\{matrix:dummy\.matrix\.clone\(\),color,batch,pos,size,rot,k\}\)/.test(sceneArt) && sceneArt.includes("const k=a.k||1;dummy.position.set(a.pos[0]*k"),
+assert(/if\(b\.items\)b\.items\.push\(\{pos,size,rot,k\}\)/.test(sceneArt) && sceneArt.includes("const k=a.k||1;dummy.position.set(a.pos[0]*k"),
   "The fan spin animation rebuilds matrices from unscaled values, so the first animated frame snaps every fan back to full size");
+/* INSTANCES ACCUMULATE AS NUMBERS, NOT AS OBJECTS. A Matrix4 clone and a Color allocation per
+   instance was a hundred and eleven thousand of each at megacampus, and the whole of a
+   seven-hundred-millisecond scene build. Only fan buckets keep a per-item record, because the
+   spin is the only thing that rebuilds a matrix later. */
+assert(sceneArt.includes("b.m.push(e[0],e[1],e[2]") && sceneArt.includes("mesh.instanceMatrix.array.set(bucket.m)"),
+  "Scene assembly is back to cloning a matrix per instance instead of filling the instance buffer directly");
+assert(!/setColorAt\(i,new T\.Color/.test(sceneArt) && sceneArt.includes("mesh.instanceColor.array.set(bucket.c)"),
+  "Scene assembly allocates a Color per instance again");
+assert(sceneArt.includes("items:fan?[]:null"),
+  "Every bucket keeps a per-item record again, not just the ones that animate");
+
+/* A STATUS CHANGE IS PAINT, NOT GEOMETRY. What a rack IS decides the geometry; what it is DOING
+   is colour, and on a large fleet that changes every simulated day. Rebuilding the scene for it
+   cost a third of a second, several times a second at speed — enough sustained main-thread work
+   for the browser to give up on the GPU process and drop the player to the flat floor. That is
+   the fifty-thousand-miner crash, and it reproduces on a clean page. */
+assert(/for\(const b of floorBatches\(\)\)parts\.push\(b\.id\+b\.qty\);/.test(inline),
+  "Batch status is back in the rebuild signature, so a fleet with churning faults rebuilds the scene every tick");
+assert(inline.includes("function floor3dStatusSignatureNow()") && inline.includes("function floor3dApplyStatuses()"),
+  "Nothing detects a status-only change, so every fault still rebuilds the scene");
+assert(sceneArt.includes("function recolour(statusFor)") && sceneArt.includes("mesh.instanceColor.needsUpdate=true"),
+  "The scene cannot repaint instances in place, so a status change has to rebuild it");
+assert(sceneArt.includes("b.tinted.push(batch>=0&&color===accentColor?1:0)"),
+  "Nothing records which instances wear the status colour, so a repaint cannot find them");
+/* And one update per frame. A burst of repaints must not issue a burst of renders and buffer
+   uploads with no frame boundary for the driver to catch up on. */
+assert(inline.includes("floor3dPending=requestAnimationFrame(run)") && inline.includes("if(floor3dPending||floor3dPendingTimer)return;"),
+  "Floor updates run synchronously on every repaint again rather than collapsing onto a frame");
+/* And never parked behind a frame alone: a hidden tab suspends rAF, and this project has
+   already lost a modal to work waiting on a frame that never arrived. */
+assert(inline.includes("floor3dPendingTimer=setTimeout(run,120)"),
+  "The floor update waits on an animation frame with no fallback, so a backgrounded tab never mounts it");
+assert(inline.includes("if(gl&&gl.isContextLost())return;"),
+  "The floor keeps drawing into a lost context, which turns a recoverable hiccup into a permanent fallback");
 /* Level of detail asks two questions, not one: can it be seen, and can it be afforded. A
    hundred-and-twenty-machine workshop draws small because the room is wide, and there is no
    reason to take its detail away for three thousand instances. */

@@ -24,7 +24,7 @@ const FLOOR3D_SCRIPTS=["vendor/three.floor.js","src/ui/floor3d/silhouettes.js",
 
 let floor3dState="idle";      // idle | loading | ready | unsupported | failed
 let floor3dRenderer=null,floor3dCanvas=null,floor3dCamera=null;
-let floor3dBuilt=null,floor3dSignature="",floor3dRaf=0,floor3dReason="";
+let floor3dBuilt=null,floor3dSignature="",floor3dStatusSignature="",floor3dRaf=0,floor3dReason="";
 
 function floor3dSupported(){
   if(floor3dState==="unsupported")return false;
@@ -75,8 +75,34 @@ function floor3dSignatureNow(){
     Object.keys(state.thermal?.equipment||{}).sort().map(k=>k+state.thermal.equipment[k]).join(","),
     (state.thermal?.orders||[]).map(o=>o.id+(o.qty||1)).sort().join(","),
     typeof immersionTotal==="function"?"imm"+immersionTotal():""];
-  for(const b of floorBatches())parts.push(b.id+b.status+b.qty);
+  /* STRUCTURE ONLY. What a rack IS — which hardware, how many of it — decides the geometry, and
+     changing it means rebuilding the scene. What a rack is DOING is paint, and on a large fleet
+     it changes every simulated day as faults appear and repairs land. Including status here
+     rebuilt the whole floor every tick: a third of a second each, several times a second at
+     speed, which is enough sustained main-thread work for the browser to give up on the GPU
+     process and drop the player to the flat floor. That is the fifty-thousand-miner crash. */
+  for(const b of floorBatches())parts.push(b.id+b.qty);
   return parts.join("|");
+}
+const FLOOR3D_STATUS_COLORS={online:0x75e3b2,fault:0xff705d,repair:0x68bafa,off:0x52636c};
+/* The other half of the same picture, cheap to compute and cheap to answer: repaint, no
+   rebuild. */
+function floor3dStatusSignatureNow(){
+  const parts=[];
+  for(const b of floorBatches())parts.push(b.status);
+  return parts.join(",");
+}
+function floor3dApplyStatuses(){
+  if(!floor3dBuilt||typeof floor3dBuilt.recolour!=="function")return;
+  const byBatch=new Map();
+  for(const b of floorBatches())byBatch.set(b.id,b.status);
+  /* The same table the assembler paints from. Two copies of a colour map is a colour map that
+     drifts, so if a third status ever appears these move together or the contract below fails. */
+  floor3dBuilt.recolour(id=>{
+    const status=byBatch.get(id);
+    if(status===undefined)return null;
+    return FLOOR3D_STATUS_COLORS[status]??null;
+  });
 }
 
 function floor3dEnsureRenderer(){
@@ -193,7 +219,7 @@ function norm(a){const l=Math.hypot(a[0],a[1],a[2])||1;return [a[0]/l,a[1]/l,a[2
 function floor3dStop(){if(floor3dRaf){cancelAnimationFrame(floor3dRaf);floor3dRaf=0}}
 function floor3dDisposeScene(){
   if(floor3dBuilt&&floor3dBuilt.dispose)floor3dBuilt.dispose();
-  floor3dBuilt=null;floor3dSignature="";
+  floor3dBuilt=null;floor3dSignature="";floor3dStatusSignature="";
 }
 
 function floor3dDraw(){
@@ -620,7 +646,7 @@ function floor3dClick(event){
    size, and it keeps one description of the floor rather than a second overlay. */
 function floor3dRebuild(){
   floor3dBuildScene();
-  floor3dSignature=floor3dSignatureNow();
+  floor3dSignature=floor3dSignatureNow();floor3dStatusSignature=floor3dStatusSignatureNow();
   floor3dUpdateReadout();
   floor3dDraw();
 }
@@ -638,15 +664,55 @@ function floor3dBindPointer(){
      zoom solves. The buttons zoom. */
 }
 
+/* ONE UPDATE PER FRAME, NOT ONE PER REPAINT.
+
+   mountFloor3d() is called from every repaint of the Mine tab, and it did its whole job
+   synchronously each time: compare signatures, maybe rebuild, upload buffers, render five and
+   a half million triangles. At sixteen times speed that is several per second, and a burst of
+   them issues renders and buffer uploads back to back with no frame boundary for the driver to
+   catch up on. Fifteen in a row is enough to lose the WebGL context outright on this machine —
+   which is the crash reported at fifty thousand miners, and it reproduces on a clean page.
+
+   Repaints are now collapsed onto the next animation frame. The floor cannot usefully update
+   more often than the display does, so nothing is lost, and a burst of ten repaints costs one
+   update instead of ten. */
+let floor3dPending=0,floor3dPendingTimer=0;
 function mountFloor3d(){
   const host=document.querySelector(".floor-3d-mount");
   if(!host){floor3dStop();return}
   if(floor3dState!=="ready"){ensureFloor3dLoaded();return}
+  if(floor3dPending||floor3dPendingTimer)return;
+  /* An animation frame is the right moment to draw and the wrong thing to DEPEND on. A hidden
+     or backgrounded tab suspends rAF entirely, and this project has already been bitten once by
+     work parked behind a frame that never arrived — a modal that never appeared while the clock
+     sat stopped. So both are armed and whichever fires first does the work: the frame when the
+     page is being looked at, the timer when it is not. */
+  const run=()=>{
+    if(floor3dPending)cancelAnimationFrame(floor3dPending);
+    clearTimeout(floor3dPendingTimer);
+    floor3dPending=0;floor3dPendingTimer=0;
+    floor3dUpdate();
+  };
+  floor3dPending=requestAnimationFrame(run);
+  floor3dPendingTimer=setTimeout(run,120);
+}
+function floor3dUpdate(){
+  const host=document.querySelector(".floor-3d-mount");
+  if(!host){floor3dStop();return}
+  if(floor3dState!=="ready")return;
   if(!floor3dEnsureRenderer()){render();return}
+  /* A context that has already gone cannot be drawn into, and hammering it is how a recoverable
+     hiccup becomes a permanent fallback. */
+  const gl=floor3dRenderer.getContext&&floor3dRenderer.getContext();
+  if(gl&&gl.isContextLost())return;
   if(floor3dCanvas.parentElement!==host)host.appendChild(floor3dCanvas);
   floor3dBindPointer();
   const signature=floor3dSignatureNow();
-  if(signature!==floor3dSignature){floor3dBuildScene();floor3dSignature=signature}
+  if(signature!==floor3dSignature){floor3dBuildScene();floor3dSignature=signature;floor3dStatusSignature=floor3dStatusSignatureNow()}
+  else{
+    const statuses=floor3dStatusSignatureNow();
+    if(statuses!==floor3dStatusSignature){floor3dApplyStatuses();floor3dStatusSignature=statuses}
+  }
   floor3dDraw();
   floor3dUpdateReadout();
   floor3dSyncViewControls();

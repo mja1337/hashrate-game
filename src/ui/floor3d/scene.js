@@ -131,7 +131,7 @@ const FloorScene=(()=>{
     /* Segment counts are the cheapest realism available: every one of these geometries is
        instanced, so raising them costs vertices once and nothing per machine. Twelve-sided
        cylinders read as polygons at fan size, and a four-segment torus is a square ring. */
-    const geo={box:new T.BoxGeometry(1,1,1),cylinder:new T.CylinderGeometry(1,1,1,20),torus:new T.TorusGeometry(1,.075,8,20)},dummy=new T.Object3D();
+    const geo={box:new T.BoxGeometry(1,1,1),cylinder:new T.CylinderGeometry(1,1,1,20),torus:new T.TorusGeometry(1,.075,8,20)},dummy=new T.Object3D(),tint=new T.Color();let accentColor=null;
     /* `metal` picks a second lit material rather than a second colour: brushed aluminium and
        a painted steel frame reflect differently, and no per-instance colour can express that.
        It costs one extra draw call per geometry that uses it, which is the whole budget. */
@@ -142,16 +142,38 @@ const FloorScene=(()=>{
        additively blended halo sitting behind it. One extra bucket covers every colour,
        because additive blending still honours the per-instance colour. */
     function part(kind,size,pos,color=C.steel,rot=[0,0,0],batch=-1,unlit=false,fan=false,metal=false,glow=false){
-      const key=kind+':'+unlit+':'+fan+':'+metal+':'+glow;if(!buckets.has(key))buckets.set(key,{kind,unlit,fan,metal,glow,items:[]});
+      const key=kind+':'+unlit+':'+fan+':'+metal+':'+glow;
+      if(!buckets.has(key))buckets.set(key,{kind,unlit,fan,metal,glow,n:0,m:[],c:[],batch:[],tinted:[],items:fan?[]:null});
       /* Machine content is drawn to the floor's scale; the building it stands in is not.
          Batch parts carry a batch id, scenery carries -1, so the two never scale together —
          a shrinking floor inside a fixed room is the whole effect being aimed for. */
       const k=batch>=0?floorScale:1;
       dummy.position.set(pos[0]*k,pos[1]*k,pos[2]*k);dummy.scale.set(size[0]*k,size[1]*k,size[2]*k);dummy.rotation.set(...rot);dummy.updateMatrix();
-      /* The spin animation rebuilds a fan's matrix from these every frame, so the scale it was
-         drawn at travels with it — otherwise the first animated frame snaps every fan back to
-         full size in a shrunken rack. */
-      buckets.get(key).items.push({matrix:dummy.matrix.clone(),color,batch,pos,size,rot,k});
+      /* ACCUMULATED AS NUMBERS, NOT AS OBJECTS.
+
+         This used to clone a Matrix4 and later allocate a Color for every instance. At
+         megacampus scale that is a hundred and eleven thousand of each, and it was the whole
+         of a seven-hundred-millisecond scene build — a main-thread block long enough that a
+         run of rebuilds can have the browser give up on the GPU process, which surfaces as a
+         lost context and a fall back to the flat floor.
+
+         The sixteen matrix elements and three colour channels go straight into flat arrays
+         that are copied into the instance buffers in one shot. Only fan buckets keep the
+         per-item record, because the spin animation is the only thing that needs to rebuild a
+         matrix later — and the scale it was drawn at has to travel with it, or the first
+         animated frame snaps every fan back to full size in a shrunken rack. */
+      const b=buckets.get(key),e=dummy.matrix.elements;
+      /* Whether this instance is wearing the batch's STATUS colour. Status changes constantly on
+         a large fleet — a fault appears, a repair finishes — and it changes nothing about the
+         geometry, only the paint. Recording which instances are painted by it is what lets that
+         be a repaint rather than a rebuild. */
+      b.tinted.push(batch>=0&&color===accentColor?1:0);
+      // One call with sixteen arguments rather than sixteen calls: at a hundred and eleven
+      // thousand instances that is the difference between 1.8 million push calls and 111,000.
+      b.m.push(e[0],e[1],e[2],e[3],e[4],e[5],e[6],e[7],e[8],e[9],e[10],e[11],e[12],e[13],e[14],e[15]);
+      tint.set(color);b.c.push(tint.r,tint.g,tint.b);
+      b.batch.push(batch);b.n++;
+      if(b.items)b.items.push({pos,size,rot,k});
     }
     const box=(size,pos,col,batch=-1,unlit=false)=>part('box',size,pos,col,[0,0,0],batch,unlit);
     const metal=(size,pos,col,batch=-1,rot=[0,0,0])=>part('box',size,pos,col,rot,batch,false,false,true);
@@ -188,7 +210,7 @@ const FloorScene=(()=>{
     const label=(text,pos,width,height=.3)=>signs.push({text,pos,width,height});
     const site=FloorScenery.populate(s,{box,part,fan,label,metal,tube,lamp,C});
     rows.forEach(b=>{
-      const {x,z}=b,statusColor=colors[b.status],accent=opts.heat?(b.status==='online'?(stats.heatRatio>1?C.red:C.orange):C.dark):statusColor;
+      const {x,z}=b,statusColor=colors[b.status],accent=accentColor=opts.heat?(b.status==='online'?(stats.heatRatio>1?C.red:C.orange):C.dark):statusColor;
       box([1.68,.013,1.3],[x,.088,z],0x34464d,b.id);
       if(s.selected===b.id){
         for(const dz of [-.72,.72])box([1.8,.025,.055],[x,.11,z+dz],C.orange,b.id,true);
@@ -209,9 +231,12 @@ const FloorScene=(()=>{
         :bucket.unlit?new T.MeshBasicMaterial({color:0xffffff})
         :new T.MeshStandardMaterial({color:0xffffff,roughness:bucket.metal?.34:.78,metalness:bucket.metal?.78:.12});
       materials.push(material);
-      const mesh=new T.InstancedMesh(geo[bucket.kind],material,bucket.items.length);
-      bucket.items.forEach((a,i)=>{mesh.setMatrixAt(i,a.matrix);mesh.setColorAt(i,new T.Color(a.color));});
-      mesh.userData.batchIds=bucket.items.map(a=>a.batch);mesh.instanceMatrix.needsUpdate=true;mesh.instanceColor.needsUpdate=true;mesh.computeBoundingSphere();
+      const mesh=new T.InstancedMesh(geo[bucket.kind],material,bucket.n);
+      // One bulk copy each, rather than a setter call and an allocation per instance.
+      mesh.instanceMatrix.array.set(bucket.m);
+      if(!mesh.instanceColor)mesh.setColorAt(0,tint);
+      mesh.instanceColor.array.set(bucket.c);
+      mesh.userData.batchIds=bucket.batch;mesh.userData.tinted=bucket.tinted;mesh.instanceMatrix.needsUpdate=true;mesh.instanceColor.needsUpdate=true;mesh.computeBoundingSphere();
       // Unlit pieces are status lights and signage: they should not darken the floor.
       if(!bucket.unlit){mesh.castShadow=true;mesh.receiveShadow=true}
       // Haloes are additive light, so they draw after everything they sit in front of.
@@ -235,7 +260,35 @@ const FloorScene=(()=>{
     function animate(t){const angle=t*.008;if(Math.abs(angle-lastAngle)<.015)return;lastAngle=angle;
       for(const {mesh,items} of fanMeshes){items.forEach((a,i)=>{const k=a.k||1;dummy.position.set(a.pos[0]*k,a.pos[1]*k,a.pos[2]*k);dummy.scale.set(a.size[0]*k,a.size[1]*k,a.size[2]*k);dummy.rotation.set(a.rot[0],a.rot[1],a.rot[2]+angle);dummy.updateMatrix();mesh.setMatrixAt(i,dummy.matrix);});mesh.instanceMatrix.needsUpdate=true;}}
     function dispose(){root.traverse(o=>{if(o.isInstancedMesh)o.dispose();});Object.values(geo).forEach(g=>g.dispose());materials.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());}
-    return {root,rows,width:site.width,depth:site.depth,cx:site.cx,cz:site.cz,landmarks:site.items,crew:site.crew,animate,dispose,animated:fanMeshes.length>0,hardware:h};
+    /* REPAINTING WITHOUT REBUILDING.
+
+       A machine going faulted changes its colour and nothing else. Rebuilding the scene for it
+       cost a third of a second at megacampus scale, and on a large fleet statuses change every
+       simulated day — which is several times a second at speed, and enough sustained main-thread
+       work for the browser to give up on the GPU process. That surfaces as a lost context and a
+       fall back to the flat floor, which is exactly what was reported at fifty thousand miners.
+
+       This walks the instances already on the GPU and rewrites the three colour channels of the
+       ones wearing a status colour. */
+    function recolour(statusFor){
+      root.traverse(mesh=>{
+        if(!mesh.isInstancedMesh||!mesh.userData.tinted||!mesh.instanceColor)return;
+        const ids=mesh.userData.batchIds,flags=mesh.userData.tinted,arr=mesh.instanceColor.array;
+        let touched=false;
+        for(let i=0;i<flags.length;i++){
+          if(!flags[i])continue;
+          const next=statusFor(ids[i]);
+          if(next===null||next===undefined)continue;
+          tint.set(next);
+          const o=i*3;
+          if(arr[o]!==tint.r||arr[o+1]!==tint.g||arr[o+2]!==tint.b){
+            arr[o]=tint.r;arr[o+1]=tint.g;arr[o+2]=tint.b;touched=true;
+          }
+        }
+        if(touched)mesh.instanceColor.needsUpdate=true;
+      });
+    }
+    return {root,rows,recolour,width:site.width,depth:site.depth,cx:site.cx,cz:site.cz,landmarks:site.items,crew:site.crew,animate,dispose,animated:fanMeshes.length>0,hardware:h};
   }
   return {build,layout,colors};
 })();
