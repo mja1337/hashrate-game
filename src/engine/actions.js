@@ -82,57 +82,6 @@ function placeHardwareOrder(id,qty,btcCost=0){const h=HARDWARE.find(x=>x.id===id
   }state.procurementOrders.push({id,qty,due:state.time+terms.days*DAY,risk:terms.risk,partialRisk:terms.partialRisk,vendor:terms.vendor,slips:0,label:terms.label,channel:terms.channel,
     // Drawn once for the batch: these came off one site with one maintenance history.
     condition:terms.channel==="secondary"?rollSecondaryCondition(h):100});const paid=btcCost>0?fmtBtc(btcCost):fmtUsd(hardwareUnitCost(h)*qty);log(`Ordered ${qty} × ${h.name}`,`-${paid} · ${terms.vendor} · ${terms.days}-day lead time`,"fleet");showToast("Miner order placed",`${qty} × ${h.name} via ${terms.vendor}: ETA ${dateFmt(state.time+terms.days*DAY)} · ${Math.round(terms.risk*100)}% delay risk.`,"info","mine");save();renderMineContent()}
-function advanceCoolingInstalls(){
-  state.thermal.orders=(state.thermal.orders||[]).filter(o=>{
-    if(o.due>state.time)return true;
-    const item=COOLING_EQUIPMENT.find(x=>x.id===o.id);if(!item)return false;
-    const qty=Math.max(1,Number(o.qty||1));
-    state.thermal.equipment[o.id]=(state.thermal.equipment[o.id]||0)+qty;
-    log(`Cooling commissioned: ${item.name}`,`+${fmtNum(item.coolingKw*qty)} kW heat rejection`,"operations");
-    showToast("Cooling commissioned",`${item.name} is installed and thermostatically controlled. The room will move toward its new target temperature over the next few simulated days.`,"success","mine");
-    return false;
-  });
-}
-function advanceProcurement(){state.procurementOrders=state.procurementOrders.filter(o=>{if(o.due>state.time)return true;const h=HARDWARE.find(x=>x.id===o.id);if(!h)return false;if((o.slips||0)<2&&nextRand()<(o.risk||0)){const delay=14+Math.floor(nextRand()*42);o.due=state.time+delay*DAY;o.slips=(o.slips||0)+1;log(`${h.name} delivery slipped`,`${o.vendor||"supplier"} · ${delay} additional days`);showToast("Delivery delayed",`${h.name} shipment slipped by ${delay} days (${o.label}).`,"warning","mine");return true}let delivered=Number(o.qty);if(delivered>1&&nextRand()<(o.partialRisk||0)){delivered=Math.max(1,Math.floor(delivered*(.45+nextRand()*.3)));const remaining=Number(o.qty)-delivered;state.procurementOrders.push({...o,qty:remaining,due:state.time+(14+Math.floor(nextRand()*28))*DAY,slips:2,label:`${o.label} · balance shipment`});log(`${h.name} partially delivered`,`${delivered} received · ${remaining} remain with ${o.vendor||"supplier"}`)}stageDelivery(o.id,delivered,Number.isFinite(o.condition)?o.condition:100);log(`Miner delivery received`,`${delivered} × ${h.name} awaiting activation`);showToast("Miners have arrived",`${delivered} × ${h.name} is staged.${delivered<Number(o.qty)?" The remaining allocation is still in transit.":""}`,"info","mine");renderFullQueued=true;return false})}
-/* Staged machines are a count per type, so a second-hand batch's condition would be lost
-   between the loading bay and the rack. It is carried alongside, weighted when two batches of
-   the same machine are waiting together — which is what actually happens when you buy the
-   same model from two sellers. */
-function stageDelivery(id,qty,condition){
-  const staged=Math.max(0,Math.floor(state.inactiveHardware?.[id]||0));
-  const store=state.stagedCondition||(state.stagedCondition={});
-  const prior=Number.isFinite(store[id])?store[id]:100;
-  const total=staged+qty;
-  store[id]=total>0?(staged*prior+qty*condition)/total:condition;
-  state.inactiveHardware[id]=total;
-}
-function activateHardware(id){const h=HARDWARE.find(x=>x.id===id),qty=Math.max(0,Math.floor(state.inactiveHardware?.[id]||0));if(!h||qty<1)return;const trial=JSON.parse(JSON.stringify(state));trial.hardware[id]=(trial.hardware[id]||0)+qty;if(!fleet(trial).within)return showToast("Commissioning blocked",`${qty} × ${h.name} no longer fits the active facility. Free capacity or upgrade the site.`);const days=Math.max(1,Math.ceil(qty/(hasStaff("fieldtech")?40:20)));state.inactiveHardware[id]=0;
-  const staged=state.stagedCondition?.[id];
-  if(state.stagedCondition)delete state.stagedCondition[id];
-  state.commissioningJobs.push({id,qty,due:state.time+days*DAY,started:state.time,days,done:0,condition:Number.isFinite(staged)?staged:undefined});log(`Commissioning started: ${h.name}`,`${qty} units · ${days} days` ,"fleet");showToast("Machines being commissioned",`${qty} × ${h.name} is being racked, configured and tested over ${days} simulation day${days===1?"":"s"}.`,"info","mine");save();renderMineContent()}
-function decommissionHardware(id,requested=1){const h=HARDWARE.find(x=>x.id===id),owned=state.hardware[id]||0;if(!h||h.permanent||owned<1)return;const qty=Math.min(owned,Math.max(1,Math.floor(Number(requested)||1)));state.hardware[id]-=qty;state.poweredDownHardware[id]=Math.min(state.poweredDownHardware[id]||0,state.hardware[id]);state.decommissionedHardware[id]=(state.decommissionedHardware[id]||0)+qty;
-  /* A machine on its way to storage still has a good fan in it. One per machine retired,
-     of whatever tier that machine takes — which is also why the skill sits behind
-     diagnostics: you have to know what is worth keeping. */
-  let salvaged=0;
-  if(hasSkill("salvage")){
-    const tier=fanTierFor(h);
-    salvaged=qty;
-    state.maintenance.inventory[tier]=(state.maintenance.inventory[tier]||0)+salvaged;
-  }
-  log(`Retired ${qty} × ${h.name}`,`Isolated from power and ready for resale${salvaged?` · ${salvaged} ${sparePart(fanTierFor(h))?.name||"fan"}${salvaged===1?"":"s"} salvaged`:""}`,"fleet");showToast("Machines retired",`${qty} × ${h.name} is in storage and ready to sell.`,"info","mine");save();renderMineContent()}
-function setHardwarePower(id,powerOn,requested=1){
-  const h=HARDWARE.find(x=>x.id===id),owned=state.hardware[id]||0;if(!h||owned<1)return;const paused=hardwarePoweredDownCount(h),qty=Math.max(1,Math.floor(Number(requested)||1));
-  if(powerOn){const changed=Math.min(paused,qty);if(!changed)return;state.poweredDownHardware[id]=paused-changed;log(`Started ${changed} × ${h.name}`,`${state.poweredDownHardware[id]} remain manually off`,"fleet");showToast("Miners started",`${changed} × ${h.name} will add heat and hash rate while site power is available.`,"info","mine")}
-  else{const repairing=Math.min(owned,Math.max(hardwareFaultCount(h),activeServiceJob(id)?.count||0)),available=Math.max(0,owned-paused-repairing),changed=Math.min(available,qty);if(!changed)return showToast("No running units",`Every available ${h.name} is already stopped or in repair.`);state.poweredDownHardware[id]=paused+changed;log(`Paused ${changed} × ${h.name}`,"Cooling load reduced without retiring hardware","fleet");showToast("Heat load reduced",`${changed} × ${h.name} is off. It earns nothing, draws no miner power and stops accumulating wear.`,"info","mine")}
-  save();renderMineContent();
-}
-function buyCooling(id){
-  const item=COOLING_EQUIPMENT.find(x=>x.id===id),tier=facilityTier();if(!item||state.time<at(item.date)||tier<item.minTier||tier>item.maxTier)return showToast("Cooling unavailable","This equipment does not fit the current facility tier or date.");
-  if(state.cash<item.cost)return showToast("Not enough cash",`${item.name} costs ${fmtUsd(item.cost)}.`);
-  const trial=JSON.parse(JSON.stringify(state));(trial.thermal.orders||[]).forEach(o=>{trial.thermal.equipment[o.id]=(trial.thermal.equipment[o.id]||0)+Number(o.qty||1)});trial.thermal.equipment[id]=(trial.thermal.equipment[id]||0)+1;const projected=fleet(trial);if(projected.potentialKw>projected.cap)return showToast("Electrical headroom required",`${item.name} adds ${item.watts.toLocaleString("en-US")} W of peak cooling demand. With your fleet and any cooling already on order, the site would need ${fmtNum(projected.potentialKw)} kW against its ${fmtNum(projected.cap)} kW supply. Pause miners or move to a larger facility first.`);
-  const days=coolingInstallDays(item);state.cash-=item.cost;state.thermal.orders.push({id,qty:1,due:state.time+days*DAY,cost:item.cost});log(`Ordered cooling: ${item.name}`,`-${fmtUsd(item.cost)} · ${days}-day install`,"operations");showToast("Cooling ordered",`${item.name} is paid for and booked in. The installers need ${days} simulated days, and it rejects no heat until the job is finished on ${dateFmt(state.time+days*DAY)}.`,"info","mine");save();renderMineContent();
-}
 function buyHardware(id,requested=1){
   const h=HARDWARE.find(x=>x.id===id);if(!h||h.permanent||state.time<at(h.date))return;
   const unitCost=hardwareUnitCost(h);

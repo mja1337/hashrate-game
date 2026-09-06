@@ -53,6 +53,49 @@ const SITE = (overrides = "") => `
   state.facility="home";state.region="na";state.facilityUpgradeJob=null;state.relocationJob=null;
   ${overrides}`;
 
+/* ---- A PLANT YOU CAN BUY IS A PLANT YOU CAN LEAVE ---- */
+
+rule("cooling can be cancelled before it lands and sold after it does", () => {
+  const r = json(`(()=>{${SITE(`state.time=at("2017-06-01");state.facility="warehouse";state.region="texas";
+    state.cash=500000;state.hardware={};state.hardware.s9=300;
+    state.thermal={temperature:26,orders:[],equipment:{axial:3}};`)}
+    const item=COOLING_EQUIPMENT.find(x=>x.id==="axial");
+    const start={cash:state.cash,cap:coolingCapacityKw()};
+    buyCooling("axial");
+    const ordered={cash:state.cash,orders:state.thermal.orders.length};
+    cancelCoolingOrder("axial");
+    const cancelled={cash:state.cash,orders:state.thermal.orders.length};
+    sellCooling("axial");
+    return {cost:item.cost,cooling:item.coolingKw,start,ordered,cancelled,
+      sold:{cash:state.cash,units:state.thermal.equipment.axial||0,cap:coolingCapacityKw()},
+      resaleQuoted:coolingResaleValue(item)}})()`);
+  assert(r.ordered.orders === 1 && r.ordered.cash === r.start.cash - r.cost, "ordering cooling no longer costs its price");
+  assert(r.cancelled.orders === 0, "an undelivered cooling order cannot be cancelled");
+  /* A cancellation is not a refund in full: the supplier keeps a restocking fee, or ordering
+     costs nothing to change your mind about and the decision carries no weight. */
+  const refunded = r.cancelled.cash - r.ordered.cash;
+  assert(refunded > 0 && refunded < r.cost, `cancelling refunded ${refunded} of ${r.cost}; it must return most of the money but not all of it`);
+  assert(r.sold.units === 2, "selling an installed unit did not remove it from the plant");
+  assert(r.sold.cash - r.cancelled.cash === r.resaleQuoted && r.resaleQuoted > 0,
+    "selling installed cooling paid something other than the price its own card quotes");
+  /* The point of selling it: the heat rejection goes with it, the same day. */
+  assert(Math.abs((r.start.cap - r.sold.cap) - r.cooling * (r.start.cap / r.start.cap)) < r.cooling * 0.35,
+    `capacity fell by ${(r.start.cap - r.sold.cap).toFixed(1)} kW when the unit sheds ${r.cooling} kW`);
+  assert(r.sold.cap < r.start.cap, "selling a cooling unit did not reduce heat rejection");
+});
+
+rule("a cooling sale is worth more than the same plant sold with a building", () => {
+  const r = json(`(()=>{${SITE(`state.time=at("2017-06-01");state.facility="warehouse";state.region="texas";
+    state.thermal={temperature:26,orders:[],equipment:{axial:2}};`)}
+    const item=COOLING_EQUIPMENT.find(x=>x.id==="axial");
+    return {chosen:coolingResaleValue(item),cost:item.cost,distressed:Math.round(item.cost*0.25)}})()`);
+  /* Choosing the moment and the buyer is worth something. A downsize sells the plant with the
+     building to someone who knows the operator has to leave; that is the worse price, and the
+     two must not drift into each other or one of the decisions stops meaning anything. */
+  assert(r.chosen > r.distressed, "selling cooling deliberately is worth no more than losing it in a downsize");
+  assert(r.chosen < r.cost, "used industrial plant sells for its full price");
+});
+
 /* ---- THE FACILITY LADDER GOES BOTH WAYS ---- */
 
 rule("a fleet that fits can move to a smaller site, and one that does not cannot", () => {

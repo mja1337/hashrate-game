@@ -45,7 +45,7 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(a==="repair-cable")repairCableClick(id,b.dataset.slot);
   else if(a==="repair-nudge")repairNudgeDial(id,b.dataset.delta);
   else if(a==="focus-service")focusServiceRow(id);
-  else if(a==="buy-cooling")buyCooling(id);
+  else if(a==="sell-cooling")sellCooling(id);else if(a==="cancel-cooling")cancelCoolingOrder(id);else if(a==="buy-cooling")buyCooling(id);
   else if(a==="gift-card")buyGiftCard(id,Number(v));
   else if(a==="custody-buy")orderCustodyProduct(id,1);
   else if(a==="custody-assemble")assembleCustodyBuild(id);
