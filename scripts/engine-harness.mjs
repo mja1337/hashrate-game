@@ -45,6 +45,7 @@ const FILES = [
   "src/engine/settlement.js",
   "src/engine/custody.js",
   "src/engine/payouts.js",
+  "src/engine/signing.js",
   "src/engine/losses.js",
   "src/engine/facilities.js",
   "src/engine/maintenance.js",

@@ -56,6 +56,10 @@ const SITE = (overrides = "") => `
      and both change how many draws a day takes from the random stream. A rule that ticks for
      years therefore used to move the sample every rule after it saw — which is how a
      connectivity rule started failing because a payout rule was added above it. */
+  /* Cumulative counters are the same hazard: state.mined and state.blocks carry across rules,
+     so a rule guarding on "did this run earn anything" could be answered by a previous rule's
+     earnings and then assert against its own empty wallet. */
+  state.mined=0;state.blocks=0;
   state.seen=[];state.hardwareAlerts={seen:[],queue:[],active:null,resumeSpeed:0};
   state.secondary={stock:{},month:""};state.pendingLosses=[];state.lossResume=false;
   state.poolAccount={balance:0,frozen:0,threshold:.01,destination:"hot",paidTotal:0,feesPaid:0,payouts:0,lastPayout:0};
@@ -88,18 +92,28 @@ rule("pool income is held by the pool until it clears the threshold", () => {
 });
 
 rule("solo mining has no pool balance and no withdrawal fee", () => {
+  /* Asserted against the router directly rather than by waiting for a block. Solo mining is a
+     lottery, and a run long enough to be sure of winning it is also long enough for an
+     unserviced fleet to degrade itself offline — so a tick-driven version of this rule was
+     failing for reasons that had nothing to do with what it claims. The tick's use of this
+     router is proved by the pool rule above, which watches a balance accrue through ticks. */
   const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.facility="warehouse";state.region="texas";
-    state.hardware={};state.hardware.s19=60;state.wallets.hot=0;state.wallets.cold=0;state.mode="solo";
-    state.poolAccount={balance:0,frozen:0,threshold:.01,destination:"hot",paidTotal:0,feesPaid:0,payouts:0,lastPayout:0};
-    state.thermal={temperature:22,orders:[],equipment:{axial:6}};`)}
-    for(let d=0;d<120;d++)tick(true);
-    return{pool:poolAccount().balance,fees:poolAccount().feesPaid,hot:state.wallets.hot,mined:state.mined}})()`);
-  assert(r.mined > 0, "solo mining earned nothing over 120 days, so this rule proves nothing");
-  /* The half of the solo trade-off the game never showed: nobody holds it and nobody charges
-     you to send it. The coinbase pays an address you control. */
-  assert(r.pool === 0, `solo mining accrued ${r.pool} in a pool balance`);
-  assert(r.fees === 0, "solo mining paid a pool withdrawal fee");
-  assert(r.hot > 0, "solo mining income never reached the wallet");
+    state.wallets.hot=0;state.wallets.cold=0;state.mode="solo";
+    state.poolAccount={balance:0,frozen:0,threshold:.01,destination:"hot",paidTotal:0,feesPaid:0,payouts:0,lastPayout:0};`)}
+    creditMiningIncome(.5);
+    const solo={hot:state.wallets.hot,pool:poolAccount().balance,fees:poolAccount().feesPaid};
+    // The same income, mined through a pool, must behave completely differently.
+    state.mode="pool";state.pool="foundry";state.wallets.hot=0;
+    creditMiningIncome(.5);
+    const pooled={hot:state.wallets.hot,pool:poolAccount().balance};
+    return{solo,pooled}})()`);
+  /* The coinbase pays an address you control: nobody holds it and nobody charges you to send
+     it. That is the half of the solo trade-off the game never showed. */
+  assert(r.solo.hot === .5, `solo income put ${r.solo.hot} in the wallet instead of the whole 0.5`);
+  assert(r.solo.pool === 0, `solo mining accrued ${r.solo.pool} in a pool balance`);
+  assert(r.solo.fees === 0, "solo mining paid a pool withdrawal fee");
+  assert(r.pooled.hot === 0 && r.pooled.pool === .5,
+    `pool income reached the wallet directly (${r.pooled.hot} hot, ${r.pooled.pool} held); it must sit with the pool first`);
 });
 
 rule("the payout destination decides who is holding the income", () => {
@@ -607,7 +621,23 @@ const CUSTODY_SITE = (overrides = "") => `
   state.wallets={hot:10,cold:40,mtgox:0,exchange:0,frozen:0,bitfinex:0,quadriga:0,etf:0,frontier:0};
   state.custody={devices:[],keys:[],policy:"single",assigned:[],configBackedUp:false,
     orders:[],parts:{},builds:[],exposure:[],seq:0,lastScare:0};
+  state.coldSpends=[];
   ${overrides}`;
+
+/* A wallet that is actually finished: distinct seeds, durable backups, assigned to the policy,
+   and — for a quorum — the descriptor written down too. Several rules need a wallet that can
+   really sign rather than one that merely has a policy set on it, and building it by hand in
+   each of them is how they drift apart. */
+const CONFIGURED_WALLET = (policy = "2of3") => `
+  setCustodyPolicy("${policy}");
+  state.custody.keys=[];state.custody.assigned=[];
+  for(let i=0;i<custodyPolicy("${policy}").keys;i++){
+    const id="k"+i;
+    state.custody.keys.push({id,seed:"s"+i,label:"KEY "+i,weakEntropy:false,
+      backup:{durability:"steel"}});
+    state.custody.assigned.push(id);
+  }
+  state.custody.configBackedUp=true;`;
 
 rule("three devices holding one seed are still one key", () => {
   const result = json(`(()=>{
@@ -757,17 +787,51 @@ rule("a vendor leak reaches that vendor's customers and no one else", () => {
   assert(Math.abs(r.after - r.held) < 1e-9, "the disclosure moved coins by itself, which a customer-data breach does not do");
 });
 
-rule("moving coins between wallets conserves them", () => {
+rule("moving coins between wallets conserves them, and leaving cold takes signing", () => {
   const r = json(`(()=>{
     ${CUSTODY_SITE(`state.time=at("2021-02-01");`)}
-    setCustodyPolicy("2of3");
+    ${CONFIGURED_WALLET("2of3")}
     const before=state.wallets.hot+state.wallets.cold;
     transfer("cold","hot",.5);
+    /* Cold storage protects coins by making them hard to spend, which necessarily includes
+       hard for their owner. The coins have left cold and have not arrived: they are in flight,
+       still the operator's, and not yet spendable. */
+    const inflight={hot:state.wallets.hot,cold:state.wallets.cold,jobs:state.coldSpends.length,
+      pending:coldSpendPending(),days:coldSpendDays()};
+    /* Driven through tick(), not by calling the advance directly: a rule that calls the helper
+       proves the helper works and passes with the tick call deleted. */
+    let ticks=0;
+    while(state.coldSpends.length&&ticks<40){tick(true);ticks++}
     const after=state.wallets.hot+state.wallets.cold;
-    return {before,after,fee:before-after};})()`);
-  assert(r.fee > 0, "a transfer costs nothing");
-  assert(r.fee < .001, `a transfer cost ${r.fee} BTC, which is not a network fee`);
-  assert(Math.abs(r.before - r.after - r.fee) < 1e-12, "coins were created or destroyed by a transfer");
+    return {before,inflight,ticks,after,fee:before+inflight.pending-after-inflight.pending,
+      settled:before-after};})()`);
+  assert(r.inflight.jobs === 1, "leaving cold storage completed instantly, so cold storage costs nothing");
+  assert(r.inflight.pending > 0, "coins left cold storage and went nowhere");
+  /* A 2-of-3 is two keys in two places, and every signature beyond the first is another
+     journey. It must take longer than a single key would. */
+  assert(r.inflight.days >= 2, `a 2-of-3 cold spend took ${r.inflight.days} day; a quorum is kept apart on purpose`);
+  assert(r.ticks > 0 && r.ticks <= r.inflight.days + 1, `the signing took ${r.ticks} ticks against an estimate of ${r.inflight.days}`);
+  assert(r.settled > 0, "the completed transfer cost nothing");
+  assert(r.settled < .001, `a transfer cost ${r.settled} BTC, which is not a network fee`);
+});
+
+rule("a quorum you cannot assemble is permanent, not slow", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");`)}
+    ${CONFIGURED_WALLET("2of3")}
+    const ok=coldSpendBlockReason();
+    // Take the keys away: the policy still demands three, and nothing satisfies it.
+    state.custody.assigned=[];
+    const broken=coldSpendBlockReason();
+    const held=state.wallets.cold;
+    transfer("cold","hot",.5);
+    return {ok,broken,held,coldAfter:state.wallets.cold,jobs:state.coldSpends.length}})()`);
+  assert(r.ok === "", `a configured 2-of-3 refused to sign: ${r.ok}`);
+  /* Not a delay — a wall, and one that says which wall it is. This is the lesson a "back up
+     your keys" sentence cannot teach: a backup is a belief until you restore from it. */
+  assert(/keys/i.test(r.broken), "an unsatisfiable quorum gave no reason, or the wrong one");
+  assert(r.jobs === 0 && r.coldAfter === r.held,
+    "coins left a wallet that cannot produce a signature");
 });
 
 /* ---- SOLVENCY: paying a bill and earning it are not the same thing ---- */

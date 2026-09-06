@@ -13,7 +13,7 @@ const initialState=()=>{const seed=Math.floor(Math.random()*4294967296);return{
   lightning:{locked:0,earned:0},
   giftCards:{spentBtc:0,spentUsd:0,cards:0},floorView:"3d",
   hardware:{laptop:1},poweredDownHardware:{},facility:"home",region:"na",thermal:{temperature:22,orders:[],equipment:{}},overdrive:false,settlementSaleMode:false,autoRepair:false,node:0,nodeStorage:50,nodePruned:false,nodeMode:"archival",nodeSync:{primaryLag:0,primaryPeak:0,backupLag:0,backupPeak:0},backupNode:{enabled:false,outageUntil:0},mode:"solo",pool:"f2pool",
-  skills:[],points:0,startingGrant:false,seen:[],activeEvent:null,pendingLosses:[],poolAccount:{balance:0,frozen:0,threshold:.01,destination:"hot",paidTotal:0,feesPaid:0,payouts:0,lastPayout:0},lossResume:false,storyPause:true,shoppingPause:false,speculations:[],powerRateShock:null,hardwareGlut:null,hardwareAlerts:{seen:[],queue:[],active:null,resumeSpeed:0},hardwareToastSeen:[],exposureWarned:[],
+  skills:[],points:0,startingGrant:false,seen:[],activeEvent:null,pendingLosses:[],poolAccount:{balance:0,frozen:0,threshold:.01,destination:"hot",paidTotal:0,feesPaid:0,payouts:0,lastPayout:0},coldSpends:[],lossResume:false,storyPause:true,shoppingPause:false,speculations:[],powerRateShock:null,hardwareGlut:null,hardwareAlerts:{seen:[],queue:[],active:null,resumeSpeed:0},hardwareToastSeen:[],exposureWarned:[],
   treasuryPolicy:"cover",pendingSettlement:null,endReason:null,arrearsDue:0,gridCutAnnounced:false,marketPressure:{usd:0,at:0},
   operator:{eras:{},periodMined:0,periodUptime:0,periodDays:0,lastRevenueUsd:0,totalMonths:0,solventMonths:0,profitableMonths:0,competitiveMonths:0,bridgeLoans:0,restructures:0},
   xp:{total:0,level:1,peakLevel:1,bestDifficulty:0,shares:0,sources:{shares:0,record:0,deploy:0,repair:0,spend:0}},
@@ -96,6 +96,7 @@ state.inactiveHardware=state.inactiveHardware&&typeof state.inactiveHardware==="
 HARDWARE.forEach(h=>state.inactiveHardware[h.id]=Math.max(0,Math.floor(Number(state.inactiveHardware[h.id])||0)));
 state.commissioningJobs=Array.isArray(state.commissioningJobs)?state.commissioningJobs.filter(job=>HARDWARE.some(h=>h.id===job.id)&&Number(job.qty)>0&&Number.isFinite(Number(job.due))):[];
 if(typeof poolAccount==="function")poolAccount();
+state.coldSpends=Array.isArray(state.coldSpends)?state.coldSpends.filter(j=>Number(j.gross)>0&&Number.isFinite(Number(j.due))):[];
 state.retirementJobs=Array.isArray(state.retirementJobs)?state.retirementJobs.filter(job=>HARDWARE.some(h=>h.id===job.id)&&Number(job.qty)>0&&Number.isFinite(Number(job.due))):[];
 state.decommissionedHardware=state.decommissionedHardware&&typeof state.decommissionedHardware==="object"?state.decommissionedHardware:{};
 HARDWARE.forEach(h=>state.decommissionedHardware[h.id]=Math.max(0,Math.floor(Number(state.decommissionedHardware[h.id])||0)));
@@ -548,6 +549,7 @@ function tick(silent=false){
   advanceRetirements();
   advanceStagedIntake();
   advancePoolPayouts();
+  advanceColdSpends();
   advanceFleetLifecycle();
   const crossed=EVENTS.filter(e=>at(e.date)>prev&&at(e.date)<=next&&!state.seen.includes(e.id)).sort((a,b)=>at(a.date)-at(b.date));
   crossed.forEach(e=>{state.seen.push(e.id);applyEvent(e)});

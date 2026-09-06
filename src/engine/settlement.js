@@ -43,7 +43,16 @@ function settlementForecast(){
   const minerWatts=state.power&&!gridCutOff()&&!state.policyLock?fs.w*contractLoadFactor():0,nodeWatts=nodeHostPowered()?nodeW:0,energyDaily=dailyEnergyCostForWatts(minerWatts+nodeWatts,state.time,r)-curtailmentCreditDaily(minerWatts,state.time,r),daily={energy:energyDaily,rent:f.rent/30.4375,internet:internetMonthlyCost()/30.4375,staff:staffMonthlyCost()/30.4375,insurance:insuranceMonthlyCost()/30.4375,nodeNetwork:totalNodeMonthlyOverhead()/30.4375,other:0};
   let cursor=new Date(state.time),days=0,month=cursor.getUTCMonth();do{cursor=new Date(cursor.getTime()+DAY);days++}while(cursor.getUTCMonth()===month);
   const accrued=accruedBillBreakdown(),breakdown={};Object.keys(accrued).forEach(key=>breakdown[key]=accrued[key]+(daily[key]||0)*days);breakdown.finance=state.projectLoan*(hasStaff("treasurer")?.009:.012);const estimated=Object.values(breakdown).reduce((sum,value)=>sum+value,0),cashAfter=state.cash-estimated,coverage=estimated?Math.max(0,Math.min(100,state.cash/estimated*100)):100;
-  return{days,dueAt:nextSettlementDate(),daily,accrued,breakdown,estimated,cashAfter,coverage,remaining:Math.max(0,estimated-state.bill)};
+  /* HOW FAR AWAY THE MONEY IS. A shortfall is a different problem depending on where the
+     treasury lives: coins in the hot wallet can be sold this afternoon, coins in cold storage
+     are a signing ceremony away, and a ceremony takes as many days as the protection you
+     bought. An operator paying mining income into cold storage and meeting a bill in four
+     days needs that stated as arithmetic, not as advice. */
+  const cold=typeof coldLockedBtc==="function"?coldLockedBtc():0;
+  const reachDays=typeof treasuryDistanceDays==="function"?treasuryDistanceDays():0;
+  const coldTooSlow=cold>0&&reachDays>days;
+  return{days,dueAt:nextSettlementDate(),daily,accrued,breakdown,estimated,cashAfter,coverage,
+    remaining:Math.max(0,estimated-state.bill),cold,reachDays,coldTooSlow};
 }
 
 function settlementSnapshot(due,month){

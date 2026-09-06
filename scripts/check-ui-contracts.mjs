@@ -210,6 +210,29 @@ assert(inline.includes('const gridDown=gridCutOff()||!!state.policyLock'),
 assert(inline.includes("if(!placeHardwareOrder(id,qty))state.cash+=cost;") && inline.includes("if(!placeHardwareOrder(id,qty,cost))state.wallets.hot+=cost;"),
   "A purchase path takes payment and ignores whether the order was actually accepted");
 
+/* SPENDING FROM COLD IS AN ACT, NOT A CLICK. Cold storage protects coins by making them hard
+   to spend, which necessarily includes hard for their owner. A transfer that completes the
+   instant it is clicked teaches that cold storage is free safety, which would make choosing
+   anything else irrational. */
+assert(inline.includes("function coldSpendDays(") && inline.includes("function coldSpendBlockReason(") && inline.includes("function advanceColdSpends("),
+  "The cold-spend ceremony, its refusal or its completion tick has gone");
+assert(inline.includes('if(from==="cold")return beginColdSpend(to,gross,fee);'),
+  "Leaving cold storage completes instantly again");
+assert(inline.includes("function coldSpendCard()"),
+  "Nothing shows coins that have left cold storage and not yet arrived, so a transfer looks like the game eating them");
+/* And a shortfall is a different problem depending on how far away the treasury is. */
+assert(inline.includes("coldTooSlow") && inline.includes("reachDays"),
+  "The settlement forecast no longer says how many days the treasury is away");
+
+/* SERVICING CAN BE UNAVAILABLE, AND THE TAB STRIP HAS TO SAY SO. A fleet in transit or sitting
+   through an outage cannot be worked on, and the badge cheerfully read "12 need attention" as
+   though a technician could be sent. */
+assert(inline.includes("const serviceHalted=moving?") && inline.includes('tone:"halted"'),
+  "The Servicing sub-tab no longer reports that it is offline");
+assert(inline.includes('offline · in transit') && inline.includes('offline · ${incident.kind.toLowerCase()}'),
+  "The Servicing badge no longer names WHY it is offline; in transit and a grid outage are different waits");
+assert(css.includes(".mine-section-badge.halted"), "The halted badge has no styling to tell it apart");
+
 /* MINING INCOME ARRIVES THROUGH CUSTODY.
    Custody was a tab you visited once. The way to teach it is not to explain it — it is to make
    every day of mining pass through it, which is why the payout card lives on Pools, where the

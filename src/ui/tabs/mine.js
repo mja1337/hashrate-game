@@ -51,9 +51,30 @@ function mineSectionBadges(){
   // Unpatched firmware is a fleet problem the Servicing section can now fix, so it counts.
   const firmware=(typeof firmwarePatchDue==="function"&&firmwarePatchDue())?1:0;
   const needsService=faults+ailing+firmware;
+  /* SERVICING CAN BE UNAVAILABLE, AND THE TAB HAS TO SAY SO.
+
+     A fleet in transit between sites, or one sitting through a grid or internet outage, cannot
+     be worked on — and the badge cheerfully read "12 need attention" as though a technician
+     could be sent. The tab strip is where a player decides which section to open, so a section
+     that cannot do anything right now is exactly the thing it should be reporting. The reason
+     is named rather than generalised, because "in transit" and "the power is off" are
+     different problems with different waits. */
+  const incident=typeof activeSiteIncident==="function"?activeSiteIncident():null;
+  const moving=typeof fleetGrounded==="function"&&fleetGrounded();
+  const movingTo=moving?(state.relocationJob?REGIONS.find(r=>r.id===state.relocationJob.id)?.name:FACILITIES.find(f=>f.id===state.facilityUpgradeJob?.id)?.name):null;
+  const movingDue=moving?(state.relocationJob?.due||state.facilityUpgradeJob?.due||0):0;
+  const serviceHalted=moving?`offline · in transit${movingTo?` to ${movingTo}`:""}`
+    :incident?`offline · ${incident.kind.toLowerCase()}`
+    :state.policyLock?"offline · site shut down"
+    :typeof gridCutOff==="function"&&gridCutOff()?"offline · grid disconnected"
+    :"";
+  const haltedDays=moving&&movingDue?Math.max(0,Math.ceil((movingDue-state.time)/DAY))
+    :incident?Math.max(0,Math.ceil((incident.until-state.time)/DAY)):0;
   return{
     floor:{text:`${fmtCompactNumber(fs.activeCount)} / ${fmtCompactNumber(fs.count)} hashing`,tone:fs.count&&!fs.activeCount?"bad":""},
-    service:{text:needsService?`${fmtCompactNumber(needsService)} need${needsService===1?"s":""} attention`:"all healthy",tone:needsService?"bad":"good"},
+    service:serviceHalted
+      ?{text:`${serviceHalted}${haltedDays?` · ${haltedDays}d`:""}`,tone:"halted"}
+      :{text:needsService?`${fmtCompactNumber(needsService)} need${needsService===1?"s":""} attention`:"all healthy",tone:needsService?"bad":"good"},
     cooling:{text:`${temperature.toFixed(0)} °C · ${band}`,tone:band==="cool"?"good":band==="warm"?"":"bad"},
     buy:{text:inbound?`${fmtCompactNumber(inbound)} arriving`:"catalogue",tone:inbound?"good":""}
   };
