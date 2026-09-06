@@ -16,27 +16,77 @@
 const FloorScene=(()=>{
   const T=FloorThree,C={slab:0x17262d,floor:0x516267,wall:0x768588,steel:0x283b43,edge:0x9aafb2,dark:0x111b22,orange:0xf7a13d,green:0x75e3b2,blue:0x68bafa,red:0xff705d,wood:0x916f4b};
   const colors={online:C.green,fault:C.red,repair:C.blue,off:0x52636c};
-  /* Racks fill the room they are in. The container yard used to space its rows on a fixed
-     4.4m pitch counted from an arbitrary origin, so once a site carried more batches than the
-     yard had rows for, the last ones marched out through the fence and stood on the grass.
-     Row pitch is now derived from the depth available in every layout, so a floor with two
-     hundred batches packs tighter rather than overflowing. */
+  /* THE FLOOR HAS TO FIT IN THE ROOM, AND LOOK LIKE IT BELONGS TO IT.
+
+     Two things were wrong at fleet scale, and they were wrong in opposite directions at once.
+
+     The grid took its column count from a number fixed per site rather than from the size of
+     the thing being placed. A container yard used eight columns whatever it held, so a rack
+     1.54 wide sat on a 3.0 pitch — half the room's width was empty aisle — while the rows it
+     forced (nineteen of them, for a five-thousand-machine fleet) were crushed onto a 1.0
+     pitch against a rack 1.15 deep. The floor overlapped itself front to back while wasting
+     half of itself side to side.
+
+     And the rack was drawn at one size regardless of the building around it. In a spare room
+     that reads correctly. In a thirty-megawatt yard it reads as a handful of enormous
+     cabinets, because the room is only thirty-one units across and a machine is nearly half
+     of one — the picture says "large objects, small site" when the truth is the reverse.
+
+     Both are the same fix. The grid is derived from the rack's actual footprint, so columns
+     are however many genuinely fit; and when the batches still overflow, the whole floor is
+     drawn to a smaller scale — machines and spacing together — the way a floor plan zooms out
+     rather than marching its contents through the wall. A big site therefore draws small,
+     dense rows, which is what a big site looks like. */
+  const AISLE_X=.36,AISLE_Z=.62,FLOOR_MIN_SCALE=.24,FLOOR_DETAIL_SCALE=.62,FLOOR_DETAIL_UNITS=1000;
   function layout(s){
-    const {p}=FloorModel.definitions(s),bs=FloorModel.batches(s);
-    const cols=Math.max(1,Math.min(p.cols,bs.length)),rows=Math.ceil(bs.length/cols);
+    const {p,h}=FloorModel.definitions(s),bs=FloorModel.batches(s);
     const usableW=p.width-(p.width>=18?7:3.8),usableD=p.depth-(p.width>=18?6:3.6);
-    const dx=usableW/p.cols;
-    const dz=Math.min(p.id==='container'?4.4:2.15,usableD/Math.max(1,rows));
-    return bs.map((b,i)=>{
+    /* The footprint comes from the code that draws the rack, not from a constant kept here.
+       A rack widens with the site — a megacampus stands eight machines abreast where a spare
+       room stands two — and a pitch that did not follow it would put the rows through each
+       other the moment the shape changed. */
+    const typical=bs.length?Math.round(bs.reduce((sum,b)=>sum+b.qty,0)/bs.length):1;
+    const foot=FloorMiners.rackFootprint(h,typical);
+    const pitchX=foot.w+AISLE_X,pitchZ=foot.d+AISLE_Z,n=Math.max(1,bs.length);
+    /* Start from the scale at which the batches would exactly fill the floor area, then walk
+       it down until the integer grid it implies genuinely fits. The area estimate lands within
+       a step or two of the answer, so this settles immediately rather than searching. */
+    let scale=Math.min(1,Math.sqrt(usableW*usableD/(n*pitchX*pitchZ))),cols=1,rows=n;
+    for(let attempt=0;attempt<24;attempt++){
+      cols=Math.max(1,Math.min(n,Math.floor(usableW/(pitchX*scale))));
+      rows=Math.ceil(n/cols);
+      if(rows*pitchZ*scale<=usableD||scale<=FLOOR_MIN_SCALE)break;
+      scale=Math.max(FLOOR_MIN_SCALE,scale*.92);
+    }
+    const dx=pitchX*scale,dz=pitchZ*scale;
+    const cells=bs.map((b,i)=>{
       const col=i%cols,row=Math.floor(i/cols);
       // Container modules stagger their rows either side of the aisle; the offset shrinks
       // with the pitch so a packed yard does not overlap itself.
       const stagger=p.id==='container'?(row%2?1:-1)*Math.min(.8,dz*.18):0;
-      return{...b,x:(col-(cols-1)/2)*dx,z:(row-(rows-1)/2)*dz+stagger-.3};
+      /* Positions are emitted at full size and scaled with the geometry in part(), so the
+         floor stays one coherent object: shrinking a rack without shrinking the gap between
+         racks would leave a small machine adrift in a full-size aisle. */
+      return{...b,x:(col-(cols-1)/2)*dx/scale,z:((row-(rows-1)/2)*dz+stagger)/scale-.3};
     });
+    cells.scale=scale;cells.cols=cols;cells.rows=rows;
+    return cells;
+  }
+  /* WHETHER THE DETAIL IS WORTH DRAWING.
+
+     Two questions, not one. Scale answers "can it be seen" — below about two-thirds size the
+     roof ridges and the serial plate are smaller than a pixel. Fleet size answers "can it be
+     afforded", and it has to be asked separately: a light industrial unit with a hundred and
+     twenty machines draws its floor small because the room is wide and the batches are many,
+     but it is three thousand instances either way and there is no reason to take its detail
+     away. A five-thousand-machine yard is the case this exists for, and only that case. */
+  function floorDetail(s,scale){
+    if(scale>=FLOOR_DETAIL_SCALE)return true;
+    const fs=typeof fleet==="function"?fleet():null;
+    return !!fs&&fs.count<=FLOOR_DETAIL_UNITS;
   }
   function build(s,opts={}){
-    const root=new T.Group(),{h}=FloorModel.definitions(s),stats=FloorModel.metrics(s),rows=layout(s),buckets=new Map(),fanMeshes=[],textures=[],materials=[],signs=[];
+    const root=new T.Group(),{h}=FloorModel.definitions(s),stats=FloorModel.metrics(s),rows=layout(s),floorScale=rows.scale||1,detail=floorDetail(s,floorScale),buckets=new Map(),fanMeshes=[],textures=[],materials=[],signs=[];
     /* Segment counts are the cheapest realism available: every one of these geometries is
        instanced, so raising them costs vertices once and nothing per machine. Twelve-sided
        cylinders read as polygons at fan size, and a four-segment torus is a square ring. */
@@ -52,8 +102,15 @@ const FloorScene=(()=>{
        because additive blending still honours the per-instance colour. */
     function part(kind,size,pos,color=C.steel,rot=[0,0,0],batch=-1,unlit=false,fan=false,metal=false,glow=false){
       const key=kind+':'+unlit+':'+fan+':'+metal+':'+glow;if(!buckets.has(key))buckets.set(key,{kind,unlit,fan,metal,glow,items:[]});
-      dummy.position.set(...pos);dummy.scale.set(...size);dummy.rotation.set(...rot);dummy.updateMatrix();
-      buckets.get(key).items.push({matrix:dummy.matrix.clone(),color,batch,pos,size,rot});
+      /* Machine content is drawn to the floor's scale; the building it stands in is not.
+         Batch parts carry a batch id, scenery carries -1, so the two never scale together —
+         a shrinking floor inside a fixed room is the whole effect being aimed for. */
+      const k=batch>=0?floorScale:1;
+      dummy.position.set(pos[0]*k,pos[1]*k,pos[2]*k);dummy.scale.set(size[0]*k,size[1]*k,size[2]*k);dummy.rotation.set(...rot);dummy.updateMatrix();
+      /* The spin animation rebuilds a fan's matrix from these every frame, so the scale it was
+         drawn at travels with it — otherwise the first animated frame snaps every fan back to
+         full size in a shrunken rack. */
+      buckets.get(key).items.push({matrix:dummy.matrix.clone(),color,batch,pos,size,rot,k});
     }
     const box=(size,pos,col,batch=-1,unlit=false)=>part('box',size,pos,col,[0,0,0],batch,unlit);
     const metal=(size,pos,col,batch=-1,rot=[0,0,0])=>part('box',size,pos,col,rot,batch,false,false,true);
@@ -65,7 +122,20 @@ const FloorScene=(()=>{
     const tube=(size,pos,col,rot=[0,0,0],batch=-1,shiny=false)=>part('cylinder',size,pos,col,rot,batch,false,false,shiny);
     /* A fan reads as a fan when it has a recessed housing, a wire guard and a hub the blades
        actually attach to. Seven blades rather than three, because three is a ceiling fan. */
+    /* LEVEL OF DETAIL.
+
+       A fan is thirteen instanced parts — housing, two guard rings, seven blades, a hub and
+       four wire spokes — and that is right when a machine fills a third of the frame. On a
+       floor drawn at a third of size, every one of those parts is smaller than a pixel, and
+       the only thing they cost is the two hundred thousand instances that took a third of a
+       second to assemble. Below the threshold a fan becomes a dark disc with a bright hub,
+       which is exactly what a fan looks like from across a warehouse. */
     function fan(x,y,z,r,id=-1,spinning=false,facing=1){
+      if(!detail){
+        part('cylinder',[r*1.06,.05,r*1.06],[x,y,z-facing*.012],C.dark,[Math.PI/2,0,0],id);
+        part('cylinder',[r*.4,.055,r*.4],[x,y,z+facing*.03],C.edge,[Math.PI/2,0,0],id,false,spinning,true);
+        return;
+      }
       part('cylinder',[r*1.06,.05,r*1.06],[x,y,z-facing*.012],C.dark,[Math.PI/2,0,0],id);
       part('torus',[r,r,r],[x,y,z+facing*.027],C.edge,[0,0,0],id,false,false,true);
       part('torus',[r*.66,r*.66,r*.66],[x,y,z+facing*.031],C.edge,[0,0,0],id,false,false,true);
@@ -83,7 +153,7 @@ const FloorScene=(()=>{
         for(const dz of [-.72,.72])box([1.8,.025,.055],[x,.11,z+dz],C.orange,b.id,true);
         for(const dx of [-.87,.87])box([.055,.025,1.5],[x+dx,.11,z],C.orange,b.id,true);
       }
-      FloorMiners.render(b.hardware||h,b,{box,part,fan,metal,tube,lamp,C,accent});
+      FloorMiners.render(b.hardware||h,b,{box,part,fan,metal,tube,lamp,C,accent,detail});
       if(b.status==='fault'||b.status==='repair'){
         lamp([.36,.25,.1],[x,2.48,z],statusColor,b.id,1.9);
         box([.035,.11,.02],[x,2.5,z+.07],C.dark,b.id);
@@ -122,7 +192,7 @@ const FloorScene=(()=>{
     }
     let lastAngle=0;
     function animate(t){const angle=t*.008;if(Math.abs(angle-lastAngle)<.015)return;lastAngle=angle;
-      for(const {mesh,items} of fanMeshes){items.forEach((a,i)=>{dummy.position.set(...a.pos);dummy.scale.set(...a.size);dummy.rotation.set(a.rot[0],a.rot[1],a.rot[2]+angle);dummy.updateMatrix();mesh.setMatrixAt(i,dummy.matrix);});mesh.instanceMatrix.needsUpdate=true;}}
+      for(const {mesh,items} of fanMeshes){items.forEach((a,i)=>{const k=a.k||1;dummy.position.set(a.pos[0]*k,a.pos[1]*k,a.pos[2]*k);dummy.scale.set(a.size[0]*k,a.size[1]*k,a.size[2]*k);dummy.rotation.set(a.rot[0],a.rot[1],a.rot[2]+angle);dummy.updateMatrix();mesh.setMatrixAt(i,dummy.matrix);});mesh.instanceMatrix.needsUpdate=true;}}
     function dispose(){root.traverse(o=>{if(o.isInstancedMesh)o.dispose();});Object.values(geo).forEach(g=>g.dispose());materials.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());}
     return {root,rows,width:site.width,depth:site.depth,cx:site.cx,cz:site.cz,landmarks:site.items,crew:site.crew,animate,dispose,animated:fanMeshes.length>0,hardware:h};
   }

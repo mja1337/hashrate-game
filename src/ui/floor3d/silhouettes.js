@@ -45,6 +45,10 @@ const FloorMiners=(()=>{
   };
   function render(h,b,api){
     const {box,part,fan,C}=api,p=profiles[h.id];if(!p)throw Error('Missing visual: '+h.id);
+    /* Whether this machine is being drawn close enough for its detail to exist. Roof ridges,
+       flank louvres, the controller board and the serial plate are sub-pixel on a floor drawn
+       small, and they are the bulk of a machine's instance count. */
+    const detail=api.detail!==false;
     const {x,z}=b,id=b.id,accent=api.accent,on=b.status==='online';
     /* Machines sit side by side on a shelf when the frame is wide enough for them, so every
        piece of a given unit shifts together. Held here rather than threaded through forty
@@ -79,24 +83,19 @@ const FloorMiners=(()=>{
        actually reaches, and machines side by side on each shelf where the machine is narrow
        enough for the frame to take them. It is still a representation — nobody is drawing
        four thousand — but a full room now looks full. */
-    const RACK_SHELF=.66,RACK_BASE=.28,RACK_MAX_LEVELS=6;
-    const rackPlan=(qty,width)=>{
-      const across=Math.max(1,Math.min(3,Math.floor(1.54/Math.max(.2,width+.06))));
-      const levels=Math.max(1,Math.min(RACK_MAX_LEVELS,Math.ceil(qty/across)));
-      return{across,levels,slots:across*levels,height:RACK_BASE+levels*RACK_SHELF+.24};
-    };
-    const rail=(levels,height)=>{
+    const rail=(levels,height,railW=1.54)=>{
       const top=height??(RACK_BASE+levels*RACK_SHELF+.24);
-      for(const dx of [-.73,.73])for(const dz of [-.52,.52])M([.05,top,.05],[dx,top/2,dz],0x44585f);
-      for(let j=0;j<levels;j++){M([1.54,.04,1.15],[0,RACK_BASE+j*RACK_SHELF,0],0x5d737a);
-        for(const dz of [-.52,.52])M([1.54,.03,.03],[0,RACK_BASE+.22+j*RACK_SHELF,dz],0x44585f);}
-      M([1.48,.12,.09],[0,top+.05,.53],C.steel);led(0,top+.05,.59,1.3);
+      const post=railW/2-.04,spine=railW/2+.05;
+      for(const dx of [-post,post])for(const dz of [-.52,.52])M([.05,top,.05],[dx,top/2,dz],0x44585f);
+      for(let j=0;j<levels;j++){M([railW,.04,RACK_DEPTH],[0,RACK_BASE+j*RACK_SHELF,0],0x5d737a);
+        for(const dz of [-.52,.52])M([railW,.03,.03],[0,RACK_BASE+.22+j*RACK_SHELF,dz],0x44585f);}
+      M([railW-.06,.12,.09],[0,top+.05,.53],C.steel);led(0,top+.05,.59,1.3);
       // Busway down the back of the rack, which is what the machines actually plug into,
       // and a data spine beside it. Orange is power, blue is data, here as everywhere else.
-      M([.12,top*.92,.12],[.79,top*.48,-.5],0x30444c);
-      for(let j=0;j<levels;j++)B([.16,.09,.05],[.79,RACK_BASE+.14+j*RACK_SHELF,-.43],C.orange);
-      M([.07,top*.92,.07],[-.79,top*.48,-.5],0x2b4150);
-      for(let j=0;j<levels;j++)B([.11,.06,.04],[-.79,RACK_BASE+.18+j*RACK_SHELF,-.44],0x4a9fe0);
+      M([.12,top*.92,.12],[spine,top*.48,-.5],0x30444c);
+      for(let j=0;j<levels;j++)B([.16,.09,.05],[spine,RACK_BASE+.14+j*RACK_SHELF,-.43],C.orange);
+      M([.07,top*.92,.07],[-spine,top*.48,-.5],0x2b4150);
+      for(let j=0;j<levels;j++)B([.11,.06,.04],[-spine,RACK_BASE+.18+j*RACK_SHELF,-.44],0x4a9fe0);
     };
     if(p.type==='laptop'){
       desk();
@@ -203,7 +202,7 @@ const FloorMiners=(()=>{
     }
     if(p.type==='hydro'){
       const plan=rackPlan(b.qty,p.w),units=Math.min(b.qty,plan.slots);
-      laneX=0;rail(plan.levels,plan.height);
+      laneX=0;rail(plan.levels,plan.height,plan.railW);
       for(let j=0;j<units;j++){
         const level=Math.floor(j/plan.across);
         laneX=(j%plan.across-(plan.across-1)/2)*(p.w+.06);
@@ -229,7 +228,7 @@ const FloorMiners=(()=>{
        busway. What separates the generations is proportion, rib count and how the PSU is
        carried — bolted on top in the S9 era, integrated alongside from the S19 on. */
     const plan=rackPlan(b.qty,p.w),units=Math.min(b.qty,plan.slots);
-    laneX=0;rail(plan.levels,plan.height);
+    laneX=0;rail(plan.levels,plan.height,plan.railW);
     for(let j=0;j<units;j++){
       const level=Math.floor(j/plan.across);
       laneX=(j%plan.across-(plan.across-1)/2)*(p.w+.06);
@@ -241,30 +240,69 @@ const FloorMiners=(()=>{
       // A bigger machine carries a bigger fan, not a second one beside it.
       const fanR=p.dual?Math.min(p.fan*1.55,Math.min(p.w,p.h)*.46):p.fan;
       F(0,y,front+.04,fanR);F(0,y,back-.04,fanR,-1);
-      /* Ridges along the roof, the way the extrusion is actually pulled. Kept close to the
-         shell colour: a first pass drew them dark and added vertical ribs down both flanks
-         as well, and eight dark stripes over a light case turns a machine into a cage. */
-      for(let k=0;k<p.fins;k++){
-        const rx=-p.w/2+.07+k*(p.w-.14)/Math.max(1,p.fins-1);
-        M([.02,.018,p.d-.1],[rx,y+p.h/2+.006,0],0x9fb0b4);
+      if(detail){
+        /* Ridges along the roof, the way the extrusion is actually pulled. Kept close to the
+           shell colour: a first pass drew them dark and added vertical ribs down both flanks
+           as well, and eight dark stripes over a light case turns a machine into a cage. */
+        for(let k=0;k<p.fins;k++){
+          const rx=-p.w/2+.07+k*(p.w-.14)/Math.max(1,p.fins-1);
+          M([.02,.018,p.d-.1],[rx,y+p.h/2+.006,0],0x9fb0b4);
+        }
+        // A louvred band low on each flank, the only break in an otherwise flat side.
+        for(let k=0;k<3;k++)for(const sx of [-1,1])
+          M([.012,.022,p.d*.52],[sx*(p.w/2+.005),y-p.h*.22+k*.06,0],0x8b9ca2);
+        // Controller board on the roof: Ethernet socket, reset, two status LEDs.
+        M([p.w*.34,.05,.2],[-p.w*.2,y+p.h/2+.03,-p.d*.18],C.dark);
+        B([.075,.045,.06],[-p.w*.2+.06,y+p.h/2+.05,-p.d*.18+.09],0x4a9fe0);
+        led(-p.w*.2-.05,y+p.h/2+.06,-p.d*.18+.1,.03);
       }
-      // A louvred band low on each flank, which is the only break in an otherwise flat side.
-      for(let k=0;k<3;k++)for(const sx of [-1,1])
-        M([.012,.022,p.d*.52],[sx*(p.w/2+.005),y-p.h*.22+k*.06,0],0x8b9ca2);
-      // Controller board on the roof: Ethernet socket, reset, two status LEDs.
-      M([p.w*.34,.05,.2],[-p.w*.2,y+p.h/2+.03,-p.d*.18],C.dark);
-      B([.075,.045,.06],[-p.w*.2+.06,y+p.h/2+.05,-p.d*.18+.09],0x4a9fe0);
-      led(-p.w*.2-.05,y+p.h/2+.06,-p.d*.18+.1,.03);
       if(p.psu){
         M([.22,.13,p.d*.82],[p.w/2-.09,y+p.h/2+.085,0],C.steel);
-        for(let k=0;k<5;k++)M([.2,.016,.03],[p.w/2-.09,y+p.h/2+.085,-p.d*.3+k*p.d*.15],C.dark);
+        if(detail)for(let k=0;k<5;k++)M([.2,.016,.03],[p.w/2-.09,y+p.h/2+.085,-p.d*.3+k*p.d*.15],C.dark);
         drop(p.w/2-.09,y+p.h/2+.02,-p.d*.42,.22);
       }else drop(p.w/2-.05,y-p.h/2+.02,-p.d*.36,.2);
       if(p.trim)M([p.w,.022,.05],[0,y-p.h/2+.02,front+.035],p.trim);
       // Serial label plate, low on the front, where every one of these machines carries it.
-      B([p.w*.3,.05,.012],[0,y-p.h/2+.07,front+.03],0xcfd6d2);
+      if(detail)B([p.w*.3,.05,.012],[0,y-p.h/2+.07,front+.03],0xcfd6d2);
+      /* The status LED stays at every scale. It is the one part of a machine that carries
+         information rather than texture, and a floor of five thousand machines is exactly
+         where seeing which ones are lit matters most. */
       led(-p.w/2+.04,y+p.h/2-.04,front+.04);
     }
   }
-  return {profiles,render};
+  /* The grid that places these racks needs their real footprint, and the only place that knows
+     it is the code that draws them. Published rather than duplicated: a pitch guessed in the
+     assembler is a pitch that goes stale the first time a rack changes shape. */
+  function rackFootprint(hardware,qty=64){
+    const p=profiles[hardware&&hardware.id||hardware]||profiles.default;
+    if(!p||p.type==="laptop")return{w:1.9,d:1.6};
+    return{w:rackPlan(qty,p.w||.4).railW,d:RACK_DEPTH};
+  }
+/* RACK GEOMETRY, in one place.
+
+   How many machines stand side by side on one shelf. A spare room holds a two-wide shelf and a
+   light industrial unit a three; a warehouse and everything above it holds a row, because that
+   is what those buildings contain — long aisles of machines, not furniture. The floor scales
+   itself to whatever this produces, so a longer rack does not overflow the room; it makes the
+   room read as the industrial site it is.
+
+   This lives at module scope because two callers need it and they must agree: the code that
+   DRAWS a rack, and the grid that decides how far apart to place them. A pitch guessed
+   separately in the assembler is a pitch that goes stale the first time a rack changes shape,
+   and the symptom is rows quietly overlapping. */
+const RACK_SHELF=.66,RACK_BASE=.28,RACK_MAX_LEVELS=6,RACK_DEPTH=1.15,RACK_MARGIN=.22,RACK_MIN_W=1.54;
+const RACK_ACROSS_BY_TIER=[2,2,3,4,4,6,6,8];
+function rackAcrossCap(){
+  const tier=typeof facilityTier==="function"?facilityTier():1;
+  return RACK_ACROSS_BY_TIER[Math.max(0,Math.min(RACK_ACROSS_BY_TIER.length-1,tier-1))];
+}
+/* Squarish rather than as-wide-as-allowed: a batch of six wants two shelves of three, not one
+   row of six with five empty slots above it. */
+function rackPlan(qty,width){
+  const across=Math.max(1,Math.min(rackAcrossCap(),Math.ceil(Math.sqrt(Math.max(1,qty)))));
+  const levels=Math.max(1,Math.min(RACK_MAX_LEVELS,Math.ceil(qty/across)));
+  const railW=Math.max(RACK_MIN_W,across*(Math.max(.2,width)+.06)+RACK_MARGIN);
+  return{across,levels,slots:across*levels,railW,height:RACK_BASE+levels*RACK_SHELF+.24};
+}
+  return {profiles,render,rackFootprint};
 })();

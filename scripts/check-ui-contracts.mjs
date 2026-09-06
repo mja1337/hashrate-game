@@ -726,6 +726,43 @@ assert(inline.includes("function miningFloorCooling()") && inline.includes("${mi
    cooling tower looked identical and buying plant changed nothing on screen. Every rung of
    the ladder now needs its own silhouette, and adding an eighth kind of plant should fail
    here until it is drawn rather than silently rendering as nothing. */
+/* THE FLOOR HAS TO FIT IN THE ROOM.
+
+   At five thousand machines the grid was wrong in both directions at once: it took its column
+   count from a number fixed per site rather than from the rack's footprint, so a container
+   yard put 1.54-wide racks on a 3.0 pitch — half the room's width empty — while crushing the
+   nineteen rows that forced onto a 1.0 pitch against a rack 1.15 deep. It overlapped itself
+   front to back while wasting half of itself side to side. And the rack was one size whatever
+   building stood around it, so a thirty-megawatt yard read as a handful of enormous cabinets.
+
+   The pitch must therefore come from the code that draws the rack, and the floor must scale
+   to fit rather than overflow. */
+const sceneArt = await readFile(new URL("src/ui/floor3d/scene.js", root), "utf8");
+const minerArt = await readFile(new URL("src/ui/floor3d/silhouettes.js", root), "utf8");
+assert(minerArt.includes("function rackFootprint(") && /return\s*\{profiles,render,rackFootprint\}/.test(minerArt),
+  "The rack no longer publishes its footprint, so the grid that places racks has to guess it");
+assert(sceneArt.includes("FloorMiners.rackFootprint(h,typical)") && !/const RACK_W\s*=/.test(sceneArt),
+  "The floor grid has gone back to a rack size of its own, which goes stale the first time a rack changes shape");
+assert(/const pitchX=foot\.w\+AISLE_X,pitchZ=foot\.d\+AISLE_Z/.test(sceneArt),
+  "Row and column pitch must be the rack's own footprint plus an aisle, or rows overlap");
+assert(sceneArt.includes("Math.sqrt(usableW*usableD/(n*pitchX*pitchZ))") && /if\(rows\*pitchZ\*scale<=usableD\|\|scale<=FLOOR_MIN_SCALE\)break;/.test(sceneArt),
+  "The floor no longer shrinks to fit the room, so a large fleet marches its rows through the wall");
+/* Machines scale, the building does not: a shrinking floor inside a fixed room is the effect.
+   Batch parts carry a batch id and scenery carries -1, which is what tells the two apart. */
+assert(sceneArt.includes("const k=batch>=0?floorScale:1;") && sceneArt.includes("dummy.position.set(pos[0]*k,pos[1]*k,pos[2]*k);dummy.scale.set(size[0]*k,size[1]*k,size[2]*k)"),
+  "Machine content and the room it stands in are scaling together, or not scaling at all");
+assert(/items\.push\(\{matrix:dummy\.matrix\.clone\(\),color,batch,pos,size,rot,k\}\)/.test(sceneArt) && sceneArt.includes("const k=a.k||1;dummy.position.set(a.pos[0]*k"),
+  "The fan spin animation rebuilds matrices from unscaled values, so the first animated frame snaps every fan back to full size");
+/* Level of detail asks two questions, not one: can it be seen, and can it be afforded. A
+   hundred-and-twenty-machine workshop draws small because the room is wide, and there is no
+   reason to take its detail away for three thousand instances. */
+assert(sceneArt.includes("function floorDetail(s,scale)") && sceneArt.includes("if(scale>=FLOOR_DETAIL_SCALE)return true") && sceneArt.includes("fs.count<=FLOOR_DETAIL_UNITS"),
+  "Level of detail no longer considers whether the detail is affordable, only whether it is visible");
+assert(minerArt.includes("const detail=api.detail!==false;") && minerArt.includes("if(detail){") && /\/\* The status LED stays at every scale/.test(minerArt),
+  "The coarse silhouette has gone, or it has taken the status LED with it — the one part that carries information rather than texture");
+assert(/const RACK_ACROSS_BY_TIER=\[2,2,3,4,4,6,6,8\]/.test(minerArt) && minerArt.includes("function rackAcrossCap()"),
+  "Racks no longer widen with the site, so a warehouse holds the same furniture as a spare room");
+
 const coolingArt = await readFile(new URL("src/ui/floor3d/cooling.js", root), "utf8");
 const mountSource = await readFile(new URL("src/ui/floor3d/mount.js", root), "utf8");
 // Matched against the SHAPES dispatch table specifically, not against any mention of the id:
