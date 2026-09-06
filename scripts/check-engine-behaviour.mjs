@@ -47,7 +47,90 @@ const SITE = (overrides = "") => `
   state.maintenance={condition:{},faults:{},faultsByPart:{},selfRepairs:{},dryFit:{},parts:0,
     inventory:state.maintenance.inventory,orders:[],serviceJobs:[]};
   state.immersion={};
+  /* Site and region are part of the standard site, not inherited from whatever ran last:
+     facility tier feeds connectivity risk, power capacity and rent, so a rule that moved site
+     used to quietly change the baseline for every rule after it. */
+  state.facility="home";state.region="na";state.facilityUpgradeJob=null;state.relocationJob=null;
   ${overrides}`;
+
+/* ---- THE FACILITY LADDER GOES BOTH WAYS ---- */
+
+rule("a fleet that fits can move to a smaller site, and one that does not cannot", () => {
+  /* The gate is physical, so it is tested physically: the same site, the same cash, the same
+     date, varying only how many machines are installed. */
+  const fits = json(`(()=>{${SITE(`state.time=at("2016-06-01");state.facility="warehouse";
+    state.region="texas";state.hardware={};state.hardware.s9=4;state.procurementOrders=[];
+    state.inactiveHardware={};state.decommissionedHardware={};state.commissioningJobs=[];
+    state.facilityUpgradeJob=null;state.relocationJob=null;`)}
+    const target=FACILITIES.find(f=>f.id==="workshop");
+    const before={cash:state.cash,facility:state.facility,blocked:facilityDownsizeBlockReason("workshop")};
+    downsizeFacility("workshop");
+    return {blocked:before.blocked,job:state.facilityUpgradeJob&&state.facilityUpgradeJob.id,
+      down:!!(state.facilityUpgradeJob&&state.facilityUpgradeJob.down),paid:before.cash-state.cash,
+      cost:facilityDownsizeCost(target),power:state.power}})()`);
+  assert(fits.blocked === "", `a four-machine fleet should fit a workshop, but: ${fits.blocked}`);
+  assert(fits.job === "workshop", "downsizing did not dispatch a move to the smaller site");
+  assert(fits.down === true, "the move is not recorded as a downsize, so the UI will call it an upgrade");
+  assert(fits.power === false, "a physical move must power the fleet down");
+  assert(fits.paid === fits.cost && fits.paid > 0, `the lease break and re-rack were not charged (paid ${fits.paid}, cost ${fits.cost})`);
+
+  const tooMany = json(`(()=>{${SITE(`state.time=at("2016-06-01");state.facility="warehouse";
+    state.region="texas";state.hardware={};state.hardware.s9=400;state.procurementOrders=[];
+    state.inactiveHardware={};state.decommissionedHardware={};state.commissioningJobs=[];
+    state.facilityUpgradeJob=null;state.relocationJob=null;`)}
+    downsizeFacility("workshop");
+    return {blocked:facilityDownsizeBlockReason("workshop"),job:state.facilityUpgradeJob}})()`);
+  assert(tooMany.blocked !== "", "400 S9s should not fit a light industrial unit");
+  assert(tooMany.job === null, "a fleet that does not fit was still moved into the smaller site");
+});
+
+rule("downsizing costs a lease break rather than a fit-out, and is far cheaper than the way up", () => {
+  const money = json(`(()=>{${SITE(`state.time=at("2016-06-01");state.facility="warehouse";state.region="texas";`)}
+    const workshop=FACILITIES.find(f=>f.id==="workshop"),warehouse=FACILITIES.find(f=>f.id==="warehouse");
+    return {down:facilityDownsizeCost(workshop),fitOut:workshop.cost,leavingRent:warehouse.rent,
+      rentSaved:warehouse.rent-workshop.rent}})()`);
+  assert(money.rentSaved > 0, "moving down the ladder does not reduce rent, which is the only reason to do it");
+  assert(money.down >= money.leavingRent, "walking away from a lease costs less than a month of it, so there is no reason to think about it");
+  /* The number that decides whether this is a real option: an operator who has shrunk is short
+     of cash, so the move has to pay for itself in months rather than years — and it must not be
+     free, or staying in a site you have outgrown downward would never be a mistake. */
+  const payback = money.down / money.rentSaved;
+  assert(payback > 1 && payback < 6, `downsizing pays back in ${payback.toFixed(1)} months; it should be a few months, not free and not a year`);
+});
+
+rule("the cooling plant a smaller site cannot host is sold with the site", () => {
+  const moved = json(`(()=>{${SITE(`state.time=at("2019-06-01");state.facility="warehouse";
+    state.region="texas";state.cash=5e6;state.hardware={};state.hardware.s9=40;
+    state.thermal={temperature:22,orders:[],equipment:{drycooler:2,evap:3,axial:4}};`)}
+    const shed=facilityCoolingShed("workshop");
+    const blockedBefore=facilityDownsizeBlockReason("workshop");
+    const cashBefore=state.cash;
+    downsizeFacility("workshop");
+    return {shedIds:shed.items.map(i=>i.id),credit:shed.credit,blockedBefore,
+      job:state.facilityUpgradeJob&&state.facilityUpgradeJob.id,
+      equipmentAfter:state.thermal.equipment,netCash:cashBefore-state.cash,
+      cost:facilityDownsizeCost(FACILITIES.find(f=>f.id==="workshop"))}})()`);
+  assert(moved.blockedBefore === "", `a 40-machine fleet should reach a workshop once the plant is shed, but: ${moved.blockedBefore}`);
+  assert(moved.job === "workshop", "the move was not dispatched");
+  /* A light industrial unit is tier 3. Dry coolers (6-8) and evaporative banks (5-7) are plant
+     it cannot host; axial fans (3-5) are exactly what it can. The band is two-sided on purpose:
+     a box fan rated for a spare room is no more installable in an industrial unit than a dry
+     cooler is, so "what this site can host" is the only question asked. */
+  assert(moved.shedIds.includes("drycooler") && moved.shedIds.includes("evap"), `plant the workshop cannot host was kept: ${moved.shedIds}`);
+  assert(!moved.shedIds.includes("axial"), "plant the smaller site CAN host was sold anyway");
+  assert(!("drycooler" in moved.equipmentAfter) && !("evap" in moved.equipmentAfter), "the shed plant is still installed");
+  assert(moved.equipmentAfter.axial === 4, "the axial fans did not survive the move");
+  assert(moved.credit > 0 && moved.netCash === moved.cost - moved.credit,
+    `salvage was not credited (net ${moved.netCash}, expected ${moved.cost} - ${moved.credit})`);
+});
+
+rule("a move down the ladder still carries transit risk", () => {
+  const risk = json(`(()=>{${SITE(`state.time=at("2016-06-01");state.facility="warehouse";state.region="texas";`)}
+    return {down:facilityMoveRisk("workshop"),up:facilityMoveRisk("campus"),same:facilityMoveRisk("warehouse")}})()`);
+  assert(risk.same === 0, "staying put cannot be risky");
+  assert(risk.down > 0, "machines are unracked, driven and re-racked; that cannot be free of risk");
+  assert(risk.down < risk.up, "moving down should be less hazardous than an expansion, not more");
+});
 
 /* ---- PROTOCOL: rules Bitcoin itself enforces, which the game may never bend ---- */
 

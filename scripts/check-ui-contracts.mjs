@@ -326,7 +326,36 @@ assert(css.includes(".impact-flash{") && css.includes(".impact-shake{") && css.i
 assert((inline.match(/,"bad"[,)]/g) || []).length >= 12, "Not enough bad-event call sites trigger the impact effect");
 assert(inline.includes("state.facilityUpgradeJob={id,due:state.time+Math.ceil(days)*DAY,cost:f.cost,risk}") && inline.includes("function upgradingFacility()") && inline.includes("function fleetGrounded()"), "Facility upgrades no longer resolve as a timed, power-down job");
 assert(inline.includes("const upgradeJob=state.facilityUpgradeJob;if(upgradeJob&&upgradeJob.due<=state.time)"), "Facility-upgrade job is not resolved in the fleet lifecycle tick");
-assert(inline.includes("busy=move||upgradeJob") && inline.includes('upgradeJob?"Upgrade in progress"'), "Facilities tab does not block new moves while a facility upgrade is in flight");
+assert(inline.includes("busy=move||upgradeJob") && inline.includes('upgradeJob?"Site move in progress"'), "Facilities tab does not block new moves while a facility move is in flight");
+
+/* THE LADDER GOES BOTH WAYS.
+   An operator who has just sold half a fleet is the one who most needs to stop paying for the
+   site it used to fill. The only hard gate is physical — the fleet has to fit, on floor space
+   AND on peak electrical draw — and the card must read that answer from the same helper the
+   action does, or it will offer a move that is then refused. */
+assert(inline.includes("function facilityDownsizeBlockReason(") && inline.includes("function downsizeFacility(") && inline.includes("if(target<current)return downsizeFacility(id)"),
+  "Downsizing is gone, or the facility action has gone back to being one-way");
+assert(!inline.includes("Downsizing is not available in this build"), "The one-way refusal is back");
+assert(/fs\.space>target\.space/.test(inline) && /fs\.potentialKw>fs\.cap/.test(inline),
+  "Downsizing no longer checks that the installed fleet fits the smaller site on both floor space and peak power");
+assert(inline.includes("const down=!active&&facilityIsDownsize(f.id),downBlock=down?facilityDownsizeBlockReason(f.id):\"\"") && inline.includes("(down?!!downBlock:state.cash<(f.cost+reserve))"),
+  "The facility card no longer reads its disabled state from the same helper that refuses the move");
+assert(inline.includes("facilityDownsizeCost(") && inline.includes("FACILITY_BREAK_MONTHS"),
+  "Downsizing no longer charges a lease break rather than a fit-out");
+assert(/if\(target<current\)return Math\.min\(\.2,/.test(inline),
+  "A move down the ladder must still carry transit risk; it is a physical move");
+/* Cooling plant is tiered, so a warehouse-sized plant cannot legally exist at workshop tier and
+   nothing in the game could remove it — which made downsizing arithmetically impossible while
+   telling the player to sell miners they had already sold. The plant is sold with the site, and
+   the card says so before the move is dispatched. */
+assert(inline.includes("function facilityCoolingShed(") && inline.includes("function facilityArrivalProbe(") && inline.includes("COOLING_SALVAGE"),
+  "Downsizing no longer sheds the cooling plant the smaller site cannot host");
+assert(inline.includes("const fs=fleet(facilityArrivalProbe(id,s))"),
+  "The downsize fit check judges the fleet against plant the destination is not allowed to have");
+assert(inline.includes("shed.items.forEach(item=>{delete state.thermal.equipment[item.id]})") && inline.includes("state.cash-=cost-shed.credit"),
+  "The shed cooling plant is not actually removed, or its salvage is not credited");
+assert(inline.includes("cooling unit${shed.items.reduce((n,i)=>n+i.qty,0)===1?\"\":\"s\"} sold with the site for"),
+  "The facility card no longer discloses the cooling plant a downsize would sell");
 assert(inline.includes('<span>Internet</span><strong style="color:${netDown?"var(--red)":"var(--green)"}">') && inline.includes('<span>Grid power</span><strong style="color:${powerDown?"var(--red)":"var(--green)"}">'), "Mining floor is missing visual internet/power status tiles");
 assert(css.includes(".thermal-console{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))"), "Thermal console grid was not widened for the new status tiles");
 

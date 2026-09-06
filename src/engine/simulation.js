@@ -226,8 +226,7 @@ function connectivityOutage(){return state.time<(state.ops?.outageUntil||0)}
 function powerOutage(){return state.time<(state.ops?.powerOutageUntil||0)}
 function siteOutage(){return connectivityOutage()||powerOutage()}
 function activeSiteIncident(){if(powerOutage())return{kind:"Grid outage",until:state.ops.powerOutageUntil};if(connectivityOutage())return{kind:"Internet outage",until:state.ops.outageUntil};return null}
-function relocating(){return !!state.relocationJob&&state.time<state.relocationJob.due}
-function upgradingFacility(){return !!state.facilityUpgradeJob&&state.time<state.facilityUpgradeJob.due}
+
 function fleetGrounded(){return relocating()||upgradingFacility()}
 function claims(){return state.wallets.mtgox+state.wallets.bitfinex+state.wallets.quadriga+state.wallets.frontier+state.wallets.exchange+state.wallets.frozen}
 function totalBtc(){return controlled()+claims()}
@@ -324,11 +323,7 @@ function incomingConditionFor(h,t=state.time){
 function hardwareUnitCost(h){return h.cost*hardwareMarketFactor(h)*(hasSkill("procurement")?.94:1)*(hasStaff("procurementlead")?.95:1)}
 function staffMonthlyCost(){return state.staff.reduce((sum,id)=>sum+(STAFF.find(x=>x.id===id)?.salary||0),0)}
 function insuranceMonthlyCost(){return state.insured?fleet().value*.0015:0}
-function facilityMoveRisk(id){
-  const current=Math.max(0,FACILITIES.findIndex(x=>x.id===state.facility)),target=Math.max(0,FACILITIES.findIndex(x=>x.id===id));
-  return target<=current?0:Math.min(.48,.05+(target-current)*.075+target*.025);
-}
-function facilityRiskLabel(risk){return risk<.12?"Low move risk":risk<.25?"Moderate move risk":"High move risk"}
+
 function learningItem(){return state.learning?LEARNING.find(x=>x.id===state.learning.id):null}
 function awardLearning(item,multiplier=1){
   const gain=item.reward*multiplier;state.knowledge+=gain;state.completedLearning.push(item.id);state.learning=null;
@@ -417,16 +412,7 @@ function advanceFleetLifecycle(){
     return false});
   const job=state.relocationJob;if(job&&job.due<=state.time){const destination=REGIONS.find(r=>r.id===job.id);state.region=job.id;
     enforceConnectivityAvailability();state.relocationJob=null;state.policyLock=null;state.power=state.debt<=0;log(`Fleet arrived in ${destination?.name||job.id}`,"Site commissioning complete","operations");showToast("Relocation complete",`The fleet is live at ${destination?.name||job.id}.`);renderFullQueued=true}
-  const upgradeJob=state.facilityUpgradeJob;if(upgradeJob&&upgradeJob.due<=state.time){
-    const destination=FACILITIES.find(x=>x.id===upgradeJob.id);state.facility=upgradeJob.id;state.facilityUpgradeJob=null;state.power=state.debt<=0;
-    const incidentRoll=nextRand();if(incidentRoll<upgradeJob.risk&&!state.insured){
-      const incident=nextRand();
-      if(incident<.42){const until=state.time+DAY*90;state.powerRateShock={multiplier:1.22,until};log("Facility upgrade: power contract repriced","+22% power for 90 days");showToast("Upgrade issue","The new site's power contract is 22% higher for 90 days.","bad")}
-      else if(incident<.78){const candidates=HARDWARE.filter(h=>!h.permanent&&(state.hardware[h.id]||0)>0);const h=candidates[Math.floor(nextRand()*candidates.length)];if(h){const lost=Math.max(1,Math.ceil((state.hardware[h.id]||0)*(.05+nextRand()*.1)*(hasSkill("spares")?.5:1)));state.hardware[h.id]=Math.max(0,state.hardware[h.id]-lost);log("Facility upgrade: miners damaged",`-${lost} ${h.name}`);showToast("Upgrade issue",`${lost} ${h.name} damaged in transit.`,"bad")}else{const fee=Math.min(state.cash,fleet().value*.025);state.cash-=fee;log("Facility upgrade: customs inspection",`-${fmtUsd(fee)}`);showToast("Upgrade issue","A customs inspection added an unexpected handling cost.","bad")}}
-      else{const fee=Math.min(state.cash,fleet().value*(.03+nextRand()*.04));state.cash-=fee;log("Facility upgrade: equipment held",`-${fmtUsd(fee)}`);showToast("Upgrade issue","Equipment was held during the move; release fees were required.","bad")}
-    }else if(incidentRoll<upgradeJob.risk&&state.insured){log("Upgrade incident insured","claim paid");showToast("Insurance claim","The policy absorbed the facility-upgrade incident.")}
-    log(`Moved into ${destination?.name||upgradeJob.id}`,"Site commissioning complete","operations");showToast("Facility upgrade complete",`The fleet is live at ${destination?.name||upgradeJob.id}.`);renderFullQueued=true
-  }
+  advanceFacilityMove();
 }
 function recordOperatorMonth(snapshot,solvent){
   if(!snapshot)return;const stats=state.operator.eras[snapshot.era]||operatorEraStats();stats.months++;if(solvent)stats.solvent++;if(snapshot.profitable)stats.profitable++;if(snapshot.uptime>=.75)stats.uptime++;if(snapshot.competitive)stats.competitive++;

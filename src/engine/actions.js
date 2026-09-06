@@ -178,10 +178,112 @@ function facilityReserve(f){
   const targetTier=Math.max(1,FACILITIES.findIndex(x=>x.id===f.id)+1),scale=[1,1.5,4,15,55,150,300,600][targetTier-1]||1,internet=(r.internet||75)*connectivityPlan().mult*scale;
   return (energy+f.rent+internet+staffMonthlyCost()+insuranceMonthlyCost()+totalNodeMonthlyOverhead())*2;
 }
+/* MOVING DOWN THE LADDER.
+
+   The facility ladder used to be one-way: having taken a warehouse you kept it, whatever
+   happened next. That is not how mining works. Operators shrink — after a halving, after a
+   price collapse, after selling half a fleet to meet a bill — and a site sized for the fleet
+   you used to have is a rent bill that does not shrink with you. Being unable to leave it was
+   the single most expensive thing the game would not let a player do.
+
+   The condition is physical, not financial: the fleet has to fit. Both ways — floor space AND
+   electrical capacity at peak draw, because a machine that fits on the floor and trips the
+   panel is not installed, it is stored. Peak is the right measure rather than today's draw:
+   overdrive and a repaired fleet coming back online both push the number up, and discovering
+   the new site cannot hold your own machines at full tilt is not a lesson worth teaching by
+   surprise. Sell or decommission first, then move.
+
+   What it costs is the lease you are walking away from — two months' rent on the site you
+   leave, which is what a break clause is — plus re-racking the fleet somewhere smaller. It
+   does NOT cost the smaller site's fit-out capital: that site already exists, which is the
+   entire reason for moving into it. And none of the original fit-out comes back, because it
+   never does.
+
+   It is still a physical move, so it still carries risk and still stops mining while the fleet
+   is powered down and transported. Less risk than an expansion — fewer machines, a simpler
+   destination, no new contract to negotiate — but not none. */
+const FACILITY_BREAK_MONTHS=2;
+function facilityDownsizeCost(target,s=state){
+  const leaving=FACILITIES.find(x=>x.id===s.facility)||FACILITIES[0];
+  return Math.round(leaving.rent*FACILITY_BREAK_MONTHS+target.cost*.12);
+}
+/* One function behind both the disabled button and the refusal, so the card can never offer a
+   move the action then declines. */
+/* THE PLANT DOES NOT COME WITH YOU.
+
+   Cooling equipment is tiered: a dry cooler bank is not something a light industrial unit can
+   host, and the catalogue already refuses to sell one at that tier. So a warehouse-sized plant
+   made downsizing arithmetically impossible — its peak draw alone exceeded the smaller site's
+   whole supply, and nothing in the game could remove it. The player was told to sell miners
+   they had already sold.
+
+   What actually happens is that the plant is sold with the site. It is bolted to a building
+   the operator is leaving, it is worth something to whoever takes that building on, and it is
+   worth nothing in a unit that cannot host it. So the move sheds every unit the target tier
+   cannot hold and credits salvage for it — disclosed on the card before the move is dispatched,
+   because it is a large number and it is not reversible. */
+/* A distressed price, because that is the position. The plant is bolted into a building the
+   operator has already decided to leave, the buyer knows it, and moving it is not an option —
+   the destination is not rated to host it. A quarter of cost is what that fetches. It still
+   comes back as real money, which is the point: shrinking should be a relief, not a windfall. */
+const COOLING_SALVAGE=.25;
+function facilityCoolingShed(targetId,s=state){
+  const target=FACILITIES.find(x=>x.id===targetId);
+  const tier=target?FACILITIES.findIndex(x=>x.id===targetId)+1:0;
+  const items=[];let credit=0,watts=0;
+  for(const item of COOLING_EQUIPMENT){
+    const owned=Math.max(0,Math.floor(Number(s.thermal?.equipment?.[item.id])||0));
+    if(!owned||tier>=item.minTier&&tier<=item.maxTier)continue;
+    const value=Math.round(item.cost*COOLING_SALVAGE*owned);
+    items.push({id:item.id,name:item.name,qty:owned,credit:value});
+    credit+=value;watts+=item.watts*owned;
+  }
+  return{items,credit,watts};
+}
+/* The state the operator would actually arrive in: the smaller site, without the plant that
+   cannot go there. Fit is judged against that, not against a fleet carrying equipment the
+   destination is not allowed to have. */
+function facilityArrivalProbe(id,s=state){
+  const shed=facilityCoolingShed(id,s),equipment={...(s.thermal?.equipment||{})};
+  shed.items.forEach(item=>{delete equipment[item.id]});
+  return{...s,facility:id,thermal:{...(s.thermal||{}),equipment}};
+}
+function facilityDownsizeBlockReason(id,s=state){
+  const target=FACILITIES.find(x=>x.id===id);
+  if(!target)return "That site does not exist.";
+  if(target.id===s.facility)return "You are already operating here.";
+  if(s.time<at(target.date))return `${target.name} is not available until ${dateFmt(at(target.date),true)}.`;
+  if(s.facilityUpgradeJob)return "A facility move is already underway; it must finish first.";
+  if(s.relocationJob)return "The fleet is in transit between regions and cannot also change site.";
+  const fs=fleet(facilityArrivalProbe(id,s));
+  if(fs.space>target.space)return `The installed fleet needs ${fmtNum(fs.space)} floor units and ${target.name} has ${fmtNum(target.space)}. Sell or decommission machines until the fleet fits.`;
+  if(fs.potentialKw>fs.cap)return `At full draw the fleet would need ${fs.potentialKw.toFixed(1)} kW at ${target.name}, which supplies ${fs.cap.toFixed(1)} kW${fs.coolingW>0?` — ${(fs.coolingW/1000).toFixed(1)} kW of that is cooling plant the smaller site can still host`:""}. Sell, decommission or turn down overdrive until the fleet fits.`;
+  const cost=Math.max(0,facilityDownsizeCost(target,s)-facilityCoolingShed(id,s).credit);
+  if(s.cash<cost)return `Breaking the ${(FACILITIES.find(x=>x.id===s.facility)||FACILITIES[0]).name} lease and re-racking at ${target.name} costs ${fmtUsd(cost)}.`;
+  return "";
+}
+function downsizeFacility(id){
+  const f=FACILITIES.find(x=>x.id===id);if(!f)return;
+  const reason=facilityDownsizeBlockReason(id);
+  if(reason)return showToast("Cannot move to a smaller site",reason,"bad","facilities");
+  const leaving=facility(),cost=facilityDownsizeCost(f),saving=Math.max(0,leaving.rent-f.rent);
+  const shed=facilityCoolingShed(id);
+  const risk=facilityMoveRisk(id)*(hasStaff("logistics")?.8:1);
+  const days=Math.max(3,Math.ceil(3+fleet().count/90))*(hasStaff("logistics")?.8:1);
+  state.cash-=cost-shed.credit;
+  shed.items.forEach(item=>{delete state.thermal.equipment[item.id]});
+  if(shed.items.length)log("Cooling plant sold with the site",`${shed.items.map(i=>`${i.qty} × ${i.name}`).join(" · ")} · +${fmtUsd(shed.credit)} salvage`,"operations");
+  state.facilityUpgradeJob={id,due:state.time+Math.ceil(days)*DAY,cost,risk,down:true};
+  state.power=false;
+  log(`Downsizing to ${f.name}`,`${Math.ceil(days)} days · -${fmtUsd(cost)} · rent falls ${fmtUsd(saving)}/month`,"operations");
+  showToast("Downsizing underway",`Mining is paused while the fleet is powered down, moved and re-racked at ${f.name}. Rent falls from ${fmtUsd(leaving.rent)} to ${fmtUsd(f.rent)} a month once commissioning finishes.${shed.items.length?` ${shed.items.reduce((n,i)=>n+i.qty,0)} unit${shed.items.reduce((n,i)=>n+i.qty,0)===1?"":"s"} of cooling plant were sold with the old site for ${fmtUsd(shed.credit)} — ${f.name} cannot host them.`:""} ETA ${dateFmt(state.facilityUpgradeJob.due)}.`,"info","facilities");
+  save();render();
+}
 function upgradeFacility(id){
-  const f=FACILITIES.find(x=>x.id===id);if(!f||state.time<at(f.date)||f.id===state.facility)return;
+  const f=FACILITIES.find(x=>x.id===id);if(!f||f.id===state.facility)return;
   const current=FACILITIES.findIndex(x=>x.id===state.facility),target=FACILITIES.findIndex(x=>x.id===id);
-  if(target<current)return showToast("One-way expansion","Downsizing is not available in this build.");
+  if(target<current)return downsizeFacility(id);
+  if(state.time<at(f.date))return;
   if(state.facilityUpgradeJob)return showToast("Upgrade underway","The current facility upgrade must finish before another can begin.");
   if(state.relocationJob)return showToast("Relocation underway","The fleet must arrive before a facility upgrade can begin.");
   const reserve=facilityReserve(f),required=f.cost+reserve;
