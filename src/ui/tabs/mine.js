@@ -10,15 +10,58 @@ function hardwareReleaseModal(){
   const alerts=state.hardwareAlerts,h=asicHardware().find(item=>item.id===alerts.active);if(!h)return"";const m=hardwareReleaseMetrics(h),p=m.previous,monthlyDelta=m.monthlyKwh-(m.oldMonthlyKwh||0),costDelta=monthlyDelta*m.rate,oldMw=m.oldEquivalentWatts===null?null:m.oldEquivalentWatts/1000,fs=m.fleet;
   return `<div class="modal-backdrop"><section class="modal hardware-alert-modal" role="alertdialog" aria-modal="true" aria-labelledby="hardware-release-title"><div class="modal-top"></div><div class="modal-body"><div class="modal-kicker">New ASIC generation · ${dateFmt(at(h.date))} · timeline paused</div><h2 id="hardware-release-title">${h.name} is now shipping.</h2><p class="lead">${h.desc} ${h.maker}’s nameplate specification changes the amount of SHA-256 work an operator can buy per watt.</p><div class="release-impact"><div><span>Physical hash rate</span><b>${fmtHash(h.hash)}</b><small>per machine · no gameplay multiplier</small></div><div><span>Nameplate input</span><b>${(h.w/1000).toFixed(h.w<1000?3:2)} kW</b><small>${fmtNum(m.monthlyKwh)} kWh in a 30.4-day month</small></div><div><span>Hardware efficiency</span><b>${fmtJth(m.efficiency)} J/TH</b><small>lower means less energy for the same work</small></div><div><span>Launch acquisition</span><b>${fmtUsd(hardwareUnitCost(h))}</b><small>${h.edge?`${h.edge.toFixed(1)}× modelled launch edge; not physical hash`:"No temporary launch-edge modifier"}</small></div></div>${p?`<div class="card-head"><h3>Step change from ${p.name}</h3><div class="meta">EQUAL-HASH COMPARISON</div></div><div class="release-impact"><div><span>Hash / machine</span><b>${m.hashMultiple.toFixed(m.hashMultiple>=10?1:2)}×</b><small>${fmtHash(p.hash)} → ${fmtHash(h.hash)}</small></div><div><span>J/TH improvement</span><b class="${m.efficiencyGain>=0?"profit-positive":"profit-negative"}">${signedPercent(m.efficiencyGain)}</b><small>${fmtJth(m.oldEfficiency)} → ${fmtJth(m.efficiency)} J/TH</small></div><div><span>Equal-hash demand</span><b>${(m.oldEquivalentWatts/1000).toFixed(2)} → ${(h.w/1000).toFixed(2)} kW</b><small>${signedPercent(-m.equalHashPowerGain)} load change</small></div><div><span>Energy impact / month</span><b class="${monthlyDelta<=0?"profit-positive":"profit-negative"}">${signedEnergy(monthlyDelta)}</b><small>${costDelta<=0?"Saves ":"Adds "}${fmtUsd(Math.abs(costDelta))} at ${fmtUsd(m.rate)}/kWh</small></div></div>`:""}<div class="demand-callout"><b>Demand-response lens · 1,000 machines</b><p>This generation represents <strong>${m.thousandMw.toFixed(2)} MW</strong> of controllable nameplate demand and can avoid <strong>${m.thousandMw.toFixed(2)} MWh</strong> by curtailing for one hour. At full load it consumes ${m.thousandMonthlyGwh.toFixed(2)} GWh per month, costing ${fmtUsd(m.thousandMonthlyCost)} at the current ${region().name} tariff.${oldMw!==null?` For the same hash rate, the prior generation would need ${oldMw.toFixed(2)} MW — a ${Math.abs(oldMw-m.thousandMw).toFixed(2)} MW ${oldMw>=m.thousandMw?"reduction":"increase"}.`:""}</p></div><p style="margin-top:14px"><strong>Your fleet benchmark:</strong> one ${h.name} delivers ${m.fleetHashMultiple>=1?`${fmtCompactNumber(m.fleetHashMultiple)}× your current ${fmtHash(fs.hash)} physical hash rate`:`${(m.fleetHashMultiple*100).toFixed(1)}% of your current physical hash rate`}, while drawing ${(h.w/1000).toFixed(2)} kW versus the fleet’s ${fs.kw.toFixed(2)} kW. Better J/TH lowers energy for a fixed amount of work; it does not guarantee lower total network demand when operators reinvest the savings into more machines.</p><div class="modal-actions"><button class="action primary" data-action="close-hardware-alert">Continue the timeline</button><button class="action" data-action="inspect-hardware-release">Review ${h.name} in Mine</button><span class="modal-note">${alerts.queue.length?`${alerts.queue.length} more release briefing queued`:"Release briefing saved in the Mine timeline"}</span></div></div></section></div>`;
 }
-function hardwareQuantityOptions(maxQty){
+/* HOW MANY WILL ACTUALLY RUN.
+
+   Capacity stopped gating the purchase, which is right — you can buy ahead of a substation
+   upgrade and take delivery into storage. What that left behind is a till that will happily
+   sell forty thousand machines to a site able to power nine hundred, and the only way to find
+   out was to read a kilowatt figure off one card and divide it by a wattage off another.
+
+   "Fits now" is that division, done for you and offered as a rung on the quantity list, so the
+   useful number is one click rather than arithmetic. It sits alongside Max rather than
+   replacing it: buying past what fits is a legitimate move, and the game should not pretend
+   otherwise — it should only make it a decision taken on purpose. */
+function hardwareQuantityOptions(maxQty,fitQty=null){
   const max=Math.max(0,Math.floor(Number(maxQty)||0));if(max<1)return[{qty:1,label:"1 miner",disabled:true}];
-  const presets=[1,2,5,10,100].filter(n=>n<max);
-  return [...presets,max].map(qty=>({qty,label:qty===max?`Max · ${fmtCompactNumber(qty)}`:`${fmtCompactNumber(qty)} miner${qty===1?"":"s"}`,disabled:false}));
+  /* Only a rung when it is genuinely the binding constraint. Clamping it to the cash maximum
+     made the two collide, and the top rung then read "Fits now" when what it actually meant was
+     "all you can afford" — which is the opposite of the thing this is here to tell you. */
+  const raw=fitQty===null?null:Math.max(0,Math.floor(fitQty));
+  const fits=raw!==null&&raw>0&&raw<max?raw:null;
+  const rungs=[1,2,5,10,100].filter(n=>n<max&&n!==fits);
+  if(fits!==null)rungs.push(fits);
+  rungs.push(max);
+  return [...new Set(rungs)].sort((a,b)=>a-b).map(qty=>({qty,
+    label:qty===fits?`Fits now · ${fmtCompactNumber(qty)}`:qty===max?`Max · ${fmtCompactNumber(qty)}`:`${fmtCompactNumber(qty)} miner${qty===1?"":"s"}`,
+    disabled:false}));
+}
+/* WHAT THIS PURCHASE DOES TO THE POWER BUDGET, under the button that makes it.
+
+   The Mine tab already draws the site's load as a bar. This is the same picture scoped to one
+   decision — what is drawn now, what the selected quantity adds, and where that lands against
+   supply — so choosing a quantity is something you can see rather than a sum done between two
+   cards. */
+function purchaseLoadBar(h,qty,fits){
+  if(h.permanent||!qty)return"";
+  const fs=fleet(),cap=Math.max(.001,fs.cap);
+  const addKw=qty*hardwarePeakWatts(h)/1000;
+  const nowPct=Math.max(0,Math.min(100,fs.potentialKw/cap*100));
+  const addPct=Math.max(0,Math.min(100-nowPct,addKw/cap*100));
+  const overKw=Math.max(0,fs.potentialKw+addKw-cap);
+  const over=overKw>0,waiting=fits!==null&&qty>fits?qty-fits:0;
+  const kw=v=>v<10?v.toFixed(2):fmtNum(Math.round(v));
+  return `<div class="buy-load ${over?"over":""}" title="${escapeHtml(`Peak now ${kw(fs.potentialKw)} kW · this order adds ${kw(addKw)} kW · site supplies ${kw(cap)} kW`)}">
+    <div class="buy-load-bar"><i class="now" style="width:${nowPct.toFixed(2)}%"></i><i class="add" style="width:${addPct.toFixed(2)}%"></i></div>
+    <small>${over
+      ? `<b>${kw(overKw)} kW over supply</b> · ${fmtNum(waiting)} would wait in storage`
+      : `Adds ${kw(addKw)} kW · ${kw(Math.max(0,cap-fs.potentialKw-addKw))} kW still free`}</small>
+  </div>`;
 }
 function hardwareBuyControls(h,cost,maxBuy,maxBtcQty,available,marketOpen,selectedQty=1,selectedCurrency="usd"){
-  const options=hardwareQuantityOptions(selectedCurrency==="btc"?maxBtcQty:maxBuy),selected=options.find(option=>option.qty===Number(selectedQty))||options[0],disabled=!available||selected.disabled;
+  const fits=typeof siteRackHeadroom==="function"?siteRackHeadroom(h):null;
+  const options=hardwareQuantityOptions(selectedCurrency==="btc"?maxBtcQty:maxBuy,fits),selected=options.find(option=>option.qty===Number(selectedQty))||options[0],disabled=!available||selected.disabled;
   const unitBtc=marketOpen?cost/Math.max(1e-9,priceAt(state.time)):0,costLabel=selectedCurrency==="btc"?fmtCompactBtc(unitBtc*selected.qty):fmtCompactUsd(cost*selected.qty),buyAction=selectedCurrency==="btc"?"buy-hw-btc":"buy-hw";
-  return `<div class="actions hardware-buy-controls" data-id="${h.id}" data-max-fiat="${maxBuy}" data-max-btc="${maxBtcQty}"><select data-hardware-qty aria-label="Purchase quantity for ${h.name}" ${disabled?"disabled":""}>${options.map(option=>`<option value="${option.qty}" ${option.qty===selected.qty?"selected":""}>${option.label}</option>`).join("")}</select><select data-hardware-currency aria-label="Purchase currency for ${h.name}" ${disabled?"disabled":""}><option value="usd" ${selectedCurrency==="usd"?"selected":""}>USD</option><option value="btc" ${selectedCurrency==="btc"?"selected":""} ${marketOpen?"":"disabled"}>BTC</option></select><button class="action small primary" data-action="${buyAction}" data-id="${h.id}" data-value="${selected.qty}" ${disabled?"disabled":""} title="${!available?`Not purchasable until ${dateFmt(at(h.date))}`:selected.disabled?"Cash, power or floor space currently blocks any purchase — see the capacity panel above":""}">Buy ${fmtCompactNumber(selected.qty)} · ${costLabel}</button></div>`;
+  return `<div class="actions hardware-buy-controls" data-id="${h.id}" data-max-fiat="${maxBuy}" data-max-btc="${maxBtcQty}"><select data-hardware-qty aria-label="Purchase quantity for ${h.name}" ${disabled?"disabled":""}>${options.map(option=>`<option value="${option.qty}" ${option.qty===selected.qty?"selected":""}>${option.label}</option>`).join("")}</select><select data-hardware-currency aria-label="Purchase currency for ${h.name}" ${disabled?"disabled":""}><option value="usd" ${selectedCurrency==="usd"?"selected":""}>USD</option><option value="btc" ${selectedCurrency==="btc"?"selected":""} ${marketOpen?"":"disabled"}>BTC</option></select><button class="action small primary" data-action="${buyAction}" data-id="${h.id}" data-value="${selected.qty}" ${disabled?"disabled":""} title="${!available?`Not purchasable until ${dateFmt(at(h.date))}`:selected.disabled?"Cash, power or floor space currently blocks any purchase — see the capacity panel above":""}">Buy ${fmtCompactNumber(selected.qty)} · ${costLabel}</button>${purchaseLoadBar(h,selected.qty,fits)}</div>`;
 }
 /* THE MINE TAB, IN THREE PARTS.
 

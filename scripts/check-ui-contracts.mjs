@@ -236,6 +236,24 @@ assert(!inline.includes("function techV2(){") || techArt.includes("function tech
 assert(inline.includes("let techScrollLeft=0") && inline.includes("if(techScrollLeft)lattice.scrollLeft=techScrollLeft"),
   "The skill tree's horizontal scroll resets on every repaint again");
 
+/* HOW MANY WILL ACTUALLY RUN, at the point of buying them.
+   Capacity stopped gating the purchase — correctly, since you can buy ahead of a substation
+   upgrade — which left a till that will sell forty thousand machines to a site able to power
+   nine hundred. The only way to find that out was to read a kilowatt figure off one card and
+   divide it by a wattage off another. */
+assert(inline.includes("function purchaseLoadBar(") && inline.includes("${purchaseLoadBar(h,selected.qty,fits)}"),
+  "The buy control no longer shows what the selected quantity does to the power budget");
+assert(inline.includes("Fits now · ${fmtCompactNumber(qty)}") && inline.includes("siteRackHeadroom(h):null"),
+  "The quantity list no longer offers the number that fits the site");
+/* But only when capacity is the binding constraint. Clamping it to the cash maximum made the
+   two collide, and the top rung then read "Fits now" when it meant "all you can afford". */
+assert(inline.includes("const fits=raw!==null&&raw>0&&raw<max?raw:null;"),
+  "A Fits rung is shown when something other than capacity is the limit, which is the opposite of what it means");
+assert(inline.includes("kW over supply") && inline.includes("would wait in storage"),
+  "Buying past capacity no longer says how far past, or what happens to the remainder");
+assert(css.includes(".buy-load-bar{") && css.includes(".buy-load.over .add{"),
+  "The purchase load bar has no styling, or no over-capacity state");
+
 /* A BULK PARTS ORDER IS CONFIRMED; A SINGLE FAN IS NOT.
    Five hundred hashboards is a five-figure commitment against a lead time, which is the kind of
    spend the rest of the game already stops to confirm. It is its own action rather than a

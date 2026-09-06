@@ -65,6 +65,53 @@ const SITE = (overrides = "") => `
   state.poolAccount={balance:0,frozen:0,threshold:.01,destination:"hot",paidTotal:0,feesPaid:0,payouts:0,lastPayout:0};
   ${overrides}`;
 
+/* ---- HIRING A CREW HAS TO BUY A CREW ---- */
+
+rule("technicians stack on a big repair and change nothing on a small one", () => {
+  const r = json(`(()=>{${SITE(`state.time=at("2025-06-01");state.facility="megacampus";state.region="iceland";
+    state.hardware={};state.hardware.s21xp=47000;state.maintenance.serviceJobs=[];`)}
+    const h=HARDWARE.find(x=>x.id==="s21xp");
+    const at_=(faults,techs)=>{state.staff=Array.from({length:techs},()=>"fieldtech");
+      const p=servicePlan(h,faults);return{crew:p.crew,days:p.days}};
+    return{small:{t3:at_(10,3),t25:at_(10,25)},
+      big:{t1:at_(300,1),t3:at_(300,3),t10:at_(300,10),t25:at_(300,25)},
+      huge:at_(1000,25)}})()`);
+  /* The bug: crew was min(3, available), so the fourth technician onward did nothing. A player
+     hired twenty-five, watched three of them work, and carried a permanent backlog while paying
+     the other twenty-two to stand still. */
+  assert(r.big.t25.crew > r.big.t3.crew, `twenty-five technicians put ${r.big.t25.crew} on a 300-unit job, the same as three`);
+  assert(r.big.t25.days < r.big.t3.days, "hiring more technicians did not make a large repair any faster");
+  assert(r.big.t10.crew > r.big.t3.crew && r.big.t10.days < r.big.t3.days, "ten technicians are worth no more than three");
+  assert(r.huge.crew >= 25, `a thousand faulted units absorbed only ${r.huge.crew} of twenty-five technicians`);
+  /* And a small job is unchanged: you cannot usefully put twenty-five people on ten machines. */
+  assert(r.small.t25.crew === r.small.t3.crew && r.small.t25.days === r.small.t3.days,
+    "a ten-unit job now scales with the payroll, which is not how a ten-unit job works");
+  /* And it is three, not one: a small job still takes a normal crew. Asserting only that the
+     two agree passes just as happily when both collapse to a single technician. */
+  assert(r.small.t3.crew === 3, `a ten-unit job with three technicians used ${r.small.t3.crew} of them`);
+  /* One technician must still beat none of them, and beat three by less. */
+  assert(r.big.t1.days > r.big.t3.days, "one technician is as good as three on a large job");
+});
+
+rule("racking and unracking scale with the crew, not with whether one exists", () => {
+  const r = json(`(()=>{${SITE(`state.time=at("2025-06-01");state.facility="megacampus";state.region="iceland";`)}
+    const rate=t=>{state.staff=Array.from({length:t},()=>"fieldtech");
+      return{commission:Math.max(1,Math.ceil(5000/crewRatePerDay(20))),retire:retirementDays(5000)}};
+    return{none:rate(0),one:rate(1),three:rate(3),twelve:rate(12),twentyfive:rate(25)}})()`);
+  /* hasStaff() is a boolean. Reading it here meant one technician doubled the rate and the
+     twenty-fourth did nothing — the same mistake as the repair planner, in the place it costs
+     most, on the sites large enough to employ a real crew. */
+  assert(r.one.commission < r.none.commission, "a technician does not speed up commissioning at all");
+  assert(r.three.commission < r.one.commission, "a third technician racks nothing faster than one");
+  assert(r.twelve.commission < r.three.commission, "twelve technicians rack no faster than three");
+  assert(r.three.retire < r.one.retire && r.twelve.retire < r.three.retire,
+    "unracking does not scale with the crew doing it");
+  /* Returns diminish rather than running away: there is a limit to how many people can usefully
+     move around the same aisle. */
+  assert(r.twentyfive.commission === r.twelve.commission,
+    "the crew speed-up has no ceiling, so a large payroll racks a fleet instantly");
+});
+
 /* ---- THE SKILL TREE IS A GRAPH, AND HAS TO BE A VALID ONE ---- */
 
 rule("every skill descends from a foundation, and the graph has no cycles", () => {

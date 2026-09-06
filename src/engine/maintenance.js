@@ -75,13 +75,29 @@ function serviceRequirements(h,count){
 }
 function serviceRequirementText(requirements){return Object.entries(requirements).map(([id,qty])=>`${qty} ${sparePart(id)?.name||id}${qty===1?"":"s"}`).join(" · ")}
 function hasServiceParts(requirements){return Object.entries(requirements).every(([id,qty])=>(state.maintenance.inventory[id]||0)>=qty)}
+/* One more technician earns their place on a job for every this-many faulted units. */
+const CREW_PER_FAULTS=25;
 function servicePlan(h,count){
   const jobs=state.maintenance.serviceJobs||[],technicians=fieldTechnicianCount(),
     committed=jobs.reduce((sum,job)=>sum+(job.contracted?0:Number(job.crew||0)),0),
     available=Math.max(0,technicians-committed),
     selfBusy=jobs.some(job=>job.contracted),
     selfServiced=available<1,
-    crew=selfServiced?(selfBusy?0:1):Math.min(3,available),
+    /* HOW MANY OF THEM CAN ACTUALLY WORK ON THIS.
+
+       This was min(3, available), on the reasoning that you cannot usefully put more than three
+       people on one hardware type. That reasoning holds for a rack of ten and collapses for a
+       farm of forty-seven thousand: the extra technicians were meant to run CONCURRENT jobs on
+       different hardware types, and an operation running one machine type at scale has no other
+       type to send them to. A player hired twenty-five, watched three of them work, and carried
+       a permanent backlog of three hundred while paying the other twenty-two $1,200 a month to
+       stand still.
+
+       The crew a job can absorb now scales with the size of the job — a bigger fault population
+       is more rows to work in parallel, which is exactly what a real site does — bounded by how
+       many technicians you actually employ. Small jobs are unchanged: below seventy-five faults
+       this still comes out at three. */
+    crew=selfServiced?(selfBusy?0:1):Math.max(1,Math.min(available,Math.max(3,Math.ceil(count/CREW_PER_FAULTS)))),
     complexity=h.era==="HYDRO ASIC"?2.2:h.era==="ASIC"?1.5:h.era==="GPU"?1.2:1,
     workDays=Math.max(1,Math.ceil(count*complexity/20)),
     days=crew?Math.max(1,Math.ceil(workDays/crew)):Infinity;

@@ -185,6 +185,13 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--orange);outline-off
 .power-split strong{grid-area:val;font:600 17px var(--mono);color:var(--text)}
 .power-split strong.down{color:var(--red)}
 .power-split small{grid-area:sub;color:var(--muted);font:9px var(--mono)}
+.buy-load{flex:1 1 100%;margin-top:6px}
+.buy-load-bar{display:flex;height:6px;border:1px solid var(--line);background:#0a0f10;overflow:hidden}
+.buy-load-bar .now{background:#4a5a62}
+.buy-load-bar .add{background:var(--green)}
+.buy-load.over .add{background:var(--red)}
+.buy-load small{display:block;margin-top:4px;color:var(--muted);font:9px var(--mono)}
+.buy-load.over small b{color:var(--red)}
 
 /* ---- SKILL TREE LATTICE ---- */
 .tech-tree-card{overflow:hidden}

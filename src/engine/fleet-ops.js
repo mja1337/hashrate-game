@@ -21,6 +21,21 @@ function stageDelivery(id,qty,condition){
   store[id]=total>0?(staged*prior+qty*condition)/total:condition;
   state.inactiveHardware[id]=total;
 }
+/* RACKING AND UNRACKING ARE CREW WORK, so the crew size is what sets the pace.
+
+   These asked hasStaff("fieldtech"), which is a boolean: one technician doubled the rate and
+   the twenty-fourth did nothing. That is the same mistake the repair planner made — the count
+   is right there in fieldTechnicianCount() — and it is most wrong exactly where it matters
+   most, on the sites large enough to employ a real crew.
+
+   Returns diminish rather than stopping dead: a second pair of hands nearly doubles the rate,
+   the tenth adds a tenth. There is a limit to how many people can usefully move around the
+   same aisle, and CREW_SOFT_CAP is where this stops pretending otherwise. */
+const CREW_SOFT_CAP=12,COMMISSION_PER_DAY=20;
+function crewRatePerDay(base){
+  const techs=Math.min(CREW_SOFT_CAP,typeof fieldTechnicianCount==="function"?fieldTechnicianCount():0);
+  return base*(1+techs);
+}
 /* WHAT THE SITE CAN TAKE TODAY.
 
    Capacity used to be enforced at the till: you could not buy a machine the room had no space
@@ -97,7 +112,7 @@ function startCommissioning(id,qty,auto=false){
   const h=HARDWARE.find(x=>x.id===id);if(!h||qty<1)return false;
   const staged=Math.max(0,Math.floor(Number(state.inactiveHardware?.[id])||0));
   qty=Math.min(qty,staged);if(qty<1)return false;
-  const days=Math.max(1,Math.ceil(qty/(hasStaff("fieldtech")?40:20)));
+  const days=Math.max(1,Math.ceil(qty/crewRatePerDay(COMMISSION_PER_DAY)));
   state.inactiveHardware[id]=staged-qty;
   const condition=state.stagedCondition?.[id];
   // A part-commissioned batch leaves the rest in the crate, and its history with it.
@@ -147,9 +162,9 @@ function advanceStagedIntake(){
    testing one. Units leave the active fleet as the crew works through them, so hash rate,
    heat and floor space all come down over the same days rather than in one step, and a field
    technician crew makes it quicker exactly as it does on the way in. */
-const RETIRE_PER_DAY=34,RETIRE_PER_DAY_TECH=68;
+const RETIRE_PER_DAY=34;
 function retirementDays(qty){
-  return Math.max(1,Math.ceil(qty/(hasStaff("fieldtech")?RETIRE_PER_DAY_TECH:RETIRE_PER_DAY)));
+  return Math.max(1,Math.ceil(qty/crewRatePerDay(RETIRE_PER_DAY)));
 }
 function retiringCount(id,s=state){
   return (s.retirementJobs||[]).filter(job=>job.id===id).reduce((sum,job)=>sum+Math.max(0,Number(job.qty)-Number(job.done||0)),0);
