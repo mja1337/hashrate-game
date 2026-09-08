@@ -133,6 +133,42 @@ rule("a service the button offers is a service that actually starts", () => {
   assert(r.cases.some(c => !c.started), "no case was ever refused, so the rule proves nothing");
 });
 
+rule("a drain the button offers is a drain that actually happens", () => {
+  /* Coming out of the fluid is not free — the fans go back on and somebody does the work — so
+     it can be refused for want of cash, and the button offering it did not know that. An
+     operator with no money saw an enabled "Drain 10" that did nothing when pressed. Parity,
+     not a list of conditions. */
+  const r = json(`(()=>{${SITE(`state.time=at("2022-06-01");state.facility="warehouse";state.region="texas";
+    state.hardware={};state.hardware.s19=40;state.immersion={};
+    state.thermal={temperature:22,orders:[],equipment:{axial:2,immersion:1}};`)}
+    state.maintenance.inventory.immersionKit=50;state.cash=1e6;
+    convertToImmersion("s19",10);
+    const h=HARDWARE.find(x=>x.id==="s19");
+    const cases=[];
+    const probe=(label,cash,qty)=>{
+      state.cash=cash;
+      const reason=immersionDrainBlockReason(h,qty);
+      const before=immersionCount("s19");
+      revertFromImmersion("s19",qty);
+      cases.push({label,reason,drained:immersionCount("s19")<before});
+    };
+    probe("plenty of cash",1e6,10);
+    // Put them back so the next probes have something to drain.
+    state.cash=1e6;convertToImmersion("s19",10);
+    probe("no cash at all",0,10);
+    probe("just short",immersionConversionLabour(h,10)-1,10);
+    probe("enough for one",immersionConversionLabour(h,1),1);
+    state.cash=1e6;
+    const drainedAll=(()=>{revertFromImmersion("s19",99);return immersionCount("s19")})();
+    probe("nothing submerged",1e6,1);
+    return{cases,drainedAll}})()`);
+  for (const c of r.cases)
+    assert((c.reason === "") === c.drained,
+      `${c.label}: the button ${c.reason ? `says "${c.reason}"` : "offers it"} but the action ${c.drained ? "drained" : "refused"}`);
+  assert(r.cases.some(c => c.drained), "nothing ever drained, so the rule proves nothing");
+  assert(r.cases.some(c => !c.drained), "nothing was ever refused, so the rule proves nothing");
+});
+
 /* ---- A JOB THAT MOVES HAS TO SAY SO ---- */
 
 rule("a repair changing stage asks the Mine tab to redraw", () => {

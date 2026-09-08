@@ -47,7 +47,7 @@ sets `renderFullQueued`, or it is in `bannerSignature()` / `modalSignature()`.
 "a full render", something has to ask for one. Candidates not yet audited: procurement rows,
 cooling install progress, pool payout accrual, staged-intake changes, career/XP surfaces.
 
-## 3. A control offering what the action refuses · **hunting**
+## 3. A control offering what the action refuses · **swept** (keep it swept)
 
 The card computes eligibility one way and the action another, and they drift.
 
@@ -66,11 +66,18 @@ cold-storage signing gate created exactly that gap, and there were TWO controls 
 Custody tab's transfer and the threat lab's shortcut — so fixing the one the first grep turned
 up left the other one broken. **When a control is duplicated, grep for the duplicate.**
 
-Audited and matching: service (`serviceBlockReason`), immersion, downsize, cooling sale, payout
-destination, cold spend (both controls), staged intake, skills (`skillGateReason`), region
-relocation (`available` covers the Sichuan closure).
-Not yet audited: energy contracts, node storage and mode, venue deposits and withdrawals,
-strategy securities, learning items, pool selection.
+**A button with no `disabled` at all is the fastest thing to grep for**, and three of the four
+found that way were fine because the control is simply not *rendered* in the invalid state —
+which is a legitimate answer. Only the fourth, immersion draining, was a real hit.
+
+Audited and matching: service (`serviceBlockReason`), immersion convert and drain, downsize,
+cooling sale and cancel, payout destination, cold spend (both controls), staged intake, skills
+(`skillGateReason`), region relocation, custody policy, custody key assignment, energy
+contract, node storage and mode, strategy, learning, pool selection.
+
+Class 3 is now swept. What remains is keeping it swept: **every new refusal added to an action
+needs its buttons revisited**, and the two bugs found here were both refusals added later than
+the control they should have disabled.
 
 ## 4. A boolean where a count was meant · **fixed** `8c13c5f`
 
@@ -151,6 +158,7 @@ and ask whether every name belongs there.
 
 | Date | Class | Finding | Commit |
 |---|---|---|---|
+| 2026-09-08 | 3 | Immersion drain offered with no cash for the refit labour | pending |
 | 2026-09-08 | 3 | Both cold→hot controls enabled on a wallet that cannot sign | `020f3b5` |
 | 2026-09-08 | 3 | Service buttons enabled while you were already on a bench; clicking did nothing | `c02ee69` |
 | 2026-09-08 | 2 | Repair rows froze on "Reconnect · 0d left" while the job finished | `bc69119` |

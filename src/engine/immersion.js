@@ -96,6 +96,19 @@ function immersionBlockReason(h,qty,s=state){
   return "";
 }
 
+/* Why a drain cannot go ahead, as a sentence, or "" when it can. Coming out of the fluid is not
+   free — the fans go back on and somebody does the work — so it can be refused for want of
+   cash, and the button offering it has to know that. It did not, so an operator with no money
+   saw an enabled "Drain 10" that did nothing when pressed. */
+function immersionDrainBlockReason(h,qty=null,s=state){
+  if(!h)return "That machine does not exist.";
+  const submerged=immersionCount(h.id,s);
+  if(!submerged)return `No ${h.name} units are currently submerged.`;
+  const count=Math.max(1,Math.min(Number(qty)||submerged,submerged));
+  const labour=immersionConversionLabour(h,count);
+  if(s.cash<labour)return `Draining and refitting ${count} unit${count===1?"":"s"} costs ${fmtUsd(labour)}; you have ${fmtUsd(s.cash)}.`;
+  return "";
+}
 function convertToImmersion(id,qty=1){
   const h=HARDWARE.find(x=>x.id===id);if(!h)return;
   qty=Math.max(1,Math.floor(Number(qty)||1));
