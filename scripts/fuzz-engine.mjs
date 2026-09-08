@@ -16,6 +16,12 @@ for (const seed of SEEDS) {
   const out = JSON.parse(ev(`(()=>{
     state.started=true;state.ended=false;state.endDismissed=true;state.storyPause=false;
     state.cash=5e7;state.power=true;state.time=at("2013-01-10");state.facility="garage";
+    /* Every skill, because a locked action is an unfuzzed action. Half of this list gates
+       something — multisig gates quorum wallets, salvage changes what retirement returns — and
+       a run without them drives the refusal path 80 times and the real one never. This costs
+       realism the fuzzer does not need: it is asking whether the engine stays consistent, not
+       whether the run was winnable. */
+    state.skills=SKILLS.map(k=>k.id);
     let s=${seed}>>>0;const rnd=()=>((s=(s*1664525+1013904223)>>>0)/4294967296);
     const pick=a=>a[Math.floor(rnd()*a.length)];
     const ids=HARDWARE.map(h=>h.id),fac=FACILITIES.map(f=>f.id);
@@ -32,6 +38,24 @@ for (const seed of SEEDS) {
       ()=>upgradeFacility(pick(fac)),
       ()=>transfer(pick(["hot","cold","exchange"]),pick(["hot","cold","exchange"]),rnd()),
       ()=>{state.overdrive=!state.overdrive},
+      /* The rest of the operation, because a fuzzer only finds bugs in what it actually drives.
+         Cooling, staff, custody, parts and the market all mutate the same state the floor reads. */
+      ()=>buyCooling(pick(COOLING_EQUIPMENT.map(c=>c.id))),
+      ()=>sellCooling(pick(COOLING_EQUIPMENT.map(c=>c.id))),
+      ()=>hireStaff(pick(STAFF.map(r=>r.id))),
+      ()=>setCustodyPolicy(pick(["single","2of3","3of5"])),
+      ()=>dismissStaff(pick(STAFF.map(r=>r.id))),
+      ()=>orderParts(pick(Object.keys(state.maintenance.inventory)),1+Math.floor(rnd()*20)),
+      ()=>serviceHardware(pick(ids)),
+      ()=>setHardwarePower(pick(ids),true,1+Math.floor(rnd()*20)),
+      ()=>setContract(pick(["spot","standard","fixed"])),
+      ()=>setPayoutThreshold(pick(PAYOUT_THRESHOLDS)),
+      ()=>setPayoutDestination(pick(["hot","cold","exchange"])),
+      ()=>buyBtc(pick(["hot","cold","exchange"]),rnd()*0.4),
+      ()=>sellBtc(pick(["hot","cold","exchange"]),rnd()*0.4),
+      ()=>toggleInsurance(),
+      ()=>orderCustodyProduct(pick(CUSTODY_PRODUCTS.map(c=>c.id)),1+Math.floor(rnd()*2)),
+      ()=>{const k=(state.custody&&state.custody.keys)||[];if(k.length)assignCustodyKey(pick(k).id)},
     ];
     /* Over capacity is not automatically wrong: overdrive deliberately pushes draw past the
        cap, and that is the operator's decision to make. With overdrive off there is no such
