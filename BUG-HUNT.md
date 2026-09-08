@@ -28,6 +28,7 @@ Found, reproduced, not yet fixed. Newest first.
 
 | # | Class | Finding | Reproduction | Severity |
 |---|-------|---------|--------------|----------|
+| F3 | 12 | Nine functions are defined and never called: `retiringCount`, `fitsInstalledFleet`, `skillPrereqsMet`, `coldSpendPending`, `liquidSelfHeldBtc`, `pendingCoolingOrdersFor`, `activePoolShare`, `glossaryEntries`, `enhanceFacilities` (superseded by `enhanceFacilitiesV2`). Most are duplicates of a guard enforced elsewhere — but they read as if the guard lives here, which is how the next reader concludes a check exists when it does not. | `grep -rho "^function [a-zA-Z0-9_]*" src/`, count each name across `src/` and `index.html`, keep the ones appearing once. | Low — verified that skills, cold spends and site fit are each guarded by a *different* live function. Hygiene, and a trap for whoever reads next. |
 | F1 | 1 | `queueRender(true)` has no timer fallback, so a render requested while the tab is hidden waits for the tab to come back. Coin-loss modals and the 3D mount both had to grow their own `setTimeout` fallback separately; the shared path still has none. | Hide the tab, trigger any `queueRender(true)`, observe nothing is drawn until focus returns. | Low — every known caller has its own fallback. Ranked `accepted` until one does not. |
 
 ---
@@ -191,6 +192,36 @@ are worth chasing even though the suite is green.
 **Check:** when a rule fails that you did not touch, suspect the rule *above* it before the
 code. When a mutant kills more rules than it should, the harness is leaking.
 
+## 12. A guard that exists but was never wired in · **hunting**
+
+`retiringCount()` was written to answer "how many of these are already on their way out", and
+nothing ever called it — so the retirement action caps on machines *owned* and lets the same
+fleet be booked twice. The function existing is what makes this hard to see: the concept was
+modelled, so a reader assumes it is enforced.
+
+Eight more unreferenced functions sit alongside it (see F3). Those turned out to be duplicates
+of guards enforced elsewhere, which is the more dangerous half of this class: they are not
+bugs today, they are the reason someone removes the real guard tomorrow believing this one
+covers it.
+
+**Check:** list every `function` declaration whose name appears exactly once across `src/` and
+`index.html`. For each, find what *does* enforce that rule. If nothing does, that is the bug.
+
+## 13. Invariants nobody thought to assert · **swept** — now automated
+
+`scripts/fuzz-engine.mjs` drives the engine with random operator actions for 12 seeds × 4000
+days and insists only that the world stay describable: no throw, no non-finite number, no
+negative fleet or wallet, and no site carrying more than it can hold with overdrive off.
+
+That last one is the whole value. Over capacity is *not* automatically wrong — overdrive
+deliberately pushes draw past the cap, and that is the operator's call — so the invariant had
+to be written around the one case where no such decision exists. Written that way it found the
+racking-during-a-move stranding on seed 4, which no rule in the suite was asking about, and
+which the behavioural suite passed straight through.
+
+**Check:** `node scripts/fuzz-engine.mjs` — a failure prints the seed, and
+`node scripts/fuzz-engine.mjs <seed>` replays exactly that run.
+
 ## 11. Module-ceiling extractions done in a hurry · **hunting**
 
 The 70KB ceiling forces splits mid-task, and a careless slice moved the whole fleet lifecycle
@@ -205,6 +236,9 @@ and ask whether every name belongs there.
 
 | Date | Class | Finding | Commit |
 |---|---|---|---|
+| 2026-09-08 | 5 | Crates on the floor were racked against the site being *left* during a move, landing 306 machines and 999 kW into a 100 kW workshop — stranded for good. Found by the new fuzzer, not by a rule | *pending* |
+| 2026-09-08 | 12 | Retirement booked against machines owned rather than machines still racked; `retiringCount()` existed for this and was never called | *pending* |
+| 2026-09-08 | — | 12 fuzz seeds × 4000 days of random operator actions, and a 17-year idle run: no throw, no non-finite state, no negative fleet or wallet. Clean. | *audit* |
 | 2026-09-08 | 5 | Downsize judged fit on the installed fleet, ignoring machines mid-commission — the crates land anyway and strand the site | *pending* |
 | 2026-09-08 | 10 | `SITE()` never reset the fleet-lifecycle state, so a stalled commissioning job leaked into later rules | *pending* |
 | 2026-09-08 | — | Save migration audited against a pre-session save: 120 ticks, no missing fields, no non-finite numbers, legacy job drained, `floorView` migrated. Clean. | *audit* |

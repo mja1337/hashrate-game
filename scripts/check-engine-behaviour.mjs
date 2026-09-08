@@ -893,6 +893,55 @@ rule("downsizing costs a lease break rather than a fit-out, and is far cheaper t
   assert(payback > 1 && payback < 6, `downsizing pays back in ${payback.toFixed(1)} months; it should be a few months, not free and not a year`);
 });
 
+rule("retirement cannot be booked for machines already on their way out", () => {
+  /* retiringCount() was written to answer this and never called, so the cap was on machines
+     owned rather than machines still in the racks. Booking the same 100 twice made a second
+     job that pulled nothing and then announced "Retired 0" with a notice saying they were in
+     storage — a confirmation for work that never happened. */
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.facility="warehouse";
+    state.region="texas";state.cash=1e8;state.hardware={s19:100};
+    state.thermal={temperature:22,orders:[],equipment:{}};`)}
+    decommissionHardware("s19",100);
+    decommissionHardware("s19",100);
+    const booked=state.retirementJobs.reduce((a,j)=>a+j.qty,0),jobs=state.retirementJobs.length;
+    for(let d=0;d<40;d++)tick(true);
+    return {booked,jobs,jobsLeft:state.retirementJobs.length,
+      hardware:state.hardware.s19||0,decommissioned:state.decommissionedHardware.s19||0}})()`);
+  assert(r.jobs === 1, `${r.jobs} retirement jobs were opened against one fleet of 100`);
+  assert(r.booked === 100, `${r.booked} machines were booked for retirement out of 100 owned`);
+  assert(r.jobsLeft === 0, "the retirement did not finish");
+  assert(r.decommissioned === 100 && r.hardware === 0,
+    `the fleet did not end up in storage: ${r.hardware} racked, ${r.decommissioned} retired`);
+});
+
+rule("the loading bay racks against the site being moved INTO, not the one being left", () => {
+  /* The stranding that has no warning attached to it, because every individual step is legal.
+     The fleet fits the smaller site, so the move is allowed. Crates already standing on the
+     floor are then racked over the following days against the headroom of the site being
+     vacated. The move lands and 306 machines are drawing 999 kW into a 100 kW cap, on a floor
+     that holds 260 units and is carrying 612. Nothing can be sold fast enough to recover it. */
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.facility="warehouse";
+    state.region="texas";state.cash=1e9;state.hardware={s19:20};
+    state.thermal={temperature:22,orders:[],equipment:{axial:2}};
+    state.inactiveHardware={s19:400};`)}
+    const moveAllowed=facilityDownsizeBlockReason("workshop")==="";
+    downsizeFacility("workshop");
+    let over=0;
+    for(let d=0;d<150;d++){tick(true);if(!fleet().within)over++}
+    const f=fleet(),site=FACILITIES.find(x=>x.id===state.facility);
+    return {moveAllowed,facility:state.facility,daysOverCapacity:over,within:f.within,
+      installed:state.hardware.s19||0,crated:state.inactiveHardware.s19||0,
+      kw:+f.potentialKw.toFixed(1),cap:f.cap,space:f.space,siteSpace:site.space}})()`);
+  assert(r.moveAllowed, "the fleet fits the workshop today, so the move itself should be allowed");
+  assert(r.facility === "workshop", "the move did not complete");
+  assert(r.daysOverCapacity === 0, `the site was over capacity on ${r.daysOverCapacity} of 150 days: crates were racked against the warehouse and landed in the workshop`);
+  assert(r.within, `the fleet ended outside its site: ${r.kw} kW against ${r.cap} kW, ${r.space} units against ${r.siteSpace}`);
+  /* And the machines are held, not destroyed. Refusing to rack them is only acceptable
+     because they stay on the books and go in as soon as there is somewhere to put them. */
+  assert(r.installed + r.crated === 420, `machines went missing: ${r.installed} racked + ${r.crated} crated`);
+  assert(r.installed > 0, "nothing was racked at all; the bay has stopped working rather than started measuring");
+});
+
 rule("a downsize counts the machines still being commissioned, not just the installed ones", () => {
   /* Crates already paid for arrive whether or not the site shrank under them. This was a real
      stranding: 20 machines installed, 200 mid-commission, the workshop accepted the move, and

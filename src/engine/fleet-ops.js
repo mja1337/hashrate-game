@@ -77,12 +77,28 @@ function committedLoad(s=state){
   }
   return{watts,space};
 }
+/* A machine bolted in today lives wherever the operation is tomorrow. While a move is in
+   flight the bay used to measure against the site being LEFT, so crates already on the floor
+   were racked into a warehouse's headroom and then landed in the workshop that replaced it:
+   fleet fits at dispatch, 306 machines racked over the following days, 999 kW arriving at a
+   100 kW cap, and the floor offline for good. Neither site alone is the answer — an upgrade
+   has not happened yet and a downsize is about to — so the bay works to whichever is tighter. */
+function rackLimits(s=state){
+  const fs=fleet(s),here=FACILITIES.find(x=>x.id===s.facility)||FACILITIES[0];
+  let cap=fs.cap,space=here.space;
+  const moveTo=s.facilityUpgradeJob&&s.facilityUpgradeJob.id;
+  if(moveTo&&moveTo!==s.facility){
+    const dest=FACILITIES.find(x=>x.id===moveTo);
+    if(dest){cap=Math.min(cap,fleet({...s,facility:moveTo}).cap);space=Math.min(space,dest.space)}
+  }
+  return{cap,space,draw:fs.potentialKw,used:fs.space};
+}
 function siteRackHeadroom(h,s=state){
   if(!h)return 0;
-  const fs=fleet(s),f=FACILITIES.find(x=>x.id===s.facility)||FACILITIES[0];
+  const fs=rackLimits(s);
   const pending=committedLoad(s);
-  const freeWatts=Math.max(0,(fs.cap-fs.potentialKw)*1000-pending.watts);
-  const freeSpace=Math.max(0,f.space-fs.space-pending.space);
+  const freeWatts=Math.max(0,(fs.cap-fs.draw)*1000-pending.watts);
+  const freeSpace=Math.max(0,fs.space-fs.used-pending.space);
   const byPower=Math.floor(freeWatts/Math.max(1,hardwarePeakWatts(h,s)));
   const bySpace=h.space>0?Math.floor(freeSpace/h.space):Infinity;
   return Math.max(0,Math.min(byPower,bySpace));
@@ -172,7 +188,14 @@ function retiringCount(id,s=state){
 function decommissionHardware(id,requested=1){
   const h=HARDWARE.find(x=>x.id===id),owned=state.hardware[id]||0;
   if(!h||h.permanent||owned<1)return;
-  const qty=Math.min(owned,Math.max(1,Math.floor(Number(requested)||1)));
+  /* What is left to retire is what you own less what is already on a pallet. Capping on owned
+     alone let the same fleet be booked twice: two jobs of 100 against 100 machines, the second
+     pulling nothing because the first had already emptied the racks, then finishing anyway
+     with "Retired 0" and a notice saying they were in storage. retiringCount existed to answer
+     exactly this and was never called. */
+  const spare=Math.max(0,owned-retiringCount(id));
+  if(spare<1)return showToast("Already being retired",`Every ${h.name} you own is already on its way out of the racks. Wait for the crew to finish before booking more.`,"info","mine");
+  const qty=Math.min(spare,Math.max(1,Math.floor(Number(requested)||1)));
   const days=retirementDays(qty);
   state.retirementJobs.push({id,qty,done:0,started:state.time,due:state.time+days*DAY,days});
   log(`Retirement started: ${h.name}`,`${qty} unit${qty===1?"":"s"} · ${days} day${days===1?"":"s"} to unrack and palletise`,"fleet");
