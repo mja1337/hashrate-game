@@ -55,7 +55,6 @@ const REPAIR_STAGES=[
   {id:"fitup",name:"Fit & rack",weight:.10},
   {id:"stabilitycheck",name:"Stability check",weight:.15}
 ];
-function shuffledSlots(n){const arr=Array.from({length:n},(_,i)=>i);for(let i=arr.length-1;i>0;i--){const j=Math.floor(nextRand()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]]}return arr}
 function shuffledPairSlots(pairs){const arr=[];for(let i=0;i<pairs;i++)arr.push(i,i);for(let i=arr.length-1;i>0;i--){const j=Math.floor(nextRand()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]]}return arr}
 const REPAIR_COMPLICATIONS={
   powerdown:"Breaker interlock didn't isolate cleanly",
@@ -104,14 +103,73 @@ function servicePlan(h,count){
   return{technicians,committed,available,crew,workDays,days,contracted:selfServiced,selfBusy,contractorBusy:selfBusy};
 }
 function repairPuzzleRequired(job){return !!job&&!job.auto&&!!job.contracted&&!job.workDone}
+/* THE JOB DECIDES THE PROCEDURE, not a die roll.
+
+   The puzzle type was Math.floor(nextRand()*3): a fan fault might hand you a torque wrench and
+   a power board might hand you cable pairs. That made the task decoration on top of the repair
+   rather than part of it, and it taught nothing, because the thing you were doing had no
+   relationship to the thing that was broken.
+
+   A fan is a wiring job. A hashboard is seated and torqued down in a cross pattern. A power
+   board and a coolant manifold are torqued to a spec. That is what those repairs are, so that
+   is what the bench now asks for — and it means finishing one has taught the player something
+   true about the part they just replaced. */
+const REPAIR_PROCEDURES={
+  laptopfan:1,fan:1,asicfan:1,coolantPump:1,
+  hashboardearly:0,hashboard:0,hashboardmodern:0,
+  powerPcb:2,coolingManifold:2
+};
+function repairProcedureFor(part){
+  const proc=REPAIR_PROCEDURES[part];
+  // No part means a recommissioning check rather than a component swap: torque to spec fits.
+  return proc===undefined?2:proc;
+}
+/* TORQUE SPECS ARE A BAND, NOT A NUMBER.
+
+   A fastener is tightened to "40 newton-metres, plus or minus two" — never to an exact integer
+   nobody could hit. The dial used to demand the precise value, which turned a procedure into
+   arithmetic with one correct answer and no reason to be careful. A band makes over-torquing
+   the actual risk, which is the actual lesson. */
+/* A GENUINE CROSS PATTERN, not a shuffle.
+
+   Now that the sequence is printed and described as the manual's, it has to actually be one —
+   a random permutation would have the game teach a technique that is not the technique. The
+   rule for four fasteners is: any corner, then the one diagonally opposite it, then either of
+   the remaining pair, then its opposite. Which corner you start at is the fitter's choice, so
+   that part stays random; the shape does not.
+
+   Corners are indexed 0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right, so the diagonals
+   are 0-3 and 1-2. */
+function crossPattern(){
+  const opposite={0:3,3:0,1:2,2:1};
+  const first=Math.floor(nextRand()*4),second=opposite[first];
+  const rest=[0,1,2,3].filter(i=>i!==first&&i!==second);
+  const third=rest[Math.floor(nextRand()*rest.length)];
+  return[first,second,third,opposite[third]];
+}
+const TORQUE_TOLERANCE=2;
 function initRepairPuzzle(job){
   if(!job||job.puzzleType!==undefined)return false;
   if(job.selfAuto===undefined)job.selfAuto=nextRand()<selfAutoCompleteChance(HARDWARE.find(x=>x.id===job.id));
   if(job.selfAuto)return false;
-  job.puzzleType=Math.floor(nextRand()*3);job.oldRemoved=!job.part;
-  if(job.puzzleType===0){job.tapOrder=shuffledSlots(4);job.tapProgress=[]}
-  else if(job.puzzleType===1){job.cableSlots=shuffledPairSlots(3);job.cableLocked=[false,false,false,false,false,false];job.cableSelected=null}
-  else{job.dialTarget=20+Math.floor(nextRand()*61);const offsets=[-16,-14,-12,-10,-8,-6,6,8,10,12,14,16];job.dialValue=job.dialTarget+offsets[Math.floor(nextRand()*offsets.length)]}
+  job.puzzleType=repairProcedureFor(job.part);job.oldRemoved=!job.part;
+  if(job.puzzleType===0){
+    /* A REAL CROSS PATTERN IS KNOWABLE. This was a hidden shuffle, so a "wrong mount" was a
+       coin flip that could damage the machine — punishing the player for information they were
+       never given. The sequence is now shown, the way a torque diagram is printed in a service
+       manual, and getting it wrong is carelessness rather than bad luck. Bench skills hide the
+       diagram, because by then you know it. */
+    job.tapOrder=crossPattern();job.tapProgress=[];job.tapFromMemory=hasSkill("benchskills");
+  }
+  else if(job.puzzleType===1){
+    /* Terminals carry the pair they belong to. Wiring is connecting like to like, not guessing
+       which of six unlabelled dots happen to match. */
+    job.cableSlots=shuffledPairSlots(3);job.cableLocked=[false,false,false,false,false,false];job.cableSelected=null;
+  }
+  else{
+    job.dialTarget=20+Math.floor(nextRand()*61);job.dialTolerance=TORQUE_TOLERANCE;
+    const offsets=[-16,-14,-12,-10,-8,8,10,12,14,16];job.dialValue=job.dialTarget+offsets[Math.floor(nextRand()*offsets.length)];
+  }
   return true;
 }
 function advanceMaintenance(){
@@ -371,9 +429,15 @@ function repairCableClick(id,slot){
 }
 function repairNudgeDial(id,delta){
   const job=activeServiceJob(id);delta=Number(delta);if(!job||job.auto||!job.oldRemoved||job.workDone||job.puzzleType!==2||!Number.isFinite(job.dialValue))return;
-  const before=job.dialValue-job.dialTarget;job.dialValue+=delta;const after=job.dialValue-job.dialTarget;
-  if(after===0)return completeRepairWork(job,"Torqued to exact spec");
-  if(before!==0&&Math.sign(after)!==Math.sign(before))selfRepairMistake(job,"Over-torqued straight past spec.");
+  const tol=Math.max(1,Number(job.dialTolerance)||TORQUE_TOLERANCE);
+  job.dialValue+=delta;
+  const off=job.dialValue-job.dialTarget;
+  if(Math.abs(off)<=tol)return completeRepairWork(job,`Torqued to ${job.dialTarget} ±${tol} Nm`);
+  /* Only going PAST the band is a mistake. Approaching it from either side is just work, and a
+     wrench that punished you for the direction you happened to start from was punishing you for
+     the roll that set up the puzzle. */
+  if(off>tol&&delta>0)selfRepairMistake(job,`Over-torqued past ${job.dialTarget+tol} Nm.`);
+  else if(off<-tol&&delta<0)selfRepairMistake(job,"Backed the fastener off below spec.");
   save();renderMineContent();
 }
 /* A board that went back on dry still goes back on: the machine returns to service, because

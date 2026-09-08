@@ -107,20 +107,6 @@ function miningFloorUnits(){
     return `<div class="floor-miner ${b.status} ${h.id==="laptop"?"laptop-desk":""}" ${b.clickable?`data-action="focus-service" data-id="${h.id}"`:""} title="${h.name} · ${b.qty>1?`${b.qty} units represented · `:""}${b.label}">${floorSprite(h.id)}${badge}${b.qty>1?`<b>×${fmtCompactNumber(b.qty)}</b>`:""}</div>`;
   }).join("");
 }
-function repairWorkPuzzle(h,job){
-  const partDef=sparePart(job.part),partName=job.part?(partDef?.name?.toLowerCase()||"part"):"unit";
-  if(!job.oldRemoved)return `<div class="repair-puzzle"><p class="repair-puzzle-note">The faulted ${partName} is still mounted on ${h.name}. Pull it before fitting the replacement.</p><button class="action small primary" data-action="repair-remove-old" data-id="${h.id}">Remove old ${partDef?.name||job.part}</button></div>`;
-  if(job.puzzleType===1){
-    const locked=Array.isArray(job.cableLocked)?job.cableLocked:[],selected=job.cableSelected;
-    return `<div class="repair-puzzle"><p class="repair-puzzle-note">Reconnect the new ${partName}'s wiring — pick two terminals at a time; a wrong pair won't seat and you'll need to try again.</p><div class="repair-cable-grid">${(job.cableSlots||[]).map((_,i)=>`<button class="repair-cable ${locked[i]?"done":""} ${selected===i?"selected":""}" data-action="repair-cable" data-id="${h.id}" data-slot="${i}" ${locked[i]?"disabled":""}>●</button>`).join("")}</div><div class="repair-puzzle-progress">${locked.filter(Boolean).length/2} / 3 pairs connected</div></div>`;
-  }
-  if(job.puzzleType===2){
-    const diff=job.dialTarget-job.dialValue;
-    return `<div class="repair-puzzle"><p class="repair-puzzle-note">Torque the new ${partName} down to exact spec — nudge the wrench until it lands precisely on target.</p><div class="repair-dial"><div class="repair-dial-readout"><span>Target</span><b>${job.dialTarget}</b></div><div class="repair-dial-readout current"><span>Current</span><b>${job.dialValue}</b></div></div><div class="repair-dial-buttons"><button class="action small" data-action="repair-nudge" data-id="${h.id}" data-delta="-5">−5</button><button class="action small" data-action="repair-nudge" data-id="${h.id}" data-delta="-1">−1</button><button class="action small" data-action="repair-nudge" data-id="${h.id}" data-delta="1">+1</button><button class="action small" data-action="repair-nudge" data-id="${h.id}" data-delta="5">+5</button></div><div class="repair-puzzle-progress">${diff===0?"On spec":diff>0?`${diff} under spec`:`${-diff} over spec`}</div></div>`;
-  }
-  const corners=[["↖","Top-left mount"],["↗","Top-right mount"],["↙","Bottom-left mount"],["↘","Bottom-right mount"]],tapped=Array.isArray(job.tapProgress)?job.tapProgress:[];
-  return `<div class="repair-puzzle"><p class="repair-puzzle-note">Seat the new ${partName} by tightening its mounts in the right cross pattern — a wrong mount shifts the part and resets the sequence.</p><div class="repair-puzzle-grid">${corners.map((c,i)=>`<button class="repair-bolt ${tapped.includes(i)?"done":""}" data-action="repair-tap" data-id="${h.id}" data-slot="${i}" ${tapped.includes(i)?"disabled":""} title="${c[1]}">${c[0]}</button>`).join("")}</div><div class="repair-puzzle-progress">${tapped.length} / 4 torqued down</div></div>`;
-}
 function selfServiceRelevant(){
   const technicians=fieldTechnicianCount();
   if(!technicians)return true;

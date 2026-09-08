@@ -192,6 +192,40 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--orange);outline-off
 .buy-load.over .add{background:var(--red)}
 .buy-load small{display:block;margin-top:4px;color:var(--muted);font:9px var(--mono)}
 .buy-load.over small b{color:var(--red)}
+/* ---- REPAIR BENCH ---- */
+.bench-face{display:flex;flex-direction:column;gap:5px;align-items:center;margin:0 0 12px}
+.bench-face small{color:var(--dim);font:9px var(--mono)}
+.bench-case{position:relative;display:flex;gap:8px;align-items:center;padding:8px 10px;
+  border:1px solid var(--edge);background:linear-gradient(180deg,#1a2225,#101617)}
+.bench-fans{display:flex;flex-direction:column;gap:5px}
+.bench-fan{width:26px;height:26px;border:2px solid #43555d;border-radius:50%;background:radial-gradient(circle,#26343a 38%,#151d20 40%)}
+.bench-boards{display:flex;flex-direction:column;gap:4px}
+.bench-board{width:52px;height:8px;background:#2d5c46;border:1px solid #3f7a5e}
+.bench-psu{width:20px;height:30px;background:#3a444a;border:1px solid #55636b}
+.bench-fan.target,.bench-board.target,.bench-psu.target{border-color:var(--orange);box-shadow:0 0 0 2px rgba(247,161,61,.35)}
+/* The printed sequence: a service manual shows you the pattern, it does not make you guess. */
+.torque-pattern{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:0 0 10px;
+  padding:8px 10px;border-left:2px solid var(--orange2);background:#17140d;font:9px var(--mono)}
+.torque-pattern span{color:var(--muted)}
+.torque-pattern span.done{color:var(--dim);text-decoration:line-through}
+.torque-pattern span.next{color:var(--orange);font-weight:600}
+.torque-pattern i{color:var(--dim);font-style:normal}
+.repair-puzzle-memory{margin:0 0 10px;padding:8px 10px;border-left:2px solid var(--green);
+  background:#0c1712;color:var(--muted);font:9px var(--mono)}
+.repair-bolt.next{border-color:var(--orange);color:var(--orange)}
+.repair-cable{font:600 11px var(--mono)}
+/* A torque spec is a band you work into, not a number you land on. */
+.torque-gauge{position:relative;height:20px;margin:2px 0 8px;border:1px solid var(--line);background:#0a0f10}
+.torque-gauge .band{position:absolute;top:0;bottom:0;background:rgba(117,227,178,.22);border-left:1px solid var(--green);border-right:1px solid var(--green)}
+.torque-gauge .needle{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--edge)}
+.torque-gauge .needle.good{background:var(--green)}
+.torque-gauge .needle.over{background:var(--red)}
+.torque-gauge .needle.under{background:var(--orange2)}
+.torque-readout{display:flex;justify-content:space-between;gap:10px;margin-bottom:8px;color:var(--dim);font:9px var(--mono)}
+.torque-readout b{color:var(--text)}
+.torque-readout .good b{color:var(--green)}
+.torque-readout .off b{color:var(--orange2)}
+
 
 /* ---- SKILL TREE LATTICE ---- */
 .tech-tree-card{overflow:hidden}

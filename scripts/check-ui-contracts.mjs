@@ -236,6 +236,35 @@ assert(!inline.includes("function techV2(){") || techArt.includes("function tech
 assert(inline.includes("let techScrollLeft=0") && inline.includes("if(techScrollLeft)lattice.scrollLeft=techScrollLeft"),
   "The skill tree's horizontal scroll resets on every repaint again");
 
+/* THE BENCH IS THE MACHINE, AND IT SHOWS ITS WORKING.
+   Three abstract shapes — four arrows, six identical dots, a number to hit — with no
+   relationship to the machine or the part, and all three punishing the player for information
+   they were never given. A service manual prints the torque diagram and a loom has its
+   terminals marked, so now so do these. */
+const benchArt = await readFile(new URL("src/ui/enhance/repair-bench.js", root), "utf8");
+assert(benchArt.includes("function repairBenchFace(") && benchArt.includes("function repairBenchLayout("),
+  "The bench no longer draws the machine being worked on");
+assert(/bench-fan \$\{kind==="fan"\?"target":""\}/.test(benchArt) && benchArt.includes('bench-board ${kind==="board"&&i===1?"target":""}'),
+  "The part being replaced is no longer highlighted where it actually sits");
+/* The 3D silhouettes are a LAZY module: a player who has only opened Servicing has never
+   loaded them, and reading through an undefined FloorMiners drew every machine with one fan. */
+assert(/return\{fans:h\.w>=2500\?2:1,psu:h\.w>=1000\}/.test(benchArt),
+  "The bench face depends on the lazily-loaded 3D module with no fallback, so it misdraws before the floor is opened");
+/* Information, not guessing. */
+assert(benchArt.includes("torque-pattern") && benchArt.includes("job.tapFromMemory"),
+  "The mount sequence is hidden again, which makes a wrong mount a coin flip with a damage penalty");
+assert(benchArt.includes("A to A, B to B, C to C") && /title="Terminal \$\{names\[pair\]/.test(benchArt),
+  "Cable terminals no longer carry the pair they belong to, so the first pick of each pair is a guess");
+assert(benchArt.includes("torque-gauge") && /\$\{job\.dialTarget\} Nm ±\$\{tol\}/.test(benchArt),
+  "The torque spec and its tolerance band are no longer shown");
+assert(css.includes(".torque-gauge{position:relative") && css.includes(".torque-pattern{"),
+  "The torque gauge or the printed pattern has no styling");
+/* And the procedure follows the part rather than a die roll. */
+assert(inline.includes("const REPAIR_PROCEDURES=") && inline.includes("function repairProcedureFor(") && inline.includes("function crossPattern()"),
+  "The bench procedure is random again, or the cross pattern is back to a shuffle");
+assert(!inline.includes("job.puzzleType=Math.floor(nextRand()*3)"),
+  "The procedure is chosen by a die roll rather than by the part that broke");
+
 /* HOW MANY WILL ACTUALLY RUN, at the point of buying them.
    Capacity stopped gating the purchase — correctly, since you can buy ahead of a substation
    upgrade — which left a till that will sell forty thousand machines to a site able to power

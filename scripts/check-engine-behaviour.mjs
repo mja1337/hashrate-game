@@ -65,6 +65,105 @@ const SITE = (overrides = "") => `
   state.poolAccount={balance:0,frozen:0,threshold:.01,destination:"hot",paidTotal:0,feesPaid:0,payouts:0,lastPayout:0};
   ${overrides}`;
 
+/* ---- THE BENCH ASKS FOR A PROCEDURE, NOT A GUESS ---- */
+
+rule("the faulted part decides the procedure", () => {
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");`)}
+    return{map:["asicfan","laptopfan","fan","coolantPump","hashboard","hashboardearly",
+      "hashboardmodern","powerPcb","coolingManifold"].map(p=>[p,repairProcedureFor(p)]),
+      noPart:repairProcedureFor(undefined)}})()`);
+  const by = Object.fromEntries(r.map);
+  /* A fan is a wiring job, a hashboard is seated and cross-torqued, a power board is torqued to
+     a spec. This was Math.floor(nextRand()*3) — a fan fault could hand you a torque wrench —
+     which made the task decoration on top of the repair and taught nothing about the part. */
+  for (const fan of ["asicfan", "laptopfan", "fan", "coolantPump"])
+    assert(by[fan] === 1, `${fan} is not a wiring job (got procedure ${by[fan]})`);
+  for (const board of ["hashboard", "hashboardearly", "hashboardmodern"])
+    assert(by[board] === 0, `${board} is not a seat-and-cross-torque job (got ${by[board]})`);
+  for (const torque of ["powerPcb", "coolingManifold"])
+    assert(by[torque] === 2, `${torque} is not a torque-to-spec job (got ${by[torque]})`);
+  assert(Number.isFinite(r.noPart), "a recommissioning check with no part has no procedure at all");
+});
+
+rule("the printed cross pattern is a real cross pattern", () => {
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");`)}
+    const opp={0:3,3:0,1:2,2:1},bad=[];
+    for(let i=0;i<600;i++){const o=crossPattern();
+      if(o.length!==4||new Set(o).size!==4||o[1]!==opp[o[0]]||o[3]!==opp[o[2]])bad.push(o)}
+    const starts=new Set();for(let i=0;i<200;i++)starts.add(crossPattern()[0]);
+    /* And the pattern the JOB actually gets, not merely what the generator returns: asserting
+       only on the helper passes happily while the caller hands out a hardcoded order. */
+    const jobs=[],jobStarts=new Set();
+    for(let i=0;i<200;i++){const j={part:"hashboardmodern"};initRepairPuzzle(j);
+      const o=j.tapOrder;jobStarts.add(o[0]);
+      if(o.length!==4||new Set(o).size!==4||o[1]!==opp[o[0]]||o[3]!==opp[o[2]])jobs.push(o)}
+    return{bad:bad.slice(0,3),badCount:bad.length,starts:[...starts].sort(),
+      jobBad:jobs.slice(0,3),jobBadCount:jobs.length,jobStarts:[...jobStarts].sort()}})()`);
+  /* The sequence is printed and described as the manual's, so it has to be one: any corner,
+     then the corner diagonally opposite, then either of the remaining pair, then its opposite.
+     A shuffle would have the game teach a technique that is not the technique. */
+  assert(r.badCount === 0, `${r.badCount} of 600 patterns were not cross patterns, e.g. ${JSON.stringify(r.bad)}`);
+  // Which corner you start at is the fitter's choice, so that much should still vary.
+  assert(r.starts.length === 4, `patterns only ever start at ${r.starts.join(",")}`);
+  assert(r.jobBadCount === 0, `${r.jobBadCount} of 200 bench jobs got a non-cross order, e.g. ${JSON.stringify(r.jobBad)}`);
+  assert(r.jobStarts.length === 4, `bench jobs only ever start at ${r.jobStarts.join(",")}, so the order is fixed rather than generated`);
+});
+
+rule("following the procedure by the book costs nothing", () => {
+  /* THE POINT OF ALL OF THIS. Every one of these used to punish the player for information they
+     were never given: the mount order was a hidden shuffle, so a wrong mount was a coin flip
+     that could damage the machine, and the cable pairs were unlabelled, so the first pick of
+     each pair was a guess with a penalty attached. Neither is a test of anything. */
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.facility="workshop";state.region="texas";
+    state.hardware={};state.hardware.s19=40;state.staff=[];state.skills=[];
+    state.thermal={temperature:22,orders:[],equipment:{axial:1}};`)}
+    state.maintenance.inventory.hashboardmodern=99;state.maintenance.inventory.asicfan=99;
+    state.maintenance.inventory.powerPcb=99;state.maintenance.inventory.thermalpaste=99;
+    const play=part=>{
+      state.maintenance.serviceJobs=[];state.maintenance.condition.s19=80;
+      state.maintenance.faults={s19:2};state.maintenance.faultsByPart={s19:{[part]:2}};
+      serviceHardwarePart("s19",part);
+      const job=activeServiceJob("s19");if(!job)return{part,skipped:true};
+      job.stage=2;job.oldRemoved=true;
+      if(job.puzzleType===0){for(const slot of job.tapOrder.slice())repairTapSlot("s19",slot)}
+      else if(job.puzzleType===1){const slots=job.cableSlots.slice();
+        for(let pair=0;pair<3;pair++){const idx=[];slots.forEach((v,i)=>{if(v===pair)idx.push(i)});
+          repairCableClick("s19",idx[0]);repairCableClick("s19",idx[1])}}
+      else{let guard=0;while(Math.abs(job.dialValue-job.dialTarget)>job.dialTolerance&&guard++<80){
+        const off=job.dialValue-job.dialTarget;repairNudgeDial("s19",off>0?(off>5?-5:-1):(off<-5?5:1))}}
+      return{part,type:job.puzzleType,mistakes:job.mistakes||0,workDone:!!job.workDone};
+    };
+    return{plays:["hashboardmodern","asicfan","powerPcb"].map(play)}})()`);
+  for (const play of r.plays) {
+    assert(!play.skipped, `${play.part} never produced a bench job`);
+    assert(play.workDone, `${play.part} could not be completed by following its own instructions`);
+    assert(play.mistakes === 0,
+      `${play.part} charged ${play.mistakes} mistake(s) to a player who followed the printed procedure exactly`);
+  }
+  assert(new Set(r.plays.map(p => p.type)).size === 3, "the three parts did not exercise three different procedures");
+});
+
+rule("a torque spec is a band, and only overshooting it is a mistake", () => {
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.facility="workshop";state.region="texas";
+    state.hardware={};state.hardware.s19=40;state.staff=[];state.skills=[];
+    state.thermal={temperature:22,orders:[],equipment:{axial:1}};`)}
+    state.maintenance.inventory.powerPcb=99;state.maintenance.inventory.thermalpaste=99;
+    state.maintenance.serviceJobs=[];state.maintenance.condition.s19=80;
+    state.maintenance.faults={s19:2};state.maintenance.faultsByPart={s19:{powerPcb:2}};
+    serviceHardwarePart("s19","powerPcb");
+    const job=activeServiceJob("s19");job.stage=2;job.oldRemoved=true;
+    const tol=job.dialTolerance,target=job.dialTarget;
+    // Land inside the band rather than exactly on the figure.
+    job.dialValue=target+tol;
+    repairNudgeDial("s19",0);
+    return{tol,target,acceptedAtEdge:!!activeServiceJob("s19")?.workDone||true,
+      landedWithoutExact:job.dialValue!==target,mistakes:job.mistakes||0,done:!!job.workDone}})()`);
+  assert(r.tol >= 1, "a torque spec has no tolerance, so it is an exact number to land on again");
+  assert(r.done, "a fastener inside the tolerance band was not accepted");
+  assert(r.landedWithoutExact, "the job only completed on the exact figure");
+  assert(r.mistakes === 0, "working into the band counted as a mistake");
+});
+
 /* ---- HIRING A CREW HAS TO BUY A CREW ---- */
 
 rule("technicians stack on a big repair and change nothing on a small one", () => {
