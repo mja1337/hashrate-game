@@ -52,18 +52,32 @@ cooling install progress, pool payout accrual, staged-intake changes, career/XP 
 The card computes eligibility one way and the action another, and they drift.
 
 Found in: immersion conversion, facility downsizing, cooling sales, hardware purchase limits,
-the dead flat tech tab (enabled buttons that silently did nothing).
+the dead flat tech tab, and both service buttons — which checked three of the action's five
+refusals and left Refurbish and Replace enabled with an empty tooltip on every OTHER machine
+while you were on a bench yourself. Clicking did nothing at all.
 
 **Check:** any `disabled={...}` whose condition is not literally the same function the action
-calls. The fix is always the same — one `somethingBlockReason()` used by both.
+calls. The fix is always the same — one `somethingBlockReason()` used by both, asserted as
+PARITY rather than as a list of conditions, so a refusal added to the action and forgotten in
+the helper fails the contract.
 
-## 4. A boolean where a count was meant · **hunting**
+Audited and matching: service (`serviceBlockReason`), immersion, downsize, cooling sale, payout
+destination, cold spend, staged intake, skills (`skillGateReason`).
+Not yet audited: energy contracts, region relocation, node storage and mode, wallet transfers,
+strategy securities, learning items, pool selection.
+
+## 4. A boolean where a count was meant · **fixed** `8c13c5f`
 
 `hasStaff(id)` answers *whether*, never *how many*. Hiring 25 field technicians did nothing
 past the first for commissioning and retirement, and past the third for repairs (`8c13c5f`).
 
 **Check:** every `hasStaff(` call site. Does the thing it gates scale with headcount in
 reality? Same question for any other predicate standing in for a quantity.
+
+Audited: all twelve call sites. `hireStaff()` refuses a duplicate for every role except
+`fieldtech`, so `hasStaff` is the right question for the eleven singleton posts and was the
+wrong one for all three field-technician sites. Re-run this audit if any other role becomes
+multi-hire.
 
 ## 5. Capacity reserved by the wrong set · **fixed** `8ce707e`
 
@@ -131,6 +145,7 @@ and ask whether every name belongs there.
 
 | Date | Class | Finding | Commit |
 |---|---|---|---|
+| 2026-09-08 | 3 | Service buttons enabled while you were already on a bench; clicking did nothing | pending |
 | 2026-09-08 | 2 | Repair rows froze on "Reconnect · 0d left" while the job finished | `bc69119` |
 | 2026-09-08 | 4 | Field technicians did not stack — boolean, not count | `8c13c5f` |
 | 2026-09-08 | 7 | 3D floor rebuilt every tick, lost the WebGL context at ~50k miners | `ad77732` |

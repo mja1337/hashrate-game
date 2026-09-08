@@ -353,6 +353,39 @@ function orderParts(type,qty=1){
   if(state.cash<cost)return showToast("Not enough cash",`${qty} ${part.name}${qty===1?"":"s"} cost ${fmtUsd(cost)}.`);
   state.cash-=cost;state.maintenance.orders.push({type:part.id,qty,due:state.time+lead*DAY});log("Spare parts ordered",`${qty} ${part.name}${qty===1?"":"s"} · -${fmtUsd(cost)} · ${lead} days`);save();renderMineContent();
 }
+/* WHY A SERVICE CANNOT START, as a sentence, or "" when it can.
+
+   Both service actions refused in five places and the buttons that launch them checked three
+   of them. The gap that mattered was the crew: with no technicians on the payroll you are the
+   crew, you can only be on one bench at a time, and every OTHER machine's Refurbish and
+   Replace button stayed enabled with an empty tooltip. Clicking one did nothing at all — the
+   action raised "You are already on a job" and the button had given no hint it would.
+
+   One function, used by both buttons and both actions, so they cannot drift again. */
+function serviceBlockReason(h,part=null,s=state){
+  if(!h)return "That machine does not exist.";
+  const count=s.hardware?.[h.id]||0;
+  if(!count)return `No ${h.name} units are installed.`;
+  if(activeServiceJob(h.id,s))return `${h.name} is already in the maintenance bay.`;
+  const faults=hardwareFaultCount(h,s);
+  let repairCount;
+  if(part){
+    const faulted=hardwareFaultBreakdown(h,s)[part]||0;
+    if(!faulted)return `No ${sparePart(part)?.name?.toLowerCase()||part} faults are currently reported on ${h.name}.`;
+    repairCount=faulted;
+  }else{
+    const condition=maintenanceCondition(h,s);
+    if(condition>=95&&!faults)return `${h.name} is at ${condition.toFixed(0)}% condition with no failed units.`;
+    repairCount=condition<65?count:Math.max(faults,Math.ceil(count*.15));
+  }
+  const plan=servicePlan(h,repairCount);
+  if(!plan.crew)return plan.technicians
+    ?`All ${plan.technicians} technician${plan.technicians===1?" is":"s are"} committed to other jobs.`
+    :"You can only work one repair at a time yourself, and you are already on one.";
+  const requirements=part?{[part]:Math.max(1,Math.ceil(repairCount/7))}:serviceRequirements(h,repairCount);
+  if(!hasServiceParts(requirements))return `This needs ${serviceRequirementText(requirements)}; order the missing components first.`;
+  return "";
+}
 function serviceHardware(id,auto=false){
   const h=HARDWARE.find(x=>x.id===id),count=state.hardware[id]||0;if(!h||!count)return;
   if(activeServiceJob(id))return showToast("Service already scheduled",`${h.name} is already in the maintenance bay.`);

@@ -65,6 +65,74 @@ const SITE = (overrides = "") => `
   state.poolAccount={balance:0,frozen:0,threshold:.01,destination:"hot",paidTotal:0,feesPaid:0,payouts:0,lastPayout:0};
   ${overrides}`;
 
+/* ---- WHAT A BUTTON OFFERS IS WHAT THE ACTION ALLOWS ---- */
+
+rule("a service the button offers is a service that actually starts", () => {
+  /* Both service actions refused in five places and their buttons checked three. The gap that
+     mattered was the crew: with nobody on the payroll you ARE the crew, you can only be on one
+     bench at a time, and every other machine's Refurbish and Replace button stayed enabled with
+     an empty tooltip. Clicking one did nothing whatsoever.
+
+     Asserted as parity rather than as a list of conditions: whatever the reason says, starting
+     the job must agree with it. A new refusal added to the action and forgotten in the helper
+     fails here. */
+  const r = json(`(()=>{${SITE(`state.time=at("2016-06-01");state.facility="warehouse";state.region="texas";
+    state.cash=1e6;state.hardware={};state.hardware.s9=40;state.hardware.s7=20;
+    state.thermal={temperature:22,orders:[],equipment:{axial:2}};`)}
+    const cases=[];
+    const probe=(label,setup)=>{
+      state.maintenance.serviceJobs=[];state.staff=[];state.skills=[];
+      state.maintenance.condition={s9:70,s7:70};
+      state.maintenance.faults={s9:4,s7:4};
+      state.maintenance.faultsByPart={s9:{asicfan:4},s7:{asicfan:4}};
+      state.maintenance.inventory.asicfan=99;state.maintenance.inventory.hashboardearly=99;
+      state.maintenance.inventory.hashboard=99;state.maintenance.inventory.thermalpaste=99;
+      setup();
+      const h=HARDWARE.find(x=>x.id==="s7");
+      for(const part of [null,"asicfan"]){
+        const reason=serviceBlockReason(h,part);
+        const before=state.maintenance.serviceJobs.length;
+        if(part)serviceHardwarePart("s7",part);else serviceHardware("s7");
+        const started=state.maintenance.serviceJobs.length>before;
+        cases.push({label,part:part||"refurbish",reason,started});
+        // Undo so the two probes in a case do not interfere.
+        state.maintenance.serviceJobs=state.maintenance.serviceJobs.filter(j=>j.id!=="s7");
+      }
+    };
+    probe("free hands",()=>{});
+    probe("already on a bench yourself",()=>{serviceHardwarePart("s9","asicfan")});
+    probe("technicians on the payroll",()=>{state.staff=["fieldtech","fieldtech","fieldtech"]});
+    probe("crew all committed",()=>{state.staff=["fieldtech"];serviceHardwarePart("s9","asicfan")});
+    probe("no parts in stock",()=>{state.maintenance.inventory.asicfan=0;state.maintenance.inventory.hashboardearly=0;state.maintenance.inventory.hashboard=0});
+    probe("nothing wrong with it",()=>{state.maintenance.condition.s7=100;state.maintenance.faults.s7=0;state.maintenance.faultsByPart.s7={}});
+    /* This machine already in the bay. Every other case clears s7's jobs between probes, so
+       without it the "already scheduled" branch was never walked and could be deleted freely. */
+    {
+      state.maintenance.serviceJobs=[];state.staff=["fieldtech","fieldtech","fieldtech"];state.skills=[];
+      state.maintenance.condition={s9:70,s7:70};state.maintenance.faults={s9:4,s7:4};
+      state.maintenance.faultsByPart={s9:{asicfan:4},s7:{asicfan:4}};
+      state.maintenance.inventory.asicfan=99;state.maintenance.inventory.hashboardearly=99;
+      state.maintenance.inventory.hashboard=99;state.maintenance.inventory.thermalpaste=99;
+      serviceHardwarePart("s7","asicfan");
+      const h=HARDWARE.find(x=>x.id==="s7");
+      for(const part of [null,"asicfan"]){
+        const reason=serviceBlockReason(h,part);
+        const before=state.maintenance.serviceJobs.length;
+        if(part)serviceHardwarePart("s7",part);else serviceHardware("s7");
+        cases.push({label:"already in the bay",part:part||"refurbish",reason,
+          started:state.maintenance.serviceJobs.length>before});
+      }
+    }
+    return{cases}})()`);
+  assert(r.cases.length >= 10, "the matrix did not run");
+  for (const c of r.cases)
+    assert((c.reason === "") === c.started,
+      `${c.label} / ${c.part}: the button ${c.reason ? `says "${c.reason}"` : "offers it"} but the action ${c.started ? "started" : "refused"}`);
+  // The matrix has to contain both answers, or parity is trivially true.
+  assert(r.cases.some(c => c.started), "no case ever started a job, so the rule proves nothing");
+  assert(r.cases.some(c => !c.started), "no case was ever refused, so the rule proves nothing");
+});
+
 /* ---- A JOB THAT MOVES HAS TO SAY SO ---- */
 
 rule("a repair changing stage asks the Mine tab to redraw", () => {
