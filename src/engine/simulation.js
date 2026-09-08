@@ -374,7 +374,10 @@ function patchFirmware(){
   log("ASIC firmware patched",`${count} machines · protected for 18 months`);showToast("Fleet patched","Signed firmware is current for 18 simulation months.");save();render();
 }
 function advanceNodeSync(silent=false){
-  const syncPath=(lagKey,peakKey,ready,rate,label)=>{const before=state.nodeSync[lagKey];if(ready){state.nodeSync[lagKey]=Math.max(0,before-rate);if(before>0&&state.nodeSync[lagKey]===0){state.nodeSync[peakKey]=0;log(`${label} caught up`,`Verification resumed at the chain tip`);if(!silent)showToast("Node synchronized",`${label} has validated its backlog and reached the chain tip.`,"info","custody")}}else{state.nodeSync[lagKey]=Math.min(365,state.nodeSync[lagKey]+1);state.nodeSync[peakKey]=Math.max(state.nodeSync[peakKey],state.nodeSync[lagKey])}};
+  const syncPath=(lagKey,peakKey,ready,rate,label)=>{const before=state.nodeSync[lagKey];if(ready){state.nodeSync[lagKey]=Math.max(0,before-rate);if(before>0&&state.nodeSync[lagKey]===0){state.nodeSync[peakKey]=0;renderFullQueued=true;log(`${label} caught up`,`Verification resumed at the chain tip`);if(!silent)showToast("Node synchronized",`${label} has validated its backlog and reached the chain tip.`,"info","custody")}}else{const wasAtTip=before===0;state.nodeSync[lagKey]=Math.min(365,state.nodeSync[lagKey]+1);state.nodeSync[peakKey]=Math.max(state.nodeSync[peakKey],state.nodeSync[lagKey]);if(wasAtTip)renderFullQueued=true}};
+  /* Only the two transitions ask for a rebuild: reaching the tip and falling off it. The lag
+     moves every tick, and rebuilding a tab to animate a progress bar would undo the reason the
+     tick repaints with refreshLive() at all. */
   syncPath("primaryLag","primaryPeak",primaryNodeReady(),primaryNodeCatchupRate(),"Primary full node");
   if(state.backupNode.enabled)syncPath("backupLag","backupPeak",backupNodeReady(),4,"Geographic backup node");
 }

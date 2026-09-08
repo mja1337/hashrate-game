@@ -64,6 +64,10 @@ function advanceCoolingInstalls(){
     const item=COOLING_EQUIPMENT.find(x=>x.id===o.id);if(!item)return false;
     const qty=Math.max(1,Number(o.qty||1));
     state.thermal.equipment[o.id]=(state.thermal.equipment[o.id]||0)+qty;
+    /* The tick's ordinary repaint patches text and never rebuilds a tab. A unit landing changes
+       the installed count, the order list and the heat-rejection figures, none of which are
+       text patches — so without this the Cooling section shows the plant it had yesterday. */
+    renderFullQueued=true;
     log(`Cooling commissioned: ${item.name}`,`+${fmtNum(item.coolingKw*qty)} kW heat rejection`,"operations");
     showToast("Cooling commissioned",`${item.name} is installed and thermostatically controlled. The room will move toward its new target temperature over the next few simulated days.`,"success","mine");
     return false;

@@ -34,7 +34,7 @@ cannot verify any repaint and every such fix has to be argued rather than demons
 **Check:** grep for `requestAnimationFrame` and ask of each: what happens if this never fires?
 If the answer is worse than "it draws late", it needs a timer armed alongside it.
 
-## 2. Stale UI because the tick repainted with `refreshLive()` · **hunting**
+## 2. Stale UI because the tick repainted with `refreshLive()` · **swept** (keep it swept)
 
 The tick's ordinary repaint patches text only. Anything structural goes stale unless something
 sets `renderFullQueued`, or it is in `bannerSignature()` / `modalSignature()`.
@@ -43,9 +43,25 @@ sets `renderFullQueued`, or it is in `bannerSignature()` / `modalSignature()`.
 - The modal that never appeared → `modalSignature()` (`b308837`).
 - Repair rows frozen on "Reconnect · 0d left" while the job finished underneath (`976d6fd`+).
 
-**Check:** for each thing the tick can change, ask which repaint draws it. If the answer is
-"a full render", something has to ask for one. Candidates not yet audited: procurement rows,
-cooling install progress, pool payout accrual, staged-intake changes, career/XP surfaces.
+**Check:** drive each `advance*` function ON ITS OWN and watch `renderFullQueued`. Not through
+`tick()` — faults raise the flag most days, so a tick-level probe reports every one of these as
+fine while they are not. That masking is why this class survived so long.
+
+Found by that method: cooling installs landing, pool payouts, the monthly second-hand listing
+refresh, and the node reaching or falling off the chain tip — four surfaces drawn once and then
+frozen.
+
+**And the counter-rule, which matters as much.** Not every change wants a rebuild. Node sync
+lag moves every single tick; asking for a full tab rebuild to animate a progress bar would undo
+the entire reason the tick repaints with `refreshLive()`. A number that changes continuously
+wants a text patch; a rebuild is for a change of STATE. Only the two transitions flag, and the
+contract asserts that ordinary progress does *not* — a contract that only checked "did it ask"
+would happily accept flagging everything.
+
+Audited and asking: maintenance stages and completion, procurement, retirements, staged intake,
+materials planning, cold spends, facility moves, fleet lifecycle, learning, cooling installs,
+pool payouts, second-hand listings, node tip transitions.
+Deliberately not asking: node sync progress, thermal temperature drift (both continuous).
 
 ## 3. A control offering what the action refuses · **swept** (keep it swept)
 
@@ -158,6 +174,7 @@ and ask whether every name belongs there.
 
 | Date | Class | Finding | Commit |
 |---|---|---|---|
+| 2026-09-08 | 2 | Cooling installs, pool payouts, listing refreshes and node tip changes drawn once then frozen | pending |
 | 2026-09-08 | 3 | Immersion drain offered with no cash for the refit labour | `333190f` |
 | 2026-09-08 | 3 | Both cold→hot controls enabled on a wallet that cannot sign | `020f3b5` |
 | 2026-09-08 | 3 | Service buttons enabled while you were already on a bench; clicking did nothing | `c02ee69` |

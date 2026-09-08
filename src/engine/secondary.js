@@ -87,6 +87,9 @@ function advanceSecondaryMarket(t=state.time){
   const month=new Date(t).toISOString().slice(0,7);
   if(store.month===month)return;
   store.month=month;
+  /* Once a month, and it changes what every second-hand card says is available to buy. Cheap to
+     ask for a rebuild at that cadence, and wrong to leave a card offering last month's depth. */
+  renderFullQueued=true;
   const glut=secondaryGlutMultiplier();
   for(const h of HARDWARE){
     if(h.permanent)continue;

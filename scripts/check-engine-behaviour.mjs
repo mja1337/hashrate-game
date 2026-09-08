@@ -65,6 +65,71 @@ const SITE = (overrides = "") => `
   state.poolAccount={balance:0,frozen:0,threshold:.01,destination:"hot",paidTotal:0,feesPaid:0,payouts:0,lastPayout:0};
   ${overrides}`;
 
+/* ---- WHAT THE TICK CHANGES, THE TICK HAS TO REDRAW ---- */
+
+rule("a tick that changes the shape of a tab asks for the rebuild", () => {
+  /* The tick's ordinary repaint is refreshLive(), which patches text and never rebuilds a tab.
+     Only renderFullQueued makes it call renderMineContent(). Anything structural that forgets
+     to raise it is drawn once and then frozen — which is how a repair row sat on "Reconnect ·
+     0d left" while the job finished underneath it.
+
+     Each advance is driven ON ITS OWN here, not through tick(): faults raise the flag most
+     days, so a tick-level probe reports every one of these as fine while they are not. */
+  const r = json(`(()=>{
+    const base=()=>{${SITE(`state.time=at("2016-06-01");state.facility="warehouse";state.region="texas";
+      state.maintenance.serviceJobs=[];state.maintenance.orders=[];
+      state.commissioningJobs=[];state.procurementOrders=[];state.inactiveHardware={};`)}};
+    const out=[];
+    const probe=(label,setup,run,read)=>{
+      base();setup();
+      renderFullQueued=false;
+      const before=JSON.stringify(read());
+      state.time+=DAY;run();
+      out.push({label,changed:JSON.stringify(read())!==before,asked:renderFullQueued===true});
+    };
+    probe("cooling install lands",
+      ()=>{state.hardware={s9:50};state.thermal={temperature:22,orders:[{id:"axial",qty:1,due:state.time+DAY,cost:0}],equipment:{}}},
+      ()=>advanceCoolingInstalls(),()=>state.thermal.equipment);
+    probe("pool payout lands",
+      ()=>{state.wallets.hot=0;state.poolAccount={balance:.5,frozen:0,threshold:.01,destination:"hot",paidTotal:0,feesPaid:0,payouts:0,lastPayout:0}},
+      ()=>advancePoolPayouts(),()=>state.poolAccount.payouts);
+    probe("second-hand listings refresh",
+      ()=>{state.time=at("2019-06-01");state.secondary={stock:{},month:""}},
+      ()=>advanceSecondaryMarket(state.time),()=>Object.keys(state.secondary.stock).length);
+    probe("staged crates go into the racks",
+      ()=>{state.time=at("2021-06-01");state.hardware={s19:1};state.inactiveHardware={s19:40};
+        state.stagedCondition={};state.thermal={temperature:22,orders:[],equipment:{axial:1}}},
+      ()=>advanceStagedIntake(),()=>state.commissioningJobs.length);
+    probe("node reaches the chain tip",
+      ()=>{state.node=1;state.nodeStorage=5000;state.nodeMode="full";
+        state.nodeSync={primaryLag:1,primaryPeak:40,backupLag:0,backupPeak:0}},
+      ()=>advanceNodeSync(true),()=>state.nodeSync.primaryLag);
+    probe("node falls off the tip",
+      ()=>{state.node=0;state.power=false;state.nodeSync={primaryLag:0,primaryPeak:0,backupLag:0,backupPeak:0}},
+      ()=>advanceNodeSync(true),()=>state.nodeSync.primaryLag);
+    probe("node already behind, falling further",
+      ()=>{state.node=0;state.power=false;state.nodeSync={primaryLag:12,primaryPeak:40,backupLag:0,backupPeak:0}},
+      ()=>advanceNodeSync(true),()=>state.nodeSync.primaryLag);
+    probe("node merely catching up",
+      ()=>{state.node=1;state.nodeStorage=5000;state.nodeMode="full";
+        state.nodeSync={primaryLag:40,primaryPeak:40,backupLag:0,backupPeak:0}},
+      ()=>advanceNodeSync(true),()=>state.nodeSync.primaryLag);
+    return{out}})()`);
+  const by = Object.fromEntries(r.out.map(o => [o.label, o]));
+  for (const label of ["cooling install lands","pool payout lands","second-hand listings refresh",
+                       "staged crates go into the racks","node reaches the chain tip","node falls off the tip"]) {
+    assert(by[label], `${label} was not probed`);
+    assert(by[label].changed, `${label} changed nothing, so the probe proves nothing`);
+    assert(by[label].asked, `${label} changed the shape of a tab without asking for the rebuild that draws it`);
+  }
+  /* And the counter-case, which is the whole reason this is not "flag on every change": a lag
+     that moves every single tick wants a text patch, not a tab rebuild. Raising the flag here
+     would undo the reason the tick repaints with refreshLive() at all. */
+  for (const label of ["node merely catching up", "node already behind, falling further"])
+    assert(by[label].changed && !by[label].asked,
+      `${label}: ordinary sync progress now forces a full tab rebuild every tick`);
+});
+
 /* ---- WHAT A BUTTON OFFERS IS WHAT THE ACTION ALLOWS ---- */
 
 rule("a service the button offers is a service that actually starts", () => {

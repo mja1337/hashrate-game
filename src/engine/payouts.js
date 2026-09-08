@@ -159,6 +159,8 @@ function advancePoolPayouts(){
   a.balance=0;a.paidTotal+=net;a.feesPaid+=Math.min(fee,sent);a.payouts++;a.lastPayout=state.time;
   const dest=payoutDestination(a.destination);
   creditPayout(a.destination,net);
+  // The payout card is balance, total paid and a count — structure, not a text patch.
+  renderFullQueued=true;
   log("Pool payout received",`+${fmtBtc(net)} to ${dest.name} · -${fmtBtc(Math.min(fee,sent))} network fee`,"custody");
 }
 
