@@ -268,10 +268,10 @@ and ask whether every name belongs there.
 
 | Date | Class | Finding | Commit |
 |---|---|---|---|
-| 2026-09-09 | 9 | Nothing asserted the shape of facility move risk: turning the `.48` ceiling into a floor made every expansion at least a coin-flip and the suite passed. Same for the `Math.min(state.cash,…)` clamp on incident fees — inverted, it drove cash to -73,471 from a balance of 500 | *pending* |
-| 2026-09-09 | 5 | Cooling on order was invisible to the move gate — plant ordered in a large site installs into whichever site you are standing in when the fitters finish. Third instance of the same in-flight-work class; `pendingCoolingOrdersFor()` was written for it and never called | *pending* |
-| 2026-09-09 | 13 | The fuzz power invariant threw instead of checking — a module constant referenced inside the VM-evaluated string — and 60 seeds could not reach the stranding precondition at all until an overshooting order action was added | *pending* |
-| 2026-09-09 | 13 | The fuzzer's replay was a lie: `initialState()` seeds the engine's own random stream from `Math.random()`, so a seed fixed the actions but not the world. A failure found on one run passed on replay | *pending* |
+| 2026-09-09 | 9 | Nothing asserted the shape of facility move risk: turning the `.48` ceiling into a floor made every expansion at least a coin-flip and the suite passed. Same for the `Math.min(state.cash,…)` clamp on incident fees — inverted, it drove cash to -73,471 from a balance of 500 | `c49c227` |
+| 2026-09-09 | 5 | Cooling on order was invisible to the move gate — plant ordered in a large site installs into whichever site you are standing in when the fitters finish. Third instance of the same in-flight-work class; `pendingCoolingOrdersFor()` was written for it and never called | `c49c227` |
+| 2026-09-09 | 13 | The fuzz power invariant threw instead of checking — a module constant referenced inside the VM-evaluated string — and 60 seeds could not reach the stranding precondition at all until an overshooting order action was added | `c49c227` |
+| 2026-09-09 | 13 | The fuzzer's replay was a lie: `initialState()` seeds the engine's own random stream from `Math.random()`, so a seed fixed the actions but not the world. A failure found on one run passed on replay | `c49c227` |
 | 2026-09-08 | 5 | Crates on the floor were racked against the site being *left* during a move, landing 306 machines and 999 kW into a 100 kW workshop — stranded for good. Found by the new fuzzer, not by a rule | `915fa67` |
 | 2026-09-08 | 12 | Retirement booked against machines owned rather than machines still racked; `retiringCount()` existed for this and was never called | `915fa67` |
 | 2026-09-08 | — | 12 fuzz seeds × 4000 days of random operator actions, and a 17-year idle run: no throw, no non-finite state, no negative fleet or wallet. Clean. | *audit* |
