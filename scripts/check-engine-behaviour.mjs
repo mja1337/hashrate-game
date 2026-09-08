@@ -893,6 +893,90 @@ rule("downsizing costs a lease break rather than a fit-out, and is far cheaper t
   assert(payback > 1 && payback < 6, `downsizing pays back in ${payback.toFixed(1)} months; it should be a few months, not free and not a year`);
 });
 
+rule("cooling on order counts against the site you are moving into", () => {
+  /* The third instance of one class: work already in flight that the gate does not count.
+     Machines mid-commission, crates waiting to be racked, and now plant on order — a cooling
+     order placed in a site with room to spare installs into whichever site the operator is
+     standing in when the fitters finish. buyCooling checks headroom honestly at the moment of
+     purchase; nothing re-checked it after the ground moved. pendingCoolingOrdersFor() was
+     written to answer this and was never called by anything. */
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.facility="warehouse";
+    state.region="texas";state.cash=1e9;state.hardware={s19:20};
+    state.thermal={temperature:22,orders:[],equipment:{}};`)}
+    const bought=[];
+    for(const item of COOLING_EQUIPMENT){
+      const before=JSON.stringify(state.thermal.orders);
+      buyCooling(item.id);
+      if(JSON.stringify(state.thermal.orders)!==before)bought.push(item.id);
+    }
+    const pendingW=state.thermal.orders.reduce((a,o)=>{
+      const it=COOLING_EQUIPMENT.find(x=>x.id===o.id);return a+(it?it.watts*(o.qty||1):0)},0);
+    const reason=facilityDownsizeBlockReason("workshop");
+    downsizeFacility("workshop");
+    return {bought:bought.length,pendingKw:+(pendingW/1000).toFixed(1),reason,
+      dispatched:!!state.facilityUpgradeJob,facility:state.facility}})()`);
+  assert(r.bought > 0, "no cooling was ordered, so the rule tests nothing");
+  assert(r.pendingKw > 20, `only ${r.pendingKw} kW of cooling was on order; too little to exceed the destination's supply`);
+  assert(r.reason !== "", `the move was allowed with ${r.pendingKw} kW of cooling still on order, which installs on arrival`);
+  assert(!r.dispatched && r.facility === "warehouse", "the move went ahead despite being refused");
+});
+
+rule("a facility move is a risk you can price, in both directions", () => {
+  /* Mutation testing found nothing asserting the SHAPE of move risk. Turning the .48 ceiling
+     into a floor — one character — makes every expansion at least a coin-flip disaster and the
+     whole suite passed. Risk is the number the operator accepts when they commit to a move, so
+     the bounds are the contract: an upgrade never certain to go wrong, a downsize meaningfully
+     safer than an expansion because there is no new grid connection to energise, and moving
+     nowhere costing nothing. */
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.cash=1e9;state.hardware={s19:20};`)}
+    const rows=[];
+    // facilityMoveRisk reads state.facility, so the site has to actually be set, not passed.
+    for(const from of FACILITIES){
+      for(const to of FACILITIES){
+        state.facility=from.id;
+        rows.push({from:from.id,to:to.id,
+          up:FACILITIES.findIndex(x=>x.id===to.id)>FACILITIES.findIndex(x=>x.id===from.id),
+          same:from.id===to.id,risk:facilityMoveRisk(to.id)});
+      }
+    }
+    return {rows,labels:[facilityRiskLabel(.05),facilityRiskLabel(.2),facilityRiskLabel(.4)]}})()`);
+  const same = r.rows.filter(x => x.same), ups = r.rows.filter(x => x.up),
+        downs = r.rows.filter(x => !x.up && !x.same);
+  assert(same.every(x => x.risk === 0), "moving to the site you are already in carries risk");
+  assert(ups.every(x => x.risk > 0 && x.risk <= 0.48),
+    `an expansion fell outside 0 < risk <= 0.48: ${JSON.stringify(ups.find(x => !(x.risk > 0 && x.risk <= 0.48)))}`);
+  assert(downs.every(x => x.risk > 0 && x.risk <= 0.2),
+    `a downsize fell outside 0 < risk <= 0.2: ${JSON.stringify(downs.find(x => !(x.risk > 0 && x.risk <= 0.2)))}`);
+  /* The ceiling has to BIND, or Math.min(.48,...) and Math.max(.48,...) are the same function
+     on this data and the assertion above proves nothing. */
+  assert(ups.some(x => x.risk > 0.2), "no expansion is riskier than a downsize ceiling; the bounds are not being exercised");
+  assert(Math.max(...downs.map(x => x.risk)) < Math.max(...ups.map(x => x.risk)),
+    "the riskiest downsize is not safer than the riskiest expansion");
+  assert(r.labels[0] === "Low move risk" && r.labels[2] === "High move risk",
+    `risk labels do not describe the bands: ${r.labels.join(" / ")}`);
+});
+
+rule("a move incident cannot charge more money than the operator has", () => {
+  /* Both incident fees are clamped with Math.min(state.cash, ...). Turning either into a
+     Math.max charges a fee computed from FLEET VALUE against a cash balance that may be a
+     fraction of it, so a bad roll on arrival invents debt out of nothing. Nothing asserted it. */
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.facility="warehouse";
+    state.region="texas";state.hardware={s19:400};state.insured=false;state.debt=0;`)}
+    // A large fleet and almost no cash: fees are priced off fleet value, so the clamp is load-bearing.
+    state.cash=500;
+    const fleetValue=Math.round(fleet().value);   // before any incident damages the fleet
+    const worst=[];
+    for(let trial=0;trial<200;trial++){
+      state.cash=500;state.facility="warehouse";state.hardware={s19:400};
+      state.facilityUpgradeJob={id:"workshop",due:state.time-DAY,cost:0,risk:1,down:true};
+      advanceFacilityMove();
+      worst.push(state.cash);
+    }
+    return {min:Math.min(...worst),fleetValue}})()`);
+  assert(r.fleetValue > 5000, `the fleet must be worth far more than the cash on hand for this to test anything, got ${r.fleetValue}`);
+  assert(r.min >= 0, `a move incident drove cash to ${r.min} from a starting balance of 500`);
+});
+
 rule("retirement cannot be booked for machines already on their way out", () => {
   /* retiringCount() was written to answer this and never called, so the cap was on machines
      owned rather than machines still in the racks. Booking the same 100 twice made a second

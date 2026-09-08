@@ -208,6 +208,15 @@ function facilityCoolingShed(targetId,s=state){
    destination is not allowed to have. */
 function facilityArrivalProbe(id,s=state){
   const shed=facilityCoolingShed(id,s),equipment={...(s.thermal?.equipment||{})};
+  /* Plant on order is plant that will be running here. A cooling order placed in a site with
+     room to spare installs into whichever site the operator is standing in when the fitters
+     finish, and the gate measured installed equipment only — so tens of kW of inbound plant
+     were invisible to the very check that exists to ask whether it fits. pendingCoolingOrdersFor
+     was written to answer this and was never called by anything. */
+  for(const order of s.thermal?.orders||[]){
+    const item=COOLING_EQUIPMENT.find(x=>x.id===order.id);if(!item)continue;
+    equipment[order.id]=(equipment[order.id]||0)+Math.max(1,Number(order.qty)||1);
+  }
   shed.items.forEach(item=>{delete equipment[item.id]});
   return{...s,facility:id,thermal:{...(s.thermal||{}),equipment}};
 }

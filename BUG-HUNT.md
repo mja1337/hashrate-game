@@ -28,7 +28,8 @@ Found, reproduced, not yet fixed. Newest first.
 
 | # | Class | Finding | Reproduction | Severity |
 |---|-------|---------|--------------|----------|
-| F3 | 12 | Nine functions are defined and never called: `retiringCount`, `fitsInstalledFleet`, `skillPrereqsMet`, `coldSpendPending`, `liquidSelfHeldBtc`, `pendingCoolingOrdersFor`, `activePoolShare`, `glossaryEntries`, `enhanceFacilities` (superseded by `enhanceFacilitiesV2`). Most are duplicates of a guard enforced elsewhere — but they read as if the guard lives here, which is how the next reader concludes a check exists when it does not. | `grep -rho "^function [a-zA-Z0-9_]*" src/`, count each name across `src/` and `index.html`, keep the ones appearing once. | Low — verified that skills, cold spends and site fit are each guarded by a *different* live function. Hygiene, and a trap for whoever reads next. |
+| F4 | 9 | 50 of 54 surviving mutants across `fleet-ops`, `facilities`, `payouts`, `signing` remain unkilled. Triaged: most are boundary (`>` vs `>=` on a due date, `add>0` vs `add>=0`) or message-shaping mutants where the outcome is asserted but the edge is not. The ones that change real behaviour and are still uncovered: `Math.max(0,paidTotal)`→`min` and `Math.min(fee,sent)`→`max` in payouts (fee accounting), `Math.max(0,…)`→`min` on `coldLockedBtc`/`liquidSelfHeldBtc` in signing (treasury distance reads zero), `Math.min(paused,qty)`→`max` in `setHardwarePower` (can un-pause more than are paused). | `node /tmp/mutate.mjs <file>` against a copy of the tree (`git archive HEAD | tar -x -C <dir>`), never the working tree — a sweep that rewrites source in place blocks every other edit for its duration and any concurrent test run loads a mutant. | Low-medium — none observed to strand or corrupt; they are unasserted edges, not known faults. |
+| F3 | 12 | Seven functions are still defined and never called: `fitsInstalledFleet`, `skillPrereqsMet`, `coldSpendPending`, `liquidSelfHeldBtc`, `pendingCoolingOrdersFor`, `activePoolShare`, `glossaryEntries`, plus `enhanceFacilities` (superseded by `enhanceFacilitiesV2`). **Two of the original nine turned out to mark real missing guards, not duplicates** — `retiringCount` (retirement double-booking, fixed `915fa67`) and `pendingCoolingOrdersFor` (cooling orders invisible to the move gate, fixed 2026-09-09). `pendingCoolingOrdersFor` is still uncalled because the fix iterates all orders rather than one id; either use it or delete it. The rest are verified duplicates: `skillPrereqsMet` (prerequisites enforced at `simulation.js:199`), `coldSpendPending` (cold is deducted at once, so a second transfer computes off the reduced balance), `fitsInstalledFleet` (the downsize gate and `rackLimits` both do this), `activePoolShare` (written out inline at `pools.js:4`), `liquidSelfHeldBtc`, and `glossaryEntries` — that last one a *second implementation* of glossary search, where the UI filters DOM nodes through `filterGlossary`/`glossarySearchKey` instead, so the two can drift apart without anyone noticing. | `grep -rho "^function [a-zA-Z0-9_]*" src/`, count each name across `src/` and `index.html`, keep the ones appearing once. For each, find what *does* enforce that rule. | Medium — the base rate is now two real bugs out of nine, so this list is worth finishing rather than filing as hygiene. |
 | F1 | 1 | `queueRender(true)` has no timer fallback, so a render requested while the tab is hidden waits for the tab to come back. Coin-loss modals and the 3D mount both had to grow their own `setTimeout` fallback separately; the shared path still has none. | Hide the tab, trigger any `queueRender(true)`, observe nothing is drawn until focus returns. | Low — every known caller has its own fallback. Ranked `accepted` until one does not. |
 
 ---
@@ -219,8 +220,39 @@ to be written around the one case where no such decision exists. Written that wa
 racking-during-a-move stranding on seed 4, which no rule in the suite was asking about, and
 which the behavioural suite passed straight through.
 
+**Tuning it took two goes, and the first was wrong in an instructive way.** The check began as
+"over capacity with overdrive off for more than three days", which fired on seed 4 — a fleet
+sitting over its cap for four days because cooling demand rose with the heat, explained plainly
+by `siteStopReason()`, and recovered on its own. That is the simulation working, not a bug. The
+fix was not to raise the threshold until it went quiet: that trades away the sensitivity the
+check exists for. Power and floor space fail differently, so they are now asked about
+separately — power is a load that legitimately spikes and recovers, so only a breach that never
+ends counts; floor space is not a load, racks do not grow when it is warm, so more machines on
+the floor than the floor holds is always wrong and needs no patience at all.
+
+**A fuzzer only finds what it can reach, and proving that takes a mutant too.** Reintroducing
+the racking-during-a-move stranding and running 60 seeds caught it *zero* times. The
+precondition is crates standing in `inactiveHardware` when a move is dispatched, and crates
+only accumulate when intake is capacity-blocked — which ordinary random buying almost never
+achieves. An action that deliberately overshoots capacity (50-450 units) was added, and the
+same mutant is now caught on seed 6. The lesson generalises: after writing an invariant, break
+the code it guards and confirm the fuzzer notices. An unreachable state is an unasserted one.
+
+That run also exposed a check that could not fire at all: `STRANDED_DAYS` was declared in the
+module but used inside the string evaluated in the VM, so the power branch threw instead of
+testing, and the surrounding grep reported "not caught" rather than "errored". Two failures
+that look identical from outside — silence — and only one of them is real.
+
 **Check:** `node scripts/fuzz-engine.mjs` — a failure prints the seed, and
 `node scripts/fuzz-engine.mjs <seed>` replays exactly that run.
+
+**And the harness had this bug first.** The engine keeps its own random stream — faults,
+events, weather, market noise — which `initialState()` seeds from `Math.random()`. The fuzzer
+seeded only its action chooser, so a run was half-reproducible: the same actions every time,
+a different world each time. A failure found on seed 29 passed on replay, which is worse than
+having no replay at all, because it reads as a flake and gets dismissed. Both streams are
+seeded now. Any harness that advertises reproducibility should be made to prove it — run the
+same seed three times and compare `state.rng`, not just the pass/fail.
 
 ## 11. Module-ceiling extractions done in a hurry · **hunting**
 
@@ -236,6 +268,10 @@ and ask whether every name belongs there.
 
 | Date | Class | Finding | Commit |
 |---|---|---|---|
+| 2026-09-09 | 9 | Nothing asserted the shape of facility move risk: turning the `.48` ceiling into a floor made every expansion at least a coin-flip and the suite passed. Same for the `Math.min(state.cash,…)` clamp on incident fees — inverted, it drove cash to -73,471 from a balance of 500 | *pending* |
+| 2026-09-09 | 5 | Cooling on order was invisible to the move gate — plant ordered in a large site installs into whichever site you are standing in when the fitters finish. Third instance of the same in-flight-work class; `pendingCoolingOrdersFor()` was written for it and never called | *pending* |
+| 2026-09-09 | 13 | The fuzz power invariant threw instead of checking — a module constant referenced inside the VM-evaluated string — and 60 seeds could not reach the stranding precondition at all until an overshooting order action was added | *pending* |
+| 2026-09-09 | 13 | The fuzzer's replay was a lie: `initialState()` seeds the engine's own random stream from `Math.random()`, so a seed fixed the actions but not the world. A failure found on one run passed on replay | *pending* |
 | 2026-09-08 | 5 | Crates on the floor were racked against the site being *left* during a move, landing 306 machines and 999 kW into a 100 kW workshop — stranded for good. Found by the new fuzzer, not by a rule | `915fa67` |
 | 2026-09-08 | 12 | Retirement booked against machines owned rather than machines still racked; `retiringCount()` existed for this and was never called | `915fa67` |
 | 2026-09-08 | — | 12 fuzz seeds × 4000 days of random operator actions, and a 17-year idle run: no throw, no non-finite state, no negative fleet or wallet. Clean. | *audit* |
