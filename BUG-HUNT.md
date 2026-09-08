@@ -61,9 +61,15 @@ calls. The fix is always the same — one `somethingBlockReason()` used by both,
 PARITY rather than as a list of conditions, so a refusal added to the action and forgotten in
 the helper fails the contract.
 
+A refusal added to an action reaches its buttons only if somebody remembers. Adding the
+cold-storage signing gate created exactly that gap, and there were TWO controls to fix — the
+Custody tab's transfer and the threat lab's shortcut — so fixing the one the first grep turned
+up left the other one broken. **When a control is duplicated, grep for the duplicate.**
+
 Audited and matching: service (`serviceBlockReason`), immersion, downsize, cooling sale, payout
-destination, cold spend, staged intake, skills (`skillGateReason`).
-Not yet audited: energy contracts, region relocation, node storage and mode, wallet transfers,
+destination, cold spend (both controls), staged intake, skills (`skillGateReason`), region
+relocation (`available` covers the Sichuan closure).
+Not yet audited: energy contracts, node storage and mode, venue deposits and withdrawals,
 strategy securities, learning items, pool selection.
 
 ## 4. A boolean where a count was meant · **fixed** `8c13c5f`
@@ -145,6 +151,7 @@ and ask whether every name belongs there.
 
 | Date | Class | Finding | Commit |
 |---|---|---|---|
+| 2026-09-08 | 3 | Both cold→hot controls enabled on a wallet that cannot sign | pending |
 | 2026-09-08 | 3 | Service buttons enabled while you were already on a bench; clicking did nothing | `c02ee69` |
 | 2026-09-08 | 2 | Repair rows froze on "Reconnect · 0d left" while the job finished | `bc69119` |
 | 2026-09-08 | 4 | Field technicians did not stack — boolean, not count | `8c13c5f` |

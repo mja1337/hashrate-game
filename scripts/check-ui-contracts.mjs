@@ -236,6 +236,31 @@ assert(!inline.includes("function techV2(){") || techArt.includes("function tech
 assert(inline.includes("let techScrollLeft=0") && inline.includes("if(techScrollLeft)lattice.scrollLeft=techScrollLeft"),
   "The skill tree's horizontal scroll resets on every repaint again");
 
+/* EVERY CONTROL THAT SPENDS FROM COLD ASKS WHETHER THE WALLET CAN SIGN.
+   Adding the signing gate created a refusal the buttons did not know about: an unsignable
+   wallet showed an enabled control with an empty tooltip that did nothing when clicked. There
+   are TWO such controls — the Custody tab's transfer and the threat lab's shortcut — and
+   fixing only the one that turned up in the first grep is how this class keeps recurring. */
+assert(inline.includes("function coldMoveBlockReason()") && inline.includes("function labColdMoveReason()"),
+  "A cold-spend control no longer shares the action's refusal");
+/* And each of them has to actually ask. A helper that answers only the balance question is the
+   original bug wearing the new function's name. */
+for (const fn of ["coldMoveBlockReason", "labColdMoveReason"]) {
+  const body = (inline.match(new RegExp(`function ${fn}\\(\\)\\{[\\s\\S]*?\\n\\}`)) || [""])[0];
+  assert(body.includes("coldSpendBlockReason"),
+    `${fn}() no longer consults the signing gate, so it only ever answers the balance question`);
+}
+{
+  const coldControls = [...inline.matchAll(/data-from="cold"[^>]*?\$\{([A-Za-z]+)\(\)\?"disabled"/g)].map(m => m[1]);
+  assert(coldControls.length >= 2,
+    `only ${coldControls.length} cold-source control(s) gate on a reason function; both the tab and the lab must`);
+  for (const fn of coldControls)
+    assert(/^(coldMoveBlockReason|labColdMoveReason|coldSpendBlockReason)$/.test(fn),
+      `a cold-source control gates on ${fn}(), which is not one of the shared signing refusals`);
+}
+assert(!/data-from="cold"[^>]*\$\{cold<=0\?"disabled"/.test(inline) && !/data-from="cold"[^>]*\$\{state\.wallets\.cold<=0\?"disabled"/.test(inline),
+  "A cold-source control is back to checking only the balance, so an unsignable wallet offers a button that does nothing");
+
 /* THE BENCH IS THE MACHINE, AND IT SHOWS ITS WORKING.
    Three abstract shapes — four arrows, six identical dots, a number to hit — with no
    relationship to the machine or the part, and all three punishing the player for information
