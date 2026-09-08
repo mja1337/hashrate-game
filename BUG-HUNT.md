@@ -131,7 +131,7 @@ and ask whether every name belongs there.
 
 | Date | Class | Finding | Commit |
 |---|---|---|---|
-| 2026-09-08 | 2 | Repair rows froze on "Reconnect · 0d left" while the job finished | `1b6ac5e` |
+| 2026-09-08 | 2 | Repair rows froze on "Reconnect · 0d left" while the job finished | `bc69119` |
 | 2026-09-08 | 4 | Field technicians did not stack — boolean, not count | `8c13c5f` |
 | 2026-09-08 | 7 | 3D floor rebuilt every tick, lost the WebGL context at ~50k miners | `ad77732` |
 | 2026-09-08 | 5, 6 | Site held more fleet than it could carry, and said nothing | `8ce707e` |
