@@ -12,7 +12,23 @@ fix, then write the contract that would have caught it, then *mutate*: reintrodu
 confirm the contract fails. A contract that passes against the reintroduced bug is not a
 contract, and this file records several that did exactly that.
 
-Status: `open` · `hunting` · `fixed` (with the commit) · `accepted` (known, deliberately left).
+Status: `open` · `hunting` · `swept` · `fixed` (with the commit) · `accepted` (known,
+deliberately left).
+
+**Everything found gets written down, fixed or not.** A hunt that finds three faults and fixes
+one has still found three. Anything not fixed on the spot goes in *Open findings* below with
+enough detail to act on cold — the reproduction, not just the symptom. The `Log` at the bottom
+is the closed list; *Open findings* is the work.
+
+---
+
+## Open findings
+
+Found, reproduced, not yet fixed. Newest first.
+
+| # | Class | Finding | Reproduction | Severity |
+|---|-------|---------|--------------|----------|
+| F1 | 1 | `queueRender(true)` has no timer fallback, so a render requested while the tab is hidden waits for the tab to come back. Coin-loss modals and the 3D mount both had to grow their own `setTimeout` fallback separately; the shared path still has none. | Hide the tab, trigger any `queueRender(true)`, observe nothing is drawn until focus returns. | Low — every known caller has its own fallback. Ranked `accepted` until one does not. |
 
 ---
 
@@ -152,13 +168,28 @@ Several have passed their mutants first time by being too loose:
 
 **Check:** mutate every new contract. If it survives, the contract is the bug.
 
-## 10. Cross-rule contamination in the behavioural harness · **hunting**
+## 10. Cross-rule contamination in the behavioural harness · **fixed** (this pass)
 
 `SITE()` now resets facility, region, seen events, hardware alerts, secondary stock, pool
 account, and the cumulative `mined`/`blocks` counters — each added after a rule failed for
 reasons that had nothing to do with it.
 
-**Check:** when a rule fails that you did not touch, suspect the rule *above* it before the code.
+The fleet lifecycle — `commissioningJobs`, `procurementOrders`, `retirementJobs`,
+`inactiveHardware`, `poweredDownHardware`, `decommissionedHardware`, `stagedCondition` — was
+added late and `SITE()` never learned it. Rules cleared those by hand, so the reset was only as
+good as the author's memory. Found by mutation, not by the suite: a mutant in
+`facilityDownsizeBlockReason` killed the downsize rule *and* an unrelated repair-stage rule,
+because the stranded site left a commissioning job running that went on landing machines into
+the next rule's floor.
+
+**The general lesson.** A green suite does not prove isolation, because contamination only
+shows when a rule starts failing — and a passing rule that depends on its predecessor is
+already broken, it just has not been asked yet. Mutation testing finds it: a mutant should kill
+*exactly* the rules that cover the mutated code. Extra casualties are contamination, and they
+are worth chasing even though the suite is green.
+
+**Check:** when a rule fails that you did not touch, suspect the rule *above* it before the
+code. When a mutant kills more rules than it should, the harness is leaking.
 
 ## 11. Module-ceiling extractions done in a hurry · **hunting**
 
@@ -174,6 +205,9 @@ and ask whether every name belongs there.
 
 | Date | Class | Finding | Commit |
 |---|---|---|---|
+| 2026-09-08 | 5 | Downsize judged fit on the installed fleet, ignoring machines mid-commission — the crates land anyway and strand the site | *pending* |
+| 2026-09-08 | 10 | `SITE()` never reset the fleet-lifecycle state, so a stalled commissioning job leaked into later rules | *pending* |
+| 2026-09-08 | — | Save migration audited against a pre-session save: 120 ticks, no missing fields, no non-finite numbers, legacy job drained, `floorView` migrated. Clean. | *audit* |
 | 2026-09-08 | 2 | Cooling installs, pool payouts, listing refreshes and node tip changes drawn once then frozen | `569e496` |
 | 2026-09-08 | 3 | Immersion drain offered with no cash for the refit labour | `333190f` |
 | 2026-09-08 | 3 | Both cold→hot controls enabled on a wallet that cannot sign | `020f3b5` |

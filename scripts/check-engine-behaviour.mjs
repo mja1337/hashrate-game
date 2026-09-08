@@ -62,6 +62,14 @@ const SITE = (overrides = "") => `
   state.mined=0;state.blocks=0;
   state.seen=[];state.hardwareAlerts={seen:[],queue:[],active:null,resumeSpeed:0};
   state.secondary={stock:{},month:""};state.pendingLosses=[];state.lossResume=false;
+  /* The physical fleet lifecycle resets too. These arrived late and SITE did not learn them,
+     so rules cleared them by hand and whoever forgot inherited the last rule's crates: a
+     stalled commissioning job would go on landing machines into the next rule's site, take it
+     over capacity, and fail an assertion about something else entirely. Contamination that
+     only appears under a mutant is worse than a bug, because it makes every result suspect. */
+  state.commissioningJobs=[];state.procurementOrders=[];state.retirementJobs=[];
+  state.inactiveHardware={};state.poweredDownHardware={};state.decommissionedHardware={};
+  state.stagedCondition={};
   state.poolAccount={balance:0,frozen:0,threshold:.01,destination:"hot",paidTotal:0,feesPaid:0,payouts:0,lastPayout:0};
   ${overrides}`;
 
@@ -883,6 +891,30 @@ rule("downsizing costs a lease break rather than a fit-out, and is far cheaper t
      free, or staying in a site you have outgrown downward would never be a mistake. */
   const payback = money.down / money.rentSaved;
   assert(payback > 1 && payback < 6, `downsizing pays back in ${payback.toFixed(1)} months; it should be a few months, not free and not a year`);
+});
+
+rule("a downsize counts the machines still being commissioned, not just the installed ones", () => {
+  /* Crates already paid for arrive whether or not the site shrank under them. This was a real
+     stranding: 20 machines installed, 200 mid-commission, the workshop accepted the move, and
+     the floor landed 5x over its power cap with no way back. The guard has to price the inbound. */
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.facility="warehouse";
+    state.region="texas";state.cash=1e8;state.hardware={s19:20};
+    state.thermal={temperature:22,orders:[],equipment:{axial:2}};
+    state.commissioningJobs=[{id:"s19",qty:200,done:0,started:state.time,due:state.time+10*DAY,days:10}];`)}
+    const reason=facilityDownsizeBlockReason("workshop");
+    downsizeFacility("workshop");
+    const dispatched=!!state.facilityUpgradeJob;
+    let over=false;
+    for(let d=0;d<60;d++){tick(true);if(!fleet().within)over=true}
+    return {reason,dispatched,everOverCapacity:over,facility:state.facility,
+      within:fleet().within,kw:+fleet().potentialKw.toFixed(1),cap:fleet().cap,
+      installed:state.hardware.s19}})()`);
+  assert(r.reason !== "", "the workshop accepted a move with 200 machines mid-commission; it cannot hold them");
+  assert(/commission/i.test(r.reason), `the refusal should say the inbound hardware is the reason, but read: ${r.reason}`);
+  assert(!r.dispatched, "the move was dispatched despite being refused");
+  assert(r.installed === 220, `the 200 commissioning machines should still land, got ${r.installed}`);
+  assert(!r.everOverCapacity, "the site went over capacity at some point in the 60 days after the refusal");
+  assert(r.within, `the fleet ended outside its site: ${r.kw} kW against ${r.cap} kW`);
 });
 
 rule("the cooling plant a smaller site cannot host is sold with the site", () => {

@@ -584,8 +584,14 @@ assert(inline.includes("busy=move||upgradeJob") && inline.includes('upgradeJob?"
 assert(inline.includes("function facilityDownsizeBlockReason(") && inline.includes("function downsizeFacility(") && inline.includes("if(target<current)return downsizeFacility(id)"),
   "Downsizing is gone, or the facility action has gone back to being one-way");
 assert(!inline.includes("Downsizing is not available in this build"), "The one-way refusal is back");
-assert(/fs\.space>target\.space/.test(inline) && /fs\.potentialKw>fs\.cap/.test(inline),
-  "Downsizing no longer checks that the installed fleet fits the smaller site on both floor space and peak power");
+assert(/space>target\.space/.test(inline) && /kw>fs\.cap/.test(inline),
+  "Downsizing no longer checks that the fleet fits the smaller site on both floor space and peak power");
+/* And the fit is judged on the fleet that will EXIST there, not the one installed today.
+   Machines already part-way through commissioning arrive whether or not the site shrank under
+   them, so the gate has to carry committedLoad() into both comparisons. Dropping either term
+   re-opens the stranding: the move is accepted, the crates land, the floor goes over its cap. */
+assert(/const space=fs\.space\+inbound\.space,kw=fs\.potentialKw\+inbound\.watts\/1000/.test(inline),
+  "Downsizing has stopped counting the machines still being commissioned into the fit test");
 assert(inline.includes("const down=!active&&facilityIsDownsize(f.id),downBlock=down?facilityDownsizeBlockReason(f.id):\"\"") && inline.includes("(down?!!downBlock:state.cash<(f.cost+reserve))"),
   "The facility card no longer reads its disabled state from the same helper that refuses the move");
 assert(inline.includes("facilityDownsizeCost(") && inline.includes("FACILITY_BREAK_MONTHS"),

@@ -218,9 +218,14 @@ function facilityDownsizeBlockReason(id,s=state){
   if(s.time<at(target.date))return `${target.name} is not available until ${dateFmt(at(target.date),true)}.`;
   if(s.facilityUpgradeJob)return "A facility move is already underway; it must finish first.";
   if(s.relocationJob)return "The fleet is in transit between regions and cannot also change site.";
-  const fs=fleet(facilityArrivalProbe(id,s));
-  if(fs.space>target.space)return `The installed fleet needs ${fmtNum(fs.space)} floor units and ${target.name} has ${fmtNum(target.space)}. Sell or decommission machines until the fleet fits.`;
-  if(fs.potentialKw>fs.cap)return `At full draw the fleet would need ${fs.potentialKw.toFixed(1)} kW at ${target.name}, which supplies ${fs.cap.toFixed(1)} kW${fs.coolingW>0?` — ${(fs.coolingW/1000).toFixed(1)} kW of that is cooling plant the smaller site can still host`:""}. Sell, decommission or turn down overdrive until the fleet fits.`;
+  const fs=fleet(facilityArrivalProbe(id,s)),inbound=committedLoad(s);
+  /* Machines already paid for and part-way through commissioning arrive whether or not the
+     site shrank under them. Judging fit on the installed fleet alone lets an operator move
+     into a site the inbound crates then overflow, and the whole floor drops offline. */
+  const space=fs.space+inbound.space,kw=fs.potentialKw+inbound.watts/1000;
+  const alsoInbound=inbound.space>0||inbound.watts>0?` — ${fmtNum(inbound.space)} floor units and ${(inbound.watts/1000).toFixed(1)} kW of that is hardware still being commissioned, which arrives regardless`:"";
+  if(space>target.space)return `The fleet needs ${fmtNum(space)} floor units and ${target.name} has ${fmtNum(target.space)}${alsoInbound}. Sell or decommission machines until the fleet fits.`;
+  if(kw>fs.cap)return `At full draw the fleet would need ${kw.toFixed(1)} kW at ${target.name}, which supplies ${fs.cap.toFixed(1)} kW${fs.coolingW>0?` — ${(fs.coolingW/1000).toFixed(1)} kW of that is cooling plant the smaller site can still host`:""}${alsoInbound}. Sell, decommission or turn down overdrive until the fleet fits.`;
   const cost=Math.max(0,facilityDownsizeCost(target,s)-facilityCoolingShed(id,s).credit);
   if(s.cash<cost)return `Breaking the ${(FACILITIES.find(x=>x.id===s.facility)||FACILITIES[0]).name} lease and re-racking at ${target.name} costs ${fmtUsd(cost)}.`;
   return "";
