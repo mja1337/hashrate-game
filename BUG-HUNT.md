@@ -236,11 +236,11 @@ and ask whether every name belongs there.
 
 | Date | Class | Finding | Commit |
 |---|---|---|---|
-| 2026-09-08 | 5 | Crates on the floor were racked against the site being *left* during a move, landing 306 machines and 999 kW into a 100 kW workshop — stranded for good. Found by the new fuzzer, not by a rule | *pending* |
-| 2026-09-08 | 12 | Retirement booked against machines owned rather than machines still racked; `retiringCount()` existed for this and was never called | *pending* |
+| 2026-09-08 | 5 | Crates on the floor were racked against the site being *left* during a move, landing 306 machines and 999 kW into a 100 kW workshop — stranded for good. Found by the new fuzzer, not by a rule | `915fa67` |
+| 2026-09-08 | 12 | Retirement booked against machines owned rather than machines still racked; `retiringCount()` existed for this and was never called | `915fa67` |
 | 2026-09-08 | — | 12 fuzz seeds × 4000 days of random operator actions, and a 17-year idle run: no throw, no non-finite state, no negative fleet or wallet. Clean. | *audit* |
-| 2026-09-08 | 5 | Downsize judged fit on the installed fleet, ignoring machines mid-commission — the crates land anyway and strand the site | *pending* |
-| 2026-09-08 | 10 | `SITE()` never reset the fleet-lifecycle state, so a stalled commissioning job leaked into later rules | *pending* |
+| 2026-09-08 | 5 | Downsize judged fit on the installed fleet, ignoring machines mid-commission — the crates land anyway and strand the site | `e45b365` |
+| 2026-09-08 | 10 | `SITE()` never reset the fleet-lifecycle state, so a stalled commissioning job leaked into later rules | `e45b365` |
 | 2026-09-08 | — | Save migration audited against a pre-session save: 120 ticks, no missing fields, no non-finite numbers, legacy job drained, `floorView` migrated. Clean. | *audit* |
 | 2026-09-08 | 2 | Cooling installs, pool payouts, listing refreshes and node tip changes drawn once then frozen | `569e496` |
 | 2026-09-08 | 3 | Immersion drain offered with no cash for the refit labour | `333190f` |
