@@ -220,10 +220,19 @@ function advanceMaintenance(){
           break;
         }
         job.stage++;
+        /* A STAGE CHANGE HAS TO ASK FOR THE REPAINT. The tick's ordinary repaint is
+           refreshLive(), which patches text and never rebuilds the Mine tab — so a job could
+           move Reconnect → Fit → Stability → done underneath a row that went on saying
+           "Reconnect · 0d left" for as long as the clock ran. The engine was never stuck; the
+           only thing frozen was the row describing it. Complications and the bench hand-over
+           already asked for it, which is why those transitions looked fine and these did not. */
+        renderFullQueued=true;
         if(job.stage<REPAIR_STAGES.length)job.stageDue=state.time+REPAIR_STAGES[job.stage].weight*(job.totalDays||1)*DAY;
       }
       if(job.stage<REPAIR_STAGES.length)return true;
     }
+    // Same again for the job leaving the list entirely: the row has to stop being drawn.
+    renderFullQueued=true;
     const repaired=Math.max(1,Number(job.count)||0);
     if(job.part){
       const byPart=state.maintenance.faultsByPart[job.id]||(state.maintenance.faultsByPart[job.id]={}),partName=sparePart(job.part)?.name||job.part;

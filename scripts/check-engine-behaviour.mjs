@@ -65,6 +65,69 @@ const SITE = (overrides = "") => `
   state.poolAccount={balance:0,frozen:0,threshold:.01,destination:"hot",paidTotal:0,feesPaid:0,payouts:0,lastPayout:0};
   ${overrides}`;
 
+/* ---- A JOB THAT MOVES HAS TO SAY SO ---- */
+
+rule("a repair changing stage asks the Mine tab to redraw", () => {
+  /* The tick's ordinary repaint is refreshLive(), which patches text and never rebuilds the
+     Mine tab. Only renderFullQueued makes it call renderMineContent(). Stage transitions did
+     not set it, so a job could move Reconnect -> Fit -> Stability -> finished underneath a row
+     that went on saying "Reconnect · 0d left" for as long as the clock ran. The engine was
+     never stuck; the row describing it was. */
+  const r = json(`(()=>{${SITE(`state.time=at("2010-03-01");state.facility="home";state.region="na";
+    state.hardware={};state.hardware.laptop=1;state.staff=[];state.skills=[];`)}
+    state.maintenance.serviceJobs=[];state.maintenance.condition.laptop=70;
+    state.maintenance.faults={laptop:1};state.maintenance.faultsByPart={laptop:{laptopfan:1}};
+    state.maintenance.inventory.laptopfan=5;state.maintenance.inventory.thermalpaste=20;
+    serviceHardwarePart("laptop","laptopfan");
+    const job=activeServiceJob("laptop");
+    for(let i=0;i<30&&(job.stage||0)<2;i++)tick(true);
+    if(!job.oldRemoved)repairRemoveOldPart("laptop");
+    if(job.puzzleType===0){for(const slot of job.tapOrder.slice())repairTapSlot("laptop",slot)}
+    else if(job.puzzleType===1){const slots=job.cableSlots.slice();
+      for(let p=0;p<3;p++){const idx=[];slots.forEach((v,i)=>{if(v===p)idx.push(i)});
+        repairCableClick("laptop",idx[0]);repairCableClick("laptop",idx[1])}}
+    else{let g=0;while(Math.abs(job.dialValue-job.dialTarget)>job.dialTolerance&&g++<80){
+      const off=job.dialValue-job.dialTarget;repairNudgeDial("laptop",off>0?(off>5?-5:-1):(off<-5?5:1))}}
+    const stageAfterWork=job.stage;
+    // Clear the flag, then run ONE tick and see whether the transition re-raises it.
+    const steps=[];
+    for(let i=0;i<6;i++){
+      renderFullQueued=false;
+      const before=activeServiceJob("laptop");
+      const stageBefore=before?before.stage:null;
+      tick(true);
+      const after=activeServiceJob("laptop");
+      const stageAfter=after?after.stage:"gone";
+      if(stageBefore!==stageAfter)steps.push({from:stageBefore,to:stageAfter,asked:renderFullQueued===true});
+      if(!after)break;
+    }
+    return{stageAfterWork,steps}})()`);
+  assert(r.stageAfterWork > 2, "the bench work never completed, so there are no later stages to test");
+  assert(r.steps.length > 0, "the job never changed stage on a tick");
+  for (const step of r.steps)
+    assert(step.asked, `moving from stage ${step.from} to ${step.to} did not ask the Mine tab to redraw, so the row would freeze there`);
+  // Including the transition that removes the job: the row has to stop being drawn at all.
+  assert(r.steps.some(step => step.to === "gone"), "the job never finished within the window");
+
+  /* A save written before repairs were staged carries a job with no stage field, and that path
+     skips the stage loop entirely — so it needs its own flag on completion. Asserting only
+     through the staged path let that one be deleted without anything noticing, because the
+     final stage++ had already raised the flag. */
+  const legacy = json(`(()=>{${SITE(`state.time=at("2010-03-01");state.facility="home";state.region="na";
+    state.hardware={};state.hardware.laptop=1;`)}
+    state.maintenance.condition.laptop=70;
+    state.maintenance.faults={laptop:1};state.maintenance.faultsByPart={laptop:{laptopfan:1}};
+    state.maintenance.inventory.laptopfan=5;state.maintenance.inventory.thermalpaste=20;
+    // A pre-staging job: due date only, no stage.
+    state.maintenance.serviceJobs=[{id:"laptop",count:1,part:"laptopfan",due:state.time+DAY,
+      crew:1,contracted:false,labor:0,auto:true}];
+    renderFullQueued=false;
+    state.time+=DAY*2;advanceMaintenance();
+    return{gone:!activeServiceJob("laptop"),asked:renderFullQueued===true}})()`);
+  assert(legacy.gone, "a legacy job never completed");
+  assert(legacy.asked, "a legacy job finished without asking the Mine tab to stop drawing its row");
+});
+
 /* ---- THE BENCH ASKS FOR A PROCEDURE, NOT A GUESS ---- */
 
 rule("the faulted part decides the procedure", () => {

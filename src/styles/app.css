@@ -168,7 +168,7 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--orange);outline-off
 /* ---- ELECTRICAL LOAD ---- */
 .power-card .meta.cool{color:var(--green)}.power-card .meta.warm{color:var(--orange2)}
 .power-card .meta.hot{color:var(--orange)}.power-card .meta.critical{color:var(--red)}
-.power-bar{position:relative;display:flex;height:26px;border:1px solid var(--line);background:#0a0f10;overflow:hidden}
+.power-bar{position:relative;display:flex;height:17px;border:1px solid var(--line);background:#0a0f10;overflow:hidden}
 .power-seg{display:block;height:100%;transition:width .25s}
 .power-seg.miners{background:linear-gradient(180deg,#f7a13d,#c97d24)}
 .power-seg.cooling{background:linear-gradient(180deg,#68bafa,#3f83b8)}

@@ -310,7 +310,7 @@ assert(powerArt.includes('class="power-seg miners"') && powerArt.includes('class
   "The load bar no longer separates machine draw from cooling plant draw");
 assert(powerArt.includes('class="power-peak') && /Peak is what has to fit/.test(powerArt),
   "The peak marker is gone; peak is what has to fit, not today's draw");
-assert(css.includes(".power-bar{position:relative") && css.includes(".power-seg.cooling{"),
+assert(/\.power-bar\{position:relative;display:flex;height:1[0-9]px/.test(css) && css.includes(".power-seg.cooling{"),
   "The load bar has no styling to separate its segments");
 
 /* A MIGRATION IS A SITE-WIDE STOPPAGE AND MUST BE BANNERED LIKE ONE.
