@@ -28,7 +28,7 @@ Found, reproduced, not yet fixed. Newest first.
 
 | # | Class | Finding | Reproduction | Severity |
 |---|-------|---------|--------------|----------|
-| F4 | 9 | 50 of 54 surviving mutants across `fleet-ops`, `facilities`, `payouts`, `signing` remain unkilled. Triaged: most are boundary (`>` vs `>=` on a due date, `add>0` vs `add>=0`) or message-shaping mutants where the outcome is asserted but the edge is not. The ones that change real behaviour and are still uncovered: `Math.max(0,paidTotal)`→`min` and `Math.min(fee,sent)`→`max` in payouts (fee accounting), `Math.max(0,…)`→`min` on `coldLockedBtc`/`liquidSelfHeldBtc` in signing (treasury distance reads zero), `Math.min(paused,qty)`→`max` in `setHardwarePower` (can un-pause more than are paused). | `node /tmp/mutate.mjs <file>` against a copy of the tree (`git archive HEAD | tar -x -C <dir>`), never the working tree — a sweep that rewrites source in place blocks every other edit for its duration and any concurrent test run loads a mutant. | Low-medium — none observed to strand or corrupt; they are unasserted edges, not known faults. |
+| F4 | 9 | ~42 boundary mutants remain across `fleet-ops`, `facilities`, `payouts`, `signing` — `>` vs `>=` on a due date, and similar. Spot-checked: these shift a job's completion by one simulated day and change nothing an operator could observe or act on. **Accepted, not unexamined**: writing a contract per boundary would pin arbitrary detail and make the suite hostile to ordinary edits. Revisit only if a due-date off-by-one ever produces a visible symptom. | `grep SURVIVORS /tmp/mut2.json` after re-running the sweep | Low |
 | F1 | 1 | `queueRender(true)` has no timer fallback, so a render requested while the tab is hidden waits for the tab to come back. Coin-loss modals and the 3D mount both had to grow their own `setTimeout` fallback separately; the shared path still has none. | Hide the tab, trigger any `queueRender(true)`, observe nothing is drawn until focus returns. | Low — every known caller has its own fallback. Ranked `accepted` until one does not. |
 
 ---
@@ -204,6 +204,19 @@ wanting a different draw overrides it visibly.
 **Check:** run the suite six times and count failures. Anything other than an identical count
 every time means a rule is reading a random world.
 
+## 16. A gate that could be outrun · **fixed** (this pass)
+
+The behavioural suite collected failures into an array and reported them near the end of the
+file. Three rules appended below that point ran, failed, pushed onto the array, and were never
+printed — the suite said "121 rules exercised" and exited zero while one of them was failing on
+every run. A mutant survived purely because of *where* its contract happened to be written.
+
+The gate now runs from `process.on("exit")`, which no later rule can outrun, and sets
+`process.exitCode` rather than calling `process.exit()` so the hook completes.
+
+**Check:** apply a mutant you know a contract covers. If the suite still exits zero, the gate is
+not seeing that contract — look at position before doubting the contract.
+
 ## 15. An assertion that matched the wrong file · **fixed** (this pass)
 
 `check-ui-contracts` concatenates every application script into one `inline` string, which is
@@ -306,6 +319,9 @@ and ask whether every name belongs there.
 
 | Date | Class | Finding | Commit |
 |---|---|---|---|
+| 2026-09-09 | 16 | The behavioural suite's failure gate sat two lines above the end of the file, so three rules appended after it ran, failed, and were never reported — the suite announced 121 passing while one failed every run. Moved to an exit hook | *pending* |
+| 2026-09-09 | 10 | `SITE()` never reset `wallets`, `hardware`, `activity` or `log`. Rules set the first two by *replacing* the object, dropping every key they did not name — one rule deleted `mtgox`, `bitfinex`, `quadriga`, `frontier` and `etf` for every rule after it | *pending* |
+| 2026-09-09 | 9 | F4: eight surviving clamp mutants killed. The worst was `stageDelivery`'s staged count — inverting it destroys crates already waiting rather than mis-averaging them | *pending* |
 | 2026-09-09 | 14 | All 119 behavioural rules ran against a `Math.random()`-seeded world; the racking rule failed once then passed six times | `d591d08` |
 | 2026-09-09 | 12 | F3 resolved: 2 of 9 never-called functions were real missing guards, 6 deleted as duplicates, 1 kept as the tested spec. `activePoolShare` would have broken the pool explorer's history slider if wired in | `d591d08` |
 | 2026-09-09 | 9 | A new glossary assertion matched the *same line in another file* — `glossary.js` and `render.js` both normalise the query identically, so testing the concatenated source passed whatever `render.js` did. Scoped to `renderSource` | `d591d08` |

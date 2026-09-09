@@ -81,7 +81,7 @@ for (const seed of SEEDS) {
        fast enough to climb out. Duration is what separates them, so the threshold is set well
        above the longest legitimate episode observed across 200 seeds (4 days) rather than at
        the first day of trouble. A detector that cries at normal play gets switched off. */
-    let ticks=0,err=null,negHw=null,negWallet=null,overCap=null,run=0,spaceRun=0;
+    let ticks=0,err=null,negHw=null,negWallet=null,overCap=null,run=0,spaceRun=0,badPower=null;
     try{
       for(let i=0;i<${TICKS};i++){
         if(rnd()<.35)acts[Math.floor(rnd()*acts.length)]();
@@ -110,16 +110,26 @@ for (const seed of SEEDS) {
             if(!(state.hardware[k]>=0)&&!negHw)negHw=k+"="+state.hardware[k];
           for(const k of Object.keys(state.wallets||{}))
             if(!(state.wallets[k]>=-1e-9)&&!negWallet)negWallet=k+"="+state.wallets[k];
+          /* Machines deliberately stopped are a subset of machines owned, always. Breaking the
+             clamp in setHardwarePower drives this negative, and a negative paused count does
+             not read as an error anywhere — it inflates the active count instead, so the site
+             reports hash rate from machines that are not there. An invariant catches it; the
+             number it produces never looks wrong on its own. */
+          for(const k of Object.keys(state.poweredDownHardware||{})){
+            const off=state.poweredDownHardware[k],owned=state.hardware[k]||0;
+            if(!badPower&&!(off>=0&&off<=owned))badPower=k+": "+off+" stopped of "+owned+" owned";
+          }
           if(bad.length>4)break;
         }
       }
     }catch(e){err=String(e&&e.message||e).slice(0,220)}
-    return JSON.stringify({ticks,err,nonFinite:bad.slice(0,5),negHw,negWallet,overCap,
+    return JSON.stringify({ticks,err,nonFinite:bad.slice(0,5),negHw,negWallet,overCap,badPower,
       date:dateFmt(state.time,true)})})()`));
   const why = out.err ? `threw: ${out.err}`
     : out.nonFinite.length ? `non-finite state: ${out.nonFinite.join(", ")}`
     : out.negHw ? `negative fleet: ${out.negHw}`
     : out.negWallet ? `negative wallet: ${out.negWallet}`
+    : out.badPower ? `paused count outside 0..owned: ${out.badPower}`
     : out.overCap ? `site over capacity: ${out.overCap}` : "";
   if (why) failures.push(`seed ${seed} (${out.ticks} ticks, reached ${out.date}) — ${why}`);
 }
@@ -129,4 +139,4 @@ if (failures.length) {
   console.error("\nReplay one with: node scripts/fuzz-engine.mjs <seed> — the seed fixes both the\naction sequence and the engine's own random stream, so the run repeats exactly.");
   process.exit(1);
 }
-console.log(`Fuzz passed: ${SEEDS.length} seeds × ${TICKS} days of random operator actions — no throw, no non-finite state, no negative fleet or wallet, no site carrying more than it can hold`);
+console.log(`Fuzz passed: ${SEEDS.length} seeds × ${TICKS} days of random operator actions — no throw, no non-finite state, no negative fleet or wallet, no site carrying more than it can hold, no impossible paused count`);

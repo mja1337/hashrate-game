@@ -48,6 +48,16 @@ const SITE = (overrides = "") => `
      behave — it teaches you to re-run rather than to look. A rule that wants a different draw
      overrides this after SITE(), deliberately and visibly. */
   state.seed=20260909;state.rng=20260909;
+  /* Wallets, fleet and the activity feed. SITE resets forty fields including several obscure
+     ones and missed the three most obvious, because rules always set hardware and wallets
+     themselves — but they set them by REPLACING the object, which drops every key they do not
+     mention. A rule writing state.wallets={hot:0,cold:0,exchange:0} deletes mtgox, bitfinex,
+     quadriga, frontier and etf for every rule after it, and the next rule to read one of those
+     venues gets undefined instead of zero. Rebuilt from initialState() so the shape is the
+     engine's own, not a list here that can drift from it. */
+  const __siteFresh=initialState();
+  state.wallets={...__siteFresh.wallets};state.hardware={...__siteFresh.hardware};
+  state.activity=[];state.log=[];state.activitySeq=0;
   state.hardwareGlut=null;state.marketPressure={usd:0,at:0};
   state.ops={firmwarePatchedUntil:1e15,hijackUntil:0,outageUntil:0,powerOutageUntil:0,venueFreezes:{},riskMonth:""};
   state.thermal={temperature:22,orders:[],equipment:{}};
@@ -901,6 +911,36 @@ rule("downsizing costs a lease break rather than a fit-out, and is far cheaper t
      free, or staying in a site you have outgrown downward would never be a mistake. */
   const payback = money.down / money.rentSaved;
   assert(payback > 1 && payback < 6, `downsizing pays back in ${payback.toFixed(1)} months; it should be a few months, not free and not a year`);
+});
+
+rule("a pool payout conserves coins: what leaves the balance arrives, less the network fee", () => {
+  /* Three surviving mutants lived here, all in clamps nobody asserted. feesPaid took
+     Math.min(fee,sent); turning it into max charged the whole payment as fee while still
+     crediting the net, so the lifetime ledger claimed roughly twice what the pool ever sent.
+     Nothing noticed, because every individual figure still looked like a number. Conservation
+     is the only assertion that catches it: sent === arrived + fee, exactly, once. */
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.facility="warehouse";
+    state.region="texas";state.hardware={s19:5};state.wallets={hot:0,cold:0,exchange:0};`)}
+    const a=poolAccount();
+    a.destination="hot";a.threshold=.001;a.balance=0;a.paidTotal=0;a.feesPaid=0;a.payouts=0;
+    const fee=payoutNetworkFee();
+    const before=state.wallets.hot+state.wallets.cold+state.wallets.exchange;
+    a.balance=Math.max(a.threshold,fee*4);
+    const sent=a.balance;
+    advancePoolPayouts();
+    const after=state.wallets.hot+state.wallets.cold+state.wallets.exchange;
+    return {sent,fee,arrived:after-before,balanceAfter:a.balance,
+      paidTotal:a.paidTotal,feesPaid:a.feesPaid,payouts:a.payouts}})()`);
+  assert(r.payouts === 1, `expected exactly one payout, got ${r.payouts}`);
+  assert(r.balanceAfter === 0, `the pool balance was not cleared: ${r.balanceAfter}`);
+  assert(Math.abs(r.arrived + r.feesPaid - r.sent) < 1e-12,
+    `coins were invented or destroyed: ${r.sent} left the pool but ${r.arrived} arrived and ${r.feesPaid} was charged as fee`);
+  assert(Math.abs(r.paidTotal - r.arrived) < 1e-12,
+    `the lifetime-paid figure disagrees with the wallets: ledger says ${r.paidTotal}, wallets gained ${r.arrived}`);
+  assert(r.feesPaid > 0 && r.feesPaid <= r.sent,
+    `the fee charged (${r.feesPaid}) is not a sane share of a ${r.sent} payment`);
+  assert(Math.abs(r.feesPaid - r.fee) < 1e-12,
+    `the fee charged was ${r.feesPaid} but the network fee is ${r.fee}`);
 });
 
 rule("cooling on order counts against the site you are moving into", () => {
@@ -2655,9 +2695,158 @@ rule("a build already in progress from an older save still completes", () => {
   assert(r.trail[2] > 0 && r.trail[2] < 120, `an old-shaped job did not ramp: ${r.trail.join(", ")}`);
 });
 
-if (failures.length) {
-  console.error(`Engine behaviour: ${failures.length} of ${checked} rules failed\n`);
-  for (const failure of failures) console.error(`  ✗ ${failure}`);
-  process.exit(1);
-}
-console.log(`Engine behaviour passed: ${checked} rules exercised against a live engine — protocol issuance, order-book depth, power contracts, hardware pricing and resale, settlement, and regional trade-offs`);
+rule("two batches of the same machine waiting together blend their condition", () => {
+  /* stageDelivery weights the condition of what is already in the crates against what is
+     arriving, which is what happens when you buy the same model from two sellers. The count
+     of what is already waiting clamps at zero; invert that clamp and it reads zero however
+     full the yard is, so the newest batch's condition simply replaces the average. Buy 90
+     worn machines and then one refurbished unit, and the whole batch reports as refurbished —
+     then racks at a condition it does not have, and the fault rate that follows is a mystery. */
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.facility="warehouse";
+    state.region="texas";state.hardware={};`)}
+    state.inactiveHardware={};state.stagedCondition={};
+    stageDelivery("s19",90,40);          // ninety tired machines
+    const afterFirst={qty:state.inactiveHardware.s19,cond:state.stagedCondition.s19};
+    stageDelivery("s19",10,100);         // ten pristine ones
+    const afterSecond={qty:state.inactiveHardware.s19,cond:state.stagedCondition.s19};
+    return {afterFirst,afterSecond}})()`);
+  assert(r.afterFirst.qty === 90 && r.afterFirst.cond === 40,
+    `the first batch staged wrong: ${r.afterFirst.qty} units at condition ${r.afterFirst.cond}`);
+  assert(r.afterSecond.qty === 100, `the batches did not accumulate: ${r.afterSecond.qty}`);
+  /* (90×40 + 10×100) / 100 = 46. Not 100, which is what ignoring the waiting batch gives,
+     and not 40, which is what ignoring the new one gives. */
+  assert(Math.abs(r.afterSecond.cond - 46) < 1e-9,
+    `the blended condition should be 46, got ${r.afterSecond.cond} — the batch already waiting was not weighted`);
+});
+
+rule("a retirement job restored without a start date still makes progress", () => {
+  /* Old saves carry retirement jobs written before `started` existed. advanceRetirements
+     back-fills it with min(now, due) so the span is positive and the crew pulls machines
+     steadily. Take the max instead and started lands on the due date: the span collapses,
+     progress reads as zero for the whole job, and every machine leaves the racks in one jump
+     at the end — the gradual retirement this was built to model, silently gone. */
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.facility="warehouse";
+    state.region="texas";state.hardware={s19:100};`)}
+    // A legacy job: no "started" field at all.
+    state.retirementJobs=[{id:"s19",qty:100,done:0,due:state.time+10*DAY,days:10}];
+    const steps=[];
+    for(let d=0;d<12;d++){tick(true);
+      const job=state.retirementJobs[0];
+      steps.push(job?job.done:(state.decommissionedHardware.s19||0));}
+    return {steps,started:Number.isFinite(state.retirementJobs[0]?.started),
+      finalRetired:state.decommissionedHardware.s19||0,
+      jobsLeft:state.retirementJobs.length,
+      partialProgress:steps.filter(n=>n>0&&n<100).length}})()`);
+  assert(r.finalRetired === 100, `the legacy job did not finish: ${r.finalRetired} of 100 retired`);
+  assert(r.jobsLeft === 0, "the legacy retirement job never closed");
+  assert(r.partialProgress > 0,
+    "the crew went from nothing to everything in one step; a back-filled start date collapsed the span");
+});
+
+rule("cold storage that holds coins is always a measurable distance away", () => {
+  /* coldLockedBtc clamps at zero so a corrupt negative balance cannot read as a debt. Invert
+     that clamp and it returns zero for every positive balance instead, which makes
+     treasuryDistanceDays() answer "nothing to wait for" while the coins are still behind a
+     signing ceremony. The whole educational point of cold storage is that the delay is real
+     and visible; a zero there teaches the opposite of the lesson. */
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");`)}
+    state.wallets.cold=2.5;state.wallets.hot=0;
+    const held=coldLockedBtc(),days=treasuryDistanceDays();
+    state.wallets.cold=0;
+    const emptyHeld=coldLockedBtc(),emptyDays=treasuryDistanceDays();
+    return {held,days,emptyHeld,emptyDays,ceremony:coldSpendDays()}})()`);
+  assert(r.held === 2.5, `cold storage holds 2.5 BTC but reports ${r.held}`);
+  assert(r.ceremony > 0, "a signing ceremony that takes no time is not cold storage");
+  assert(r.days === r.ceremony,
+    `coins in cold are ${r.days} days away but the ceremony takes ${r.ceremony}`);
+  assert(r.emptyHeld === 0 && r.emptyDays === 0,
+    `an empty treasury should be zero days away, not ${r.emptyDays}`);
+});
+
+rule("machines in repair cannot also be powered down", () => {
+  /* setHardwarePower clamps the repairing count at what is owned, and the available count at
+     owned minus paused minus repairing. Break either clamp and the two states overlap: the
+     same machine is counted as stopped and as on a bench, or more units are stopped than
+     exist. Both leave poweredDownHardware describing a fleet that is not there. */
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.facility="warehouse";
+    state.region="texas";state.hardware={s19:10};`)}
+    state.maintenance.faults={s19:4};state.maintenance.faultsByPart={s19:{asicfan:4}};
+    setHardwarePower("s19",false,10);
+    const afterPause={off:state.poweredDownHardware.s19||0,faults:hardwareFaultCount(HARDWARE.find(h=>h.id==="s19"))};
+    setHardwarePower("s19",true,50);
+    const afterStart={off:state.poweredDownHardware.s19||0};
+    return {owned:10,afterPause,afterStart}})()`);
+  assert(r.afterPause.off > 0, "nothing was paused, so the rule tests nothing");
+  assert(r.afterPause.off + r.afterPause.faults <= r.owned,
+    `${r.afterPause.off} stopped plus ${r.afterPause.faults} in repair exceeds the ${r.owned} owned`);
+  assert(r.afterStart.off >= 0,
+    `restarting more units than were stopped drove the paused count to ${r.afterStart.off}`);
+  assert(r.afterStart.off <= r.owned, `${r.afterStart.off} stopped of ${r.owned} owned`);
+});
+
+rule("crates waiting to be racked are never a negative number of crates", () => {
+  /* The staged count clamps at zero. Inverted, it reports zero or below for a yard full of
+     crates, and the shortfall message that tells the operator how much power or floor they
+     need to free reads as though nothing is waiting. */
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.facility="workshop";
+    state.region="texas";state.hardware={s19:20};`)}
+    state.inactiveHardware={s19:300};
+    const h=HARDWARE.find(x=>x.id==="s19");
+    const tight=stagedFitCount("s19"),reason=stagedHoldReason("s19");
+    /* And the same crates in a site with room to spare, because "how many fit" returning zero
+       is the RIGHT answer in a full workshop — a rule that only ever asks the full case passes
+       whatever the arithmetic does. */
+    state.facility="warehouse";
+    const roomy=stagedFitCount("s19"),roomyReason=stagedHoldReason("s19");
+    return {tight,roomy,crated:state.inactiveHardware.s19,
+      reason:String(reason).slice(0,200),roomyReason:String(roomyReason).slice(0,120)}})()`);
+  assert(r.crated === 300, "the crates were not staged");
+  assert(r.tight >= 0, `the staged count went negative: ${r.tight}`);
+  assert(r.tight <= r.crated, `${r.tight} staged out of ${r.crated} crated`);
+  assert(r.roomy > 0, `a site with room racked ${r.roomy} of ${r.crated} waiting crates`);
+  assert(r.roomy <= r.crated, `${r.roomy} racked out of ${r.crated} crated`);
+  assert(r.tight < r.roomy, `the full workshop accepted ${r.tight}, the roomy warehouse ${r.roomy} — the site should matter`);
+  assert(r.reason !== "", "300 crates cannot all fit a workshop, so the hold should be explained");
+  assert(/300/.test(r.reason), `the explanation should say how many are waiting: "${r.reason}"`);
+  /* Both shortfalls, separately asserted. 300 S19s overrun a workshop on power AND on floor,
+     and a message that names only one of them sends the operator to free the wrong thing. */
+  assert(/kW more electrical capacity/.test(r.reason),
+    `the explanation should name the power shortfall: "${r.reason}"`);
+  assert(/more floor units/.test(r.reason),
+    `the explanation should name the floor shortfall: "${r.reason}"`);
+});
+
+rule("a restored pool account cannot carry an impossible lifetime total", () => {
+  /* The normaliser clamps paidTotal at zero on load. Inverting that clamp forces every
+     restored account to zero or below, so a save with real history reopens claiming the pool
+     has never paid — and the operator's own record of what they earned is gone. */
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");`)}
+    state.poolAccount={balance:.5,frozen:0,threshold:.01,destination:"hot",
+      paidTotal:12.5,feesPaid:.25,payouts:40,lastPayout:0};
+    const kept=poolAccount();
+    state.poolAccount={balance:.5,frozen:0,threshold:.01,destination:"hot",
+      paidTotal:-3,feesPaid:-1,payouts:-2,lastPayout:0};
+    const repaired=poolAccount();
+    return {keptPaid:kept.paidTotal,keptFees:kept.feesPaid,keptPayouts:kept.payouts,
+      repairedPaid:repaired.paidTotal,repairedFees:repaired.feesPaid}})()`);
+  assert(r.keptPaid === 12.5, `a valid lifetime total was discarded on load: ${r.keptPaid}`);
+  assert(r.keptFees === .25 && r.keptPayouts === 40, "valid payout history was discarded on load");
+  assert(r.repairedPaid >= 0 && r.repairedFees >= 0,
+    `a corrupt save kept impossible totals: paid ${r.repairedPaid}, fees ${r.repairedFees}`);
+});
+
+/* Reported from an exit hook rather than inline, because inline made the gate
+   position-dependent: it sat a few lines above the end of the file, and two rules appended
+   after it ran, failed, pushed onto `failures` and were never printed. The suite announced
+   121 rules passing while one of them was failing every run — a mutant survived purely
+   because of where its contract happened to be written. An exit hook cannot be outrun by a
+   rule added later, wherever it lands. */
+process.on("exit", () => {
+  if (failures.length) {
+    console.error(`Engine behaviour: ${failures.length} of ${checked} rules failed\n`);
+    for (const failure of failures) console.error(`  ✗ ${failure}`);
+    process.exitCode = 1;
+    return;
+  }
+  console.log(`Engine behaviour passed: ${checked} rules exercised against a live engine — protocol issuance, order-book depth, power contracts, hardware pricing and resale, settlement, and regional trade-offs`);
+});

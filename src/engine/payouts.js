@@ -155,13 +155,17 @@ function advancePoolPayouts(){
   if(a.balance<=0)return;
   const fee=payoutNetworkFee();
   if(a.balance<Math.max(a.threshold,fee*2))return;
-  const sent=a.balance,net=Math.max(0,sent-fee);
-  a.balance=0;a.paidTotal+=net;a.feesPaid+=Math.min(fee,sent);a.payouts++;a.lastPayout=state.time;
+  /* One fee, named once. It used to be written as Math.min(fee,sent) in the accounting and
+     again in the log line, which is two chances to be wrong and no way for the numbers to
+     disagree loudly — the ledger would say one thing and the activity feed another. What
+     leaves the pool balance is what arrives plus what the network took: net+paidFee===sent. */
+  const sent=a.balance,paidFee=Math.min(fee,sent),net=Math.max(0,sent-paidFee);
+  a.balance=0;a.paidTotal+=net;a.feesPaid+=paidFee;a.payouts++;a.lastPayout=state.time;
   const dest=payoutDestination(a.destination);
   creditPayout(a.destination,net);
   // The payout card is balance, total paid and a count — structure, not a text patch.
   renderFullQueued=true;
-  log("Pool payout received",`+${fmtBtc(net)} to ${dest.name} · -${fmtBtc(Math.min(fee,sent))} network fee`,"custody");
+  log("Pool payout received",`+${fmtBtc(net)} to ${dest.name} · -${fmtBtc(paidFee)} network fee`,"custody");
 }
 
 /* WHEN THE POOL STOPS PAYING.
