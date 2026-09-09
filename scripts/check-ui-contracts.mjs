@@ -6,6 +6,7 @@ const html = await readFile(new URL("index.html", root), "utf8");
 const css = await readFile(new URL("src/styles/app.css", root), "utf8");
 const appScripts = [...html.matchAll(/<script src="(src\/[^"]+\.js)"><\/script>/g)].map(match => match[1]);
 const inline = (await Promise.all(appScripts.map(file => readFile(new URL(file, root), "utf8")))).join("\n");
+const engineModules = (await readdir(new URL("src/engine/", root))).filter(name => name.endsWith(".js"));
 const simulationSource = await readFile(new URL("src/engine/simulation.js", root), "utf8");
 const buildSource = await readFile(new URL("scripts/build-historical-data.mjs", root), "utf8");
 const renderSource = await readFile(new URL("src/ui/render.js", root), "utf8");
@@ -574,7 +575,10 @@ assert(inline.includes("function triggerImpactEffect()") && inline.includes('sho
 assert(css.includes(".impact-flash{") && css.includes(".impact-shake{") && css.includes(".toast.toast-bad{"), "Impact-flash/shake CSS is missing");
 assert((inline.match(/,"bad"[,)]/g) || []).length >= 12, "Not enough bad-event call sites trigger the impact effect");
 assert(inline.includes("state.facilityUpgradeJob={id,due:state.time+Math.ceil(days)*DAY,cost:f.cost,risk}") && inline.includes("function upgradingFacility()") && inline.includes("function fleetGrounded()"), "Facility upgrades no longer resolve as a timed, power-down job");
-assert(inline.includes("const upgradeJob=state.facilityUpgradeJob;if(upgradeJob&&upgradeJob.due<=state.time)"), "Facility-upgrade job is not resolved in the fleet lifecycle tick");
+/* Reads the shared predicate rather than a hand-written comparison. Every "is this due yet"
+   in the engine goes through dueBy/pendingAt now, so the boundary is asserted once, in the
+   engine rule that owns it, instead of being re-spelled and re-pinned at each call site. */
+assert(inline.includes("const upgradeJob=state.facilityUpgradeJob;if(upgradeJob&&dueBy(upgradeJob,state.time))"), "Facility-upgrade job is not resolved in the fleet lifecycle tick");
 assert(inline.includes("busy=move||upgradeJob") && inline.includes('upgradeJob?"Site move in progress"'), "Facilities tab does not block new moves while a facility move is in flight");
 
 /* THE LADDER GOES BOTH WAYS.
@@ -904,6 +908,27 @@ assert(/const RENDER_FRAME_GRACE=\d+;/.test(renderQueueSource),
    is the one repaint that can never afford to wait for a frame the browser may not grant. */
 assert(/if\(urgent\)\{renderUrgentQueued=true;setTimeout\(paint,0\);return\}/.test(renderQueueSource),
   "An urgent repaint no longer bypasses both the throttle and the animation frame");
+
+/* NO ENGINE MODULE ASKS "IS THIS DUE" IN ITS OWN WORDS.
+
+   The question was written six ways — job.due>t, t<job.due, t>=job.due, job.due<=t and two
+   with the operands swapped — and a mutation sweep found the boundary unasserted at every one
+   of them. Not because each needed its own contract, but because there was no single place to
+   assert. dueBy/pendingAt in config/timeline.js is that place, and the boundary rule lives in
+   check-engine-behaviour.
+
+   This guard stops the spellings coming back. It deliberately does NOT cover `.due` compared
+   against something other than a clock: settlement carries a cash amount called `due`, and
+   `state.cash>=pending.due` is a solvency test, not a schedule. Nor does it cover two due
+   dates compared with each other, which is sorting. Only date-against-now is the boundary
+   this owns. */
+for (const file of engineModules) {
+  const source = await readFile(new URL(`src/engine/${file}`, root), "utf8");
+  const handwritten = [...source.matchAll(/[a-zA-Z_$][\w$.?]*\.due\s*(?:<=|>=|<|>)\s*(?:s|state)\.time|(?:s|state)\.time\s*(?:<=|>=|<|>)\s*[a-zA-Z_$][\w$.?]*\.due/g)]
+    .map(match => match[0]);
+  assert(handwritten.length === 0,
+    `src/engine/${file} asks whether work is due in its own words (${handwritten.join(", ")}) instead of using dueBy()/pendingAt(); the boundary is then unasserted here, which is how it went unasserted in a dozen places`);
+}
 
 /* Reporting a loss stops the clock, so it must request its own repaint: there is no next tick
    left to notice a flag, and a modal nothing draws is worse than the toast it replaced. */

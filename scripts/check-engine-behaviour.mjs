@@ -2695,6 +2695,37 @@ rule("a build already in progress from an older save still completes", () => {
   assert(r.trail[2] > 0 && r.trail[2] < 120, `an old-shaped job did not ramp: ${r.trail.join(", ")}`);
 });
 
+rule("a job due at exactly this instant is due, and one with no due date is neither", () => {
+  /* The boundary that had been written six different ways and asserted nowhere. Both mutation
+     directions matter: make dueBy strict and every lead time in the game gains a day; make
+     pendingAt inclusive and a job scheduled for today is treated as already finished. The
+     malformed case is asserted too, because that is where the two stop being complements —
+     and where a careless "just use !dueBy" would change what the old comparisons did. */
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");`)}
+    const t=state.time;
+    const exactly={due:t},tomorrow={due:t+DAY},yesterday={due:t-DAY};
+    const noDate={},nan={due:"soon"},nul={due:null};
+    return {
+      exactlyDue:dueBy(exactly,t),exactlyPending:pendingAt(exactly,t),
+      tomorrowDue:dueBy(tomorrow,t),tomorrowPending:pendingAt(tomorrow,t),
+      yesterdayDue:dueBy(yesterday,t),yesterdayPending:pendingAt(yesterday,t),
+      noDateDue:dueBy(noDate,t),noDatePending:pendingAt(noDate,t),
+      nanDue:dueBy(nan,t),nanPending:pendingAt(nan,t),
+      nullDue:dueBy(nul,t),nullPending:pendingAt(nul,t),
+      undefDue:dueBy(undefined,t),undefPending:pendingAt(undefined,t)}})()`);
+  assert(r.exactlyDue === true && r.exactlyPending === false,
+    "a job due at exactly this instant must be due, not still pending — otherwise every lead time gains a day");
+  assert(r.tomorrowDue === false && r.tomorrowPending === true, "a job due tomorrow is pending, not due");
+  assert(r.yesterdayDue === true && r.yesterdayPending === false, "a job due yesterday is due, not pending");
+  /* Neither, in both directions, for every shape of missing date. */
+  for (const [kind, due, pending] of [["no due field", r.noDateDue, r.noDatePending],
+      ["an unparseable due", r.nanDue, r.nanPending], ["a null due", r.nullDue, r.nullPending],
+      ["no job at all", r.undefDue, r.undefPending]]) {
+    assert(due === false, `${kind} must not read as due`);
+    assert(pending === false, `${kind} must not read as pending either`);
+  }
+});
+
 rule("two batches of the same machine waiting together blend their condition", () => {
   /* stageDelivery weights the condition of what is already in the crates against what is
      arriving, which is what happens when you buy the same model from two sellers. The count

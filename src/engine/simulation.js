@@ -425,7 +425,7 @@ function advanceFleetLifecycle(){
     const started=job.started;
     const span=Math.max(DAY,job.due-started);
     const done=Math.max(0,Math.floor(Number(job.done)||0));
-    const finished=state.time>=job.due;
+    const finished=dueBy(job,state.time);
     const racked=finished?total:Math.min(total,Math.floor(total*Math.max(0,(state.time-started)/span)));
     const add=Math.max(0,racked-done);
     if(add>0){
@@ -442,7 +442,7 @@ function advanceFleetLifecycle(){
     showToast("Commissioning complete",`${total} × ${h.name} is now connected to the fleet. Machines came online as the crew worked through them.`);
     renderFullQueued=true;
     return false});
-  const job=state.relocationJob;if(job&&job.due<=state.time){const destination=REGIONS.find(r=>r.id===job.id);state.region=job.id;
+  const job=state.relocationJob;if(job&&dueBy(job,state.time)){const destination=REGIONS.find(r=>r.id===job.id);state.region=job.id;
     enforceConnectivityAvailability();state.relocationJob=null;state.policyLock=null;state.power=state.debt<=0;log(`Fleet arrived in ${destination?.name||job.id}`,"Site commissioning complete","operations");showToast("Relocation complete",`The fleet is live at ${destination?.name||job.id}.`);renderFullQueued=true}
   advanceFacilityMove();
 }

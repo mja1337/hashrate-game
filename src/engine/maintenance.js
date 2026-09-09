@@ -173,11 +173,11 @@ function initRepairPuzzle(job){
   return true;
 }
 function advanceMaintenance(){
-  state.maintenance.orders=state.maintenance.orders.filter(order=>{if(order.due>state.time)return true;const part=sparePart(order.type)||sparePart("fan");state.maintenance.inventory[part.id]=(state.maintenance.inventory[part.id]||0)+order.qty;log("Spare parts delivered",`+${order.qty} ${part.name}${order.qty===1?"":"s"}`);return false});
+  state.maintenance.orders=state.maintenance.orders.filter(order=>{if(pendingAt(order,state.time))return true;const part=sparePart(order.type)||sparePart("fan");state.maintenance.inventory[part.id]=(state.maintenance.inventory[part.id]||0)+order.qty;log("Spare parts delivered",`+${order.qty} ${part.name}${order.qty===1?"":"s"}`);return false});
   state.maintenance.serviceJobs=state.maintenance.serviceJobs.filter(job=>{
     const h=HARDWARE.find(x=>x.id===job.id),legacy=!Number.isFinite(Number(job.stage));
     if(legacy){
-      if(job.due>state.time)return true;
+      if(pendingAt(job,state.time))return true;
     }else{
       while(job.stage<REPAIR_STAGES.length&&job.stageDue<=state.time){
         const stage=REPAIR_STAGES[job.stage];

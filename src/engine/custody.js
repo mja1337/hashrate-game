@@ -201,7 +201,7 @@ function receiveCustodyOrder(order,when){
 function advanceCustodyOrders(next){
   const c=state.custody;
   c.orders=(c.orders||[]).filter(o=>{
-    if(o.due>next)return true;
+    if(pendingAt(o,next))return true;
     receiveCustodyOrder({...o,boughtAt:o.due-((custodyProduct(o.id)?.lead||0)*DAY)},next);
     const p=custodyProduct(o.id);
     showToast("Custody hardware delivered",`${o.qty} × ${p?p.name:o.id} has arrived.`,"info","custody");
@@ -209,7 +209,7 @@ function advanceCustodyOrders(next){
     return false;
   });
   c.builds=(c.builds||[]).filter(b=>{
-    if(b.due>next)return true;
+    if(pendingAt(b,next))return true;
     const build=CUSTODY_BUILDS[b.build];
     c.seq=(c.seq||0)+1;
     c.devices.push({uid:`d${c.seq}`,product:build.id,supplier:"selfbuilt",boughtAt:b.startedAt,keyId:null,

@@ -73,7 +73,7 @@ function beginColdSpend(to,gross,fee){
    operator has already succeeded at. */
 function advanceColdSpends(){
   state.coldSpends=coldSpends().filter(job=>{
-    if(job.due>state.time)return true;
+    if(pendingAt(job,state.time))return true;
     const net=Math.max(0,(Number(job.gross)||0)-(Number(job.fee)||0));
     state.wallets[job.to]=(state.wallets[job.to]||0)+net;
     log("Cold spend settled",`${fmtBtc(net)} reached ${walletName(job.to)}`,"custody");

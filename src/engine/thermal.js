@@ -28,7 +28,7 @@ function activeMinerWatts(s=state){return minerWattsSplit(s).total}
 function roomHeatWatts(s=state){return minerWattsSplit(s).room}
 function coolingPeakWatts(s=state){return COOLING_EQUIPMENT.reduce((sum,item)=>sum+(s.thermal?.equipment?.[item.id]||0)*item.watts,0)}
 function coolingPowerWatts(s=state,minerWatts=activeMinerWatts(s)){if(minerWatts<=0)return 0;const capacity=Math.max(.1,coolingCapacityKw(s)),demand=Math.max(.12,Math.min(1,minerWatts/1000/capacity));return coolingPeakWatts(s)*demand}
-function thermalPowerAvailable(s=state){return !!s.power&&!gridCutOff(s)&&!s.policyLock&&s.time>=(s.ops?.powerOutageUntil||0)&&!(s.relocationJob&&s.time<s.relocationJob.due)&&!(s.facilityUpgradeJob&&s.time<s.facilityUpgradeJob.due)}
+function thermalPowerAvailable(s=state){return !!s.power&&!gridCutOff(s)&&!s.policyLock&&s.time>=(s.ops?.powerOutageUntil||0)&&!pendingAt(s.relocationJob,s.time)&&!pendingAt(s.facilityUpgradeJob,s.time)}
 /* Cooling ratings are quoted as what the site can reject at a ten-degree room-to-outside
    difference, so a rating divided by ten is the kilowatts it sheds per degree. */
 const THERMAL_REFERENCE_DELTA=10;
@@ -60,7 +60,7 @@ function advanceThermals(){const target=thermalTargetC(),current=roomTemperature
    been installed yet can be cancelled; and an installed unit can be sold on. */
 function advanceCoolingInstalls(){
   state.thermal.orders=(state.thermal.orders||[]).filter(o=>{
-    if(o.due>state.time)return true;
+    if(pendingAt(o,state.time))return true;
     const item=COOLING_EQUIPMENT.find(x=>x.id===o.id);if(!item)return false;
     const qty=Math.max(1,Number(o.qty||1));
     state.thermal.equipment[o.id]=(state.thermal.equipment[o.id]||0)+qty;

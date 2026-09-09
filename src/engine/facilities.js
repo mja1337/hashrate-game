@@ -15,8 +15,8 @@
    That last one is the only hard gate, and it is enforced in facilityDownsizeBlockReason
    where the button that offers the move can read the same answer. */
 
-function relocating(){return !!state.relocationJob&&state.time<state.relocationJob.due}
-function upgradingFacility(){return !!state.facilityUpgradeJob&&state.time<state.facilityUpgradeJob.due}
+function relocating(){return pendingAt(state.relocationJob,state.time)}
+function upgradingFacility(){return pendingAt(state.facilityUpgradeJob,state.time)}
 function facilityMoveRisk(id){
   const current=Math.max(0,FACILITIES.findIndex(x=>x.id===state.facility)),target=Math.max(0,FACILITIES.findIndex(x=>x.id===id));
   if(target===current)return 0;
@@ -33,7 +33,7 @@ function facilityRiskLabel(risk){return risk<.12?"Low move risk":risk<.25?"Moder
    move was dispatched — so a policy bought mid-move does not retroactively change the odds
    that were accepted. */
 function advanceFacilityMove(){
-  const upgradeJob=state.facilityUpgradeJob;if(upgradeJob&&upgradeJob.due<=state.time){
+  const upgradeJob=state.facilityUpgradeJob;if(upgradeJob&&dueBy(upgradeJob,state.time)){
     const destination=FACILITIES.find(x=>x.id===upgradeJob.id),wasDownsize=!!upgradeJob.down;state.facility=upgradeJob.id;state.facilityUpgradeJob=null;state.power=state.debt<=0;
     const incidentRoll=nextRand();if(incidentRoll<upgradeJob.risk&&!state.insured){
       const incident=nextRand();
