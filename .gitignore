@@ -2,3 +2,7 @@
 # A sweep's output is a working note, not a record: it is only true for the commit
 # it ran against, and BUG-HUNT.md carries the conclusions that outlive it.
 mutation-survivors.json
+
+# Finder metadata. Written into any directory the user opens, at any depth, and
+# recreated the moment it is removed — so it is ignored rather than deleted.
+.DS_Store
