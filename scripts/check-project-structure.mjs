@@ -11,6 +11,8 @@ const expectedScripts = [
   "src/data/operations.js",
   "src/data/progression.js",
   "src/data/content.js",
+  /* The timeline is its own dataset and the one most likely to keep growing. */
+  "src/data/events.js",
   "src/data/custody.js",
   "src/data/glossary.js",
   "src/engine/history.js",

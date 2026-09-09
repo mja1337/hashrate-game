@@ -679,9 +679,51 @@ assert(inline.includes("constant ten-minute block interval"), "Projected halving
 assert(inline.includes('id:"sandbox-start"') && inline.includes('anchor:"method-sandbox"'), "The first sandbox briefing is missing, or no longer links to the Method sandbox chapter");
 assert(inline.includes('${tip.anchor?`data-anchor="${tip.anchor}"`:""}'), "Operator briefings can no longer deep-link to a Method chapter");
 
-const contentSource = await readFile(new URL("src/data/content.js", root), "utf8");
-const eventsStart = contentSource.indexOf("const EVENTS=[");
-const eventsSource = contentSource.slice(eventsStart, contentSource.indexOf("\n];", eventsStart));
+/* The timeline moved to its own module when content.js reached the ceiling. This reads the
+   whole file rather than slicing an array out of a larger one — there is nothing else in it. */
+const eventsSource = await readFile(new URL("src/data/events.js", root), "utf8");
+
+/* EVERY EVENT CARRIES ITS RECEIPT, AND THE FEED SHOWS IT.
+
+   The game claims to be a historical replay, so each entry names a source. That was true of
+   the data and false on screen: the link was hardcoded to the genesis block, so seventy-seven
+   citations sat in the file where no player could ever reach them — data implying a behaviour
+   that did not exist. The link is generic now, with genesis keeping its own wording, and an
+   entry with no citation renders no link rather than an empty one. */
+assert(/\$\{feature\.url\?`<div class="story-source">/.test(renderSource),
+  "The story feed no longer links an event to its source, or links it unconditionally");
+assert(/feature\.id==="genesis"\?"Read the Bitcoin whitepaper"/.test(renderSource),
+  "The genesis block lost its own wording in the story feed");
+assert(/Source: \$\{escapeHtml\(feature\.src\|\|""\)\}/.test(renderSource),
+  "An event's source is no longer named, or is being interpolated without escaping");
+
+/* And the shape of the data itself, because this is the dataset most likely to be added to by
+   hand. Each of these has a reason: a duplicate id silently shadows an event in state.seen, a
+   missing dek or body renders a blank card, an imp outside 1-3 either never fires or awards a
+   skill point it should not, and a src without a url (or the reverse) is half a citation. */
+const eventEntries = [...eventsSource.matchAll(/\{id:"([^"]+)",date:"(\d{4}-\d{2}-\d{2})",[^\n]*/g)]
+  .map(match => ({ id: match[1], date: match[2], line: match[0] }));
+assert(eventEntries.length >= 78, `The timeline has shrunk to ${eventEntries.length} events`);
+const seenEventIds = new Set();
+for (const entry of eventEntries) {
+  assert(!seenEventIds.has(entry.id), `Two timeline events share the id "${entry.id}"; the second can never be marked seen`);
+  seenEventIds.add(entry.id);
+  for (const field of ["title:", "dek:", "body:", "cat:", "imp:"]) {
+    assert(entry.line.includes(field), `Timeline event "${entry.id}" is missing ${field.slice(0, -1)}`);
+  }
+  const imp = Number((entry.line.match(/imp:(\d)/) || [])[1]);
+  assert(imp >= 1 && imp <= 3, `Timeline event "${entry.id}" has imp ${imp}, outside 1-3`);
+  /* A closed list, so a typo fails rather than quietly becoming a seventh category. It is
+     seven because writing this check found one: WikiLeaks is filed under "civil society",
+     which is a deliberate choice and reads correctly on screen, but was invisible to every
+     earlier survey of the data because a \w+ pattern stops at the space. */
+  const cat = (entry.line.match(/cat:"([\w ]+)"/) || [])[1];
+  assert(["network", "markets", "adoption", "custody", "policy", "geopolitics", "civil society"].includes(cat),
+    `Timeline event "${entry.id}" has an unknown category "${cat}"`);
+  const hasSrc = /src:"/.test(entry.line), hasUrl = /url:"/.test(entry.line);
+  assert(hasSrc === hasUrl,
+    `Timeline event "${entry.id}" has ${hasSrc ? "a source with no link" : "a link with no source"} — half a citation`);
+}
 const hardwareSource = await readFile(new URL("src/data/hardware.js", root), "utf8");
 for (const [label, source] of [["historical event", eventsSource], ["hardware release", hardwareSource]]) {
   for (const [, date] of source.matchAll(/date:"(\d{4}-\d{2}-\d{2})"/g)) {

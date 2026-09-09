@@ -31,6 +31,7 @@ const FILES = [
   "src/data/operations.js",
   "src/data/progression.js",
   "src/data/content.js",
+  "src/data/events.js",
   "src/data/custody.js",
   "src/data/glossary.js",
   "src/engine/history.js",
