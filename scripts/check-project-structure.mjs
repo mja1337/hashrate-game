@@ -44,6 +44,9 @@ const expectedScripts = [
   "src/ui/tabs/ledger.js",
   "src/ui/tabs/market.js",
   "src/ui/tabs/operations.js",
+  /* The fleet chapter is its own module: it is the manual's largest and the one that grows
+     every time the mining floor changes. */
+  "src/ui/tabs/method-chapters-fleet.js",
   "src/ui/tabs/method-chapters.js",
   "src/ui/tabs/tech.js",
   "src/ui/tabs/method.js",

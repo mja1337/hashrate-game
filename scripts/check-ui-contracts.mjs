@@ -820,8 +820,29 @@ assert(inline.includes("function revealMethodAnchor(id)") && inline.includes('if
 assert(!inline.includes("ensureMethodAnchors"), "Method anchors are written into the markup now; the runtime heading-text matcher must not come back");
 // The chapter prose moved to its own module when method.js reached the size ceiling; the
 // renderer stayed behind. This check is about the chapters, so it follows them.
-const methodSource = await readFile(new URL("src/ui/tabs/method-chapters.js", root), "utf8");
-const methodChapterIds = [...methodSource.matchAll(/\{id:"(method-[a-z]+)",title:/g)].map(match => match[1]);
+/* The prose now lives in two modules — the fleet chapter grew large enough to need its own —
+   so "the Method prose" is both of them, and every text search below reads the pair. Splitting
+   content must not be able to hide content from these checks. */
+const methodComposerSource = await readFile(new URL("src/ui/tabs/method-chapters.js", root), "utf8");
+const methodFleetSource = await readFile(new URL("src/ui/tabs/method-chapters-fleet.js", root), "utf8");
+const methodSource = methodComposerSource + "\n" + methodFleetSource;
+/* Chapter identity and ORDER come from the composer's array, reading an inlined chapter and an
+   extracted one as equal members of it. Executing methodChapters() would be stronger still,
+   but the bodies are template literals that call window, fmtNum and sourceTag at evaluation
+   time, and stubbing the whole render surface to read eight ids would be a fragile way to
+   learn very little. What matters is that the manual still opens as eight chapters in a known
+   order, and that a chapter moved into its own module is still one of them. */
+const methodChapterIds = [...methodComposerSource.matchAll(/\{id:"(method-[a-z]+)",title:|(methodFleetChapter)\(\)/g)]
+  .map(match => match[1] || "method-fleet");
+/* And the extracted module really does supply the chapter the composer is calling for: without
+   this, deleting the fleet prose entirely would leave the order assertion above still passing
+   on the strength of the function call alone. */
+assert(/function methodFleetChapter\(\)/.test(methodFleetSource),
+  "method-chapters-fleet.js no longer defines methodFleetChapter(), so the composer calls nothing");
+assert(/return \{id:"method-fleet",title:/.test(methodFleetSource),
+  "methodFleetChapter() no longer returns the fleet chapter itself");
+assert(/summary:"/.test(methodFleetSource) && /lead:"/.test(methodFleetSource) && /body:`/.test(methodFleetSource),
+  "The fleet chapter lost its summary, lead or body in the split");
 assert(methodChapterIds.length === 8, `Method should open as eight named chapters, not ${methodChapterIds.length}`);
 assert(methodChapterIds[0] === "method-start" && methodChapterIds[7] === "method-sandbox", "Method must open on Start here and close on the procedural sandbox");
 assert(inline.includes("function methodTocHtml(chapters)") && inline.includes('data-action="method-chapter"') && inline.includes('else if(a==="method-chapter")revealMethodAnchor(id)'), "The Method table of contents is missing, or its links do not open the chapter they name");
