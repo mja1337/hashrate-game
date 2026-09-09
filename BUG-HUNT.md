@@ -29,24 +29,35 @@ Found, reproduced, not yet fixed. Newest first.
 | # | Class | Finding | Reproduction | Severity |
 |---|-------|---------|--------------|----------|
 | F4 | 9 | ~42 boundary mutants remain across `fleet-ops`, `facilities`, `payouts`, `signing` — `>` vs `>=` on a due date, and similar. Spot-checked: these shift a job's completion by one simulated day and change nothing an operator could observe or act on. **Accepted, not unexamined**: writing a contract per boundary would pin arbitrary detail and make the suite hostile to ordinary edits. Revisit only if a due-date off-by-one ever produces a visible symptom. | `grep SURVIVORS /tmp/mut2.json` after re-running the sweep | Low |
-| F1 | 1 | `queueRender(true)` has no timer fallback, so a render requested while the tab is hidden waits for the tab to come back. Coin-loss modals and the 3D mount both had to grow their own `setTimeout` fallback separately; the shared path still has none. | Hide the tab, trigger any `queueRender(true)`, observe nothing is drawn until focus returns. | Low — every known caller has its own fallback. Ranked `accepted` until one does not. |
 
 ---
 
-## 1. Work parked behind an animation frame that never comes · **open**
+## 1. Work parked behind an animation frame that never comes · **fixed** — F1 resolved
 
 `requestAnimationFrame` does not fire in a hidden or backgrounded tab. Anything deferred behind
 it alone stops happening, and comes back only if something else re-triggers it.
 
-Bitten three times:
+Bitten four times:
 - The event modal that never drew while the clock sat stopped (`b308837`).
 - The 3D floor that never mounted at all (`ad77732`).
 - Verifying the stale repair row, where the paint never ran in the test pane.
+- `queueRender()` itself — the last one, and the one that had been rated Low twice.
 
-`queueRender()` still parks non-urgent repaints behind `setTimeout` → `rAF`. On a hidden tab
-that means no repaint at all until the tab is looked at again, which currently recovers via the
-visibility handler — hence `accepted` rather than fixed, but it is the reason the test pane
-cannot verify any repaint and every such fix has to be argued rather than demonstrated.
+**F1 was underrated, and measuring it is what showed that.** The entry said "every known caller
+has its own fallback" and rated it accepted. But the shared throttled path sat on `rAF` alone,
+and because `renderQueued` stays true until a paint clears it, one parked frame silenced *every
+later repaint* through the already-queued check. In a pane where `visibilityState` is
+permanently `"hidden"`, the first paint after load was still pending eighteen seconds later,
+with `lastRenderAt` at 0: the clock ran and the screen stopped, and only modal-urgent renders
+got through. The fix races the frame against a timer — the frame wins when the page is being
+looked at, the timer when it is not — with a schedule token so a stale fallback cannot paint
+against a newer schedule and defeat the throttle that keeps 16x readable. Verified: 177
+`queueRender` calls in 3.5s still produce 2 paints, and a hidden pane now follows the clock.
+
+**The lesson is about the rating, not the bug.** "Every caller has its own fallback" was true
+and irrelevant — the hazard was in the shared path they were all working around. Two callers
+independently growing the same `setTimeout` workaround was the evidence, and I read it as
+reassurance instead of as a symptom.
 
 **Check:** grep for `requestAnimationFrame` and ask of each: what happens if this never fires?
 If the answer is worse than "it draws late", it needs a timer armed alongside it.
@@ -204,6 +215,21 @@ wanting a different draw overrides it visibly.
 **Check:** run the suite six times and count failures. Anything other than an identical count
 every time means a rule is reading a random world.
 
+## 17. A new module has three homes · **fixed** (this pass)
+
+Extracting `render-queue.js` needed it added to `index.html`, the `expectedScripts` manifest in
+`check-project-structure`, **and** the file list in `engine-harness`. Missing the third broke 12
+engine rules with `queueRender is not defined`, and missing the second broke the structure
+suite. Both failed loudly, which is the good case — but they failed one at a time, after the
+fact, and nothing states up front that the three lists must agree.
+
+Note also that the structure suite *passed* a deliberately wrong load order, because the
+manifest and `index.html` were edited consistently. Agreement between the two lists is not the
+same as the order being right, which is why the load-order assertion lives in the UI contracts
+and names the reason.
+
+**Check:** after adding a module, run all five suites, not the one you were working in.
+
 ## 16. A gate that could be outrun · **fixed** (this pass)
 
 The behavioural suite collected failures into an array and reported them near the end of the
@@ -319,6 +345,9 @@ and ask whether every name belongs there.
 
 | Date | Class | Finding | Commit |
 |---|---|---|---|
+| 2026-09-09 | 1 | F1: `queueRender`'s throttled paint sat on rAF alone, so a hidden tab never repainted and `renderQueued` stayed true, dropping every later repaint. Measured: first paint after load still pending 18s later in a permanently-hidden pane. Frame and timer now race, tokenised so the throttle holds | *pending* |
+| 2026-09-09 | 17 | Adding one module required three separate lists to agree; two failed after the fact | *pending* |
+| 2026-09-09 | 11 | `simulation.js` breached the 70KB ceiling. Extracted `render-queue.js` as a real seam — the clock and when its effects reach the glass — rather than trimming comments to fit | *pending* |
 | 2026-09-09 | 16 | The behavioural suite's failure gate sat two lines above the end of the file, so three rules appended after it ran, failed, and were never reported — the suite announced 121 passing while one failed every run. Moved to an exit hook | `f70f5df` |
 | 2026-09-09 | 10 | `SITE()` never reset `wallets`, `hardware`, `activity` or `log`. Rules set the first two by *replacing* the object, dropping every key they did not name — one rule deleted `mtgox`, `bitfinex`, `quadriga`, `frontier` and `etf` for every rule after it | `f70f5df` |
 | 2026-09-09 | 9 | F4: eight surviving clamp mutants killed. The worst was `stageDelivery`'s staged count — inverting it destroys crates already waiting rather than mis-averaging them | `f70f5df` |

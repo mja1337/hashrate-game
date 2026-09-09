@@ -9,6 +9,7 @@ const inline = (await Promise.all(appScripts.map(file => readFile(new URL(file, 
 const simulationSource = await readFile(new URL("src/engine/simulation.js", root), "utf8");
 const buildSource = await readFile(new URL("scripts/build-historical-data.mjs", root), "utf8");
 const renderSource = await readFile(new URL("src/ui/render.js", root), "utf8");
+const renderQueueSource = await readFile(new URL("src/engine/render-queue.js", root), "utf8");
 const operatorSource = await readFile(new URL("src/engine/operator.js", root), "utf8");
 
 function assert(condition, message) {
@@ -693,7 +694,10 @@ assert(inline.includes("function refreshMarket()") && inline.includes('id="marke
 assert(inline.includes("const TX_COUNT=Math.max(0,Math.min(300,txDay))"), "Mempool 'next block' mosaic no longer scales with real transaction volume");
 assert((inline.match(/title="\$\{/g) || []).length >= 20, "Not enough disabled controls explain themselves on hover");
 assert(/if\(!needsFull&&state\.started&&!state\.activeEvent&&!state\.ended\)refreshLive\(\);else renderMineContent\(\);/.test(inline), "Fault-driven full renders no longer route through the scroll-coordinated Mine path");
-assert(inline.includes("setTimeout(()=>requestAnimationFrame(paint),delay)"), "Queued renders are no longer frame-aligned, which is what made 16x speed jitter");
+/* Frame alignment is still required, but it is no longer the only mechanism — see the
+   queueRender block further down, which asserts the frame, the timer that covers a tab the
+   frame never comes to, and the token that stops the two from defeating the throttle. */
+assert(inline.includes("setTimeout(()=>requestAnimationFrame(paintIfCurrent),delay)"), "Queued renders are no longer frame-aligned, which is what made 16x speed jitter");
 assert(inline.includes("state.speed>=16?600:"), "The high-speed render throttle is gone; faster clocks must repaint less often, not more");
 assert(inline.includes("function captureScrollAnchor()") && inline.includes("function restoreScrollAnchor(anchor)") && inline.includes("const anchor=keepPosition?captureScrollAnchor():null"), "Repaints no longer anchor on the card the reader is looking at, so content inserted above the viewport will silently push the page down");
 assert(inline.includes("save();renderMineContent();") && !/log\("Spare parts ordered"[^;]*\);save\(\);render\(\);/.test(inline), "Ordering spare parts still rebuilds the whole page instead of patching the Mine tab");
@@ -756,6 +760,14 @@ assert(inline.includes("function dismissStaff(id)") && inline.includes('a==="dis
 assert(inline.includes("function selfServiceBench(owned)") && inline.includes("${selfServiceRelevant()?selfServiceBench(owned):\"\"}") && inline.includes("function selfServiceRelevant()") && css.includes(".self-service-bench{"), "The Mine floor is missing the self-service bench panel, its styling, or the check that shows it whenever no technician is free");
 assert(inline.includes("function operatorLevel(total)") && inline.includes("function xpForLevel(level)") && inline.includes("function levelAwardsPoint(level)") && inline.includes("function awardXp(amount,source)"), "The operator XP model is missing");
 const operatorIdx = appScripts.indexOf("src/engine/operator.js"), simulationIdx = appScripts.indexOf("src/engine/simulation.js");
+/* render-queue.js owns the repaint flags as top-level `let` bindings. Nothing in simulation.js
+   reaches them at load today — verified, and the wrong order does boot cleanly — so this
+   assertion is a precaution rather than a live requirement. It is worth pinning anyway: the
+   flags are set from all over the engine, simulation.js runs 146 top-level statements, and the
+   first migration to touch one would crash on load for whichever saves take that path. */
+const renderQueueIdx = appScripts.indexOf("src/engine/render-queue.js");
+assert(renderQueueIdx >= 0 && renderQueueIdx < simulationIdx,
+  "src/engine/render-queue.js must load BEFORE src/engine/simulation.js: it declares the repaint flags with let, and simulation.js touches them at load through its migration block");
 assert(operatorIdx >= 0 && simulationIdx >= 0 && operatorIdx < simulationIdx, "src/engine/operator.js must load BEFORE src/engine/simulation.js: the migration block calls normalizeXp() at the top level, and reversing them aborts the whole engine on load");
 assert(/const XP_LEVEL_STEP=60,SHARE_WORK=4294967296;/.test(operatorSource) && !/const XP_LEVEL_STEP/.test(simulationSource), "The XP constants belong in operator.js alongside the functions that use them");
 assert(inline.includes('awardXp(1.2*Math.log2(1+shares),"shares")') && inline.includes('"record")') && inline.includes('"deploy")') && inline.includes('"repair")'), "XP is no longer earned from all four sources (shares, best-share records, deployment, repairs)");
@@ -843,6 +855,35 @@ assert(inline.includes("Immediate effect: move BTC") && inline.includes("Consequ
    it; the last is the only part the player can still act on. */
 assert(inline.includes("function reportCoinLoss(") && inline.includes("function lossModal()") && inline.includes("function dismissLoss()"),
   "The coin-loss ledger, its modal or its dismissal has gone");
+/* THE REPAINT THAT MAY NEVER COME.
+
+   queueRender's throttled path aligned its DOM write with an animation frame, which is the
+   right instinct and the wrong sole mechanism: a hidden tab is owed no frames, so the paint
+   never ran — and because renderQueued stays true until a paint clears it, every later repaint
+   was dropped by the already-queued check too. The clock ran and the screen stopped. Measured,
+   not supposed: in a pane whose visibilityState is permanently "hidden", the first paint after
+   load was still pending eighteen seconds later, and only modal-urgent renders got through.
+
+   So the frame and a timer race, and the token decides which one counts. The token is not
+   decoration: without it a stale fallback fires against a newer schedule and paints early,
+   defeating the throttle that keeps 16x readable. Each of these three lines is load-bearing
+   and each is asserted separately, because losing any one of them restores a different bug. */
+/* The comparison, not just the counter. Asserting that a token is CREATED says nothing about
+   whether anything reads it — the first version of this line passed against a mutant that kept
+   the counter and threw the check away, which is the whole of the bug it was meant to stop. */
+assert(/const paintIfCurrent=\(\)=>\{if\(token===renderScheduleToken\)paint\(\)\};/.test(renderQueueSource),
+  "queueRender no longer checks its schedule token, so a stale timer can paint against a newer schedule and defeat the repaint throttle");
+assert(/setTimeout\(\(\)=>requestAnimationFrame\(paintIfCurrent\),delay\);/.test(renderQueueSource),
+  "queueRender no longer aligns its throttled paint with an animation frame, so a visible tab can write mid-paint");
+assert(/setTimeout\(paintIfCurrent,delay\+RENDER_FRAME_GRACE\);/.test(renderQueueSource),
+  "queueRender has lost its timer fallback: on a hidden or frame-starved tab the repaint never runs and renderQueued stays true, so every later repaint is dropped as well");
+assert(/const RENDER_FRAME_GRACE=\d+;/.test(renderQueueSource),
+  "The grace period before the fallback paint is no longer named, so the wait for a frame that may never come is a magic number");
+/* And the urgent path stays free of frames entirely. A dialog explaining why the clock stopped
+   is the one repaint that can never afford to wait for a frame the browser may not grant. */
+assert(/if\(urgent\)\{renderUrgentQueued=true;setTimeout\(paint,0\);return\}/.test(renderQueueSource),
+  "An urgent repaint no longer bypasses both the throttle and the animation frame");
+
 /* Reporting a loss stops the clock, so it must request its own repaint: there is no next tick
    left to notice a flag, and a modal nothing draws is worse than the toast it replaced. */
 assert(/state\.lossResume=true;[\s\S]{0,400}queueRender\(true\)/.test(inline),

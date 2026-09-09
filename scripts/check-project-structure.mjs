@@ -21,6 +21,9 @@ const expectedScripts = [
   "src/engine/secondary.js",
   "src/engine/nodes.js",
   "src/engine/operator.js",
+  /* Before simulation.js: it declares the repaint flags with `let`, and simulation.js reaches
+     them at load through its migration block. */
+  "src/engine/render-queue.js",
   "src/engine/simulation.js",
   "src/engine/settlement.js",
   "src/engine/custody.js",

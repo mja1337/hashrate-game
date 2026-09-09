@@ -41,6 +41,8 @@ const FILES = [
   "src/engine/secondary.js",
   "src/engine/nodes.js",
   "src/engine/operator.js",
+  // Before simulation.js, matching index.html — see the note in render-queue.js.
+  "src/engine/render-queue.js",
   "src/engine/simulation.js",
   "src/engine/settlement.js",
   "src/engine/custody.js",
