@@ -306,10 +306,10 @@ and ask whether every name belongs there.
 
 | Date | Class | Finding | Commit |
 |---|---|---|---|
-| 2026-09-09 | 14 | All 119 behavioural rules ran against a `Math.random()`-seeded world; the racking rule failed once then passed six times | *pending* |
-| 2026-09-09 | 12 | F3 resolved: 2 of 9 never-called functions were real missing guards, 6 deleted as duplicates, 1 kept as the tested spec. `activePoolShare` would have broken the pool explorer's history slider if wired in | *pending* |
-| 2026-09-09 | 9 | A new glossary assertion matched the *same line in another file* — `glossary.js` and `render.js` both normalise the query identically, so testing the concatenated source passed whatever `render.js` did. Scoped to `renderSource` | *pending* |
-| 2026-09-09 | 8 | Two contracts asserted spares the game never consults (`skillPrereqsMet`, `coldSpendPending`) — repointed at the shipped paths | *pending* |
+| 2026-09-09 | 14 | All 119 behavioural rules ran against a `Math.random()`-seeded world; the racking rule failed once then passed six times | `d591d08` |
+| 2026-09-09 | 12 | F3 resolved: 2 of 9 never-called functions were real missing guards, 6 deleted as duplicates, 1 kept as the tested spec. `activePoolShare` would have broken the pool explorer's history slider if wired in | `d591d08` |
+| 2026-09-09 | 9 | A new glossary assertion matched the *same line in another file* — `glossary.js` and `render.js` both normalise the query identically, so testing the concatenated source passed whatever `render.js` did. Scoped to `renderSource` | `d591d08` |
+| 2026-09-09 | 8 | Two contracts asserted spares the game never consults (`skillPrereqsMet`, `coldSpendPending`) — repointed at the shipped paths | `d591d08` |
 | 2026-09-09 | 9 | Nothing asserted the shape of facility move risk: turning the `.48` ceiling into a floor made every expansion at least a coin-flip and the suite passed. Same for the `Math.min(state.cash,…)` clamp on incident fees — inverted, it drove cash to -73,471 from a balance of 500 | `c49c227` |
 | 2026-09-09 | 5 | Cooling on order was invisible to the move gate — plant ordered in a large site installs into whichever site you are standing in when the fitters finish. Third instance of the same in-flight-work class; `pendingCoolingOrdersFor()` was written for it and never called | `c49c227` |
 | 2026-09-09 | 13 | The fuzz power invariant threw instead of checking — a module constant referenced inside the VM-evaluated string — and 60 seeds could not reach the stranding precondition at all until an overshooting order action was added | `c49c227` |
