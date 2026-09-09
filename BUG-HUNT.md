@@ -319,9 +319,9 @@ and ask whether every name belongs there.
 
 | Date | Class | Finding | Commit |
 |---|---|---|---|
-| 2026-09-09 | 16 | The behavioural suite's failure gate sat two lines above the end of the file, so three rules appended after it ran, failed, and were never reported — the suite announced 121 passing while one failed every run. Moved to an exit hook | *pending* |
-| 2026-09-09 | 10 | `SITE()` never reset `wallets`, `hardware`, `activity` or `log`. Rules set the first two by *replacing* the object, dropping every key they did not name — one rule deleted `mtgox`, `bitfinex`, `quadriga`, `frontier` and `etf` for every rule after it | *pending* |
-| 2026-09-09 | 9 | F4: eight surviving clamp mutants killed. The worst was `stageDelivery`'s staged count — inverting it destroys crates already waiting rather than mis-averaging them | *pending* |
+| 2026-09-09 | 16 | The behavioural suite's failure gate sat two lines above the end of the file, so three rules appended after it ran, failed, and were never reported — the suite announced 121 passing while one failed every run. Moved to an exit hook | `f70f5df` |
+| 2026-09-09 | 10 | `SITE()` never reset `wallets`, `hardware`, `activity` or `log`. Rules set the first two by *replacing* the object, dropping every key they did not name — one rule deleted `mtgox`, `bitfinex`, `quadriga`, `frontier` and `etf` for every rule after it | `f70f5df` |
+| 2026-09-09 | 9 | F4: eight surviving clamp mutants killed. The worst was `stageDelivery`'s staged count — inverting it destroys crates already waiting rather than mis-averaging them | `f70f5df` |
 | 2026-09-09 | 14 | All 119 behavioural rules ran against a `Math.random()`-seeded world; the racking rule failed once then passed six times | `d591d08` |
 | 2026-09-09 | 12 | F3 resolved: 2 of 9 never-called functions were real missing guards, 6 deleted as duplicates, 1 kept as the tested spec. `activePoolShare` would have broken the pool explorer's history slider if wired in | `d591d08` |
 | 2026-09-09 | 9 | A new glossary assertion matched the *same line in another file* — `glossary.js` and `render.js` both normalise the query identically, so testing the concatenated source passed whatever `render.js` did. Scoped to `renderSource` | `d591d08` |
