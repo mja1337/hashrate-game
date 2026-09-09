@@ -345,9 +345,9 @@ and ask whether every name belongs there.
 
 | Date | Class | Finding | Commit |
 |---|---|---|---|
-| 2026-09-09 | 1 | F1: `queueRender`'s throttled paint sat on rAF alone, so a hidden tab never repainted and `renderQueued` stayed true, dropping every later repaint. Measured: first paint after load still pending 18s later in a permanently-hidden pane. Frame and timer now race, tokenised so the throttle holds | *pending* |
-| 2026-09-09 | 17 | Adding one module required three separate lists to agree; two failed after the fact | *pending* |
-| 2026-09-09 | 11 | `simulation.js` breached the 70KB ceiling. Extracted `render-queue.js` as a real seam — the clock and when its effects reach the glass — rather than trimming comments to fit | *pending* |
+| 2026-09-09 | 1 | F1: `queueRender`'s throttled paint sat on rAF alone, so a hidden tab never repainted and `renderQueued` stayed true, dropping every later repaint. Measured: first paint after load still pending 18s later in a permanently-hidden pane. Frame and timer now race, tokenised so the throttle holds | `ceb1089` |
+| 2026-09-09 | 17 | Adding one module required three separate lists to agree; two failed after the fact | `ceb1089` |
+| 2026-09-09 | 11 | `simulation.js` breached the 70KB ceiling. Extracted `render-queue.js` as a real seam — the clock and when its effects reach the glass — rather than trimming comments to fit | `ceb1089` |
 | 2026-09-09 | 16 | The behavioural suite's failure gate sat two lines above the end of the file, so three rules appended after it ran, failed, and were never reported — the suite announced 121 passing while one failed every run. Moved to an exit hook | `f70f5df` |
 | 2026-09-09 | 10 | `SITE()` never reset `wallets`, `hardware`, `activity` or `log`. Rules set the first two by *replacing* the object, dropping every key they did not name — one rule deleted `mtgox`, `bitfinex`, `quadriga`, `frontier` and `etf` for every rule after it | `f70f5df` |
 | 2026-09-09 | 9 | F4: eight surviving clamp mutants killed. The worst was `stageDelivery`'s staged count — inverting it destroys crates already waiting rather than mis-averaging them | `f70f5df` |
