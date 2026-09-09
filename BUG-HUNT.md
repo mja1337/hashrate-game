@@ -247,6 +247,14 @@ remained was not more of the same. Four were plainly observable and are now cont
 - `fs.hash<=0` → `<0`: a site at exactly zero hash falls through every branch of
   `siteStopReason` and returns nothing — the original 575k-machine bug, restored inside the
   function written to prevent it.
+- `threshold>1` → `>=1` in `signing.js`: a single-key operator told their coins were released
+  by "1 signatures gathered from 1 keys held apart". I had claimed both `threshold>1` sites
+  were covered; the fee was, the sentence was not, and only the clean sweep showed it.
+- `overKw>0` / `overSpace>0` → `>=0`: the stop reason *invents* half a message rather than
+  dropping one — "0 kW more than the workshop can supply" — sending the operator to free
+  capacity that is not the problem. Catching this needed the asymmetric cases: over on floor
+  while inside the power cap, and over on power while inside the floor. A rule that only asks
+  the both-short case passes either gate however it is written.
 
 One is genuinely equivalent and now recorded as such rather than left ambiguous:
 `stagedFitCount>=staged` → `>` cannot be observed, because when the crates fit exactly both
@@ -272,6 +280,18 @@ It also lives in the repo now instead of `/tmp`, so the check below is reproduci
 
 **Check:** `node scripts/mutate-engine.mjs [file ...]` — every survivor is either a missing
 contract or an equivalent mutant. Decide which, in writing, one at a time.
+
+**Where it stands:** 108 mutants across the five worked modules, 38 surviving. `timeline.js`
+contributes none. The remainder are dominated by probability boundaries against `nextRand()`
+(`incident<.42` → `<=`), which differ on a measure-zero set and cannot be observed, and by
+label thresholds where the boundary is a presentation choice rather than a rule. The ones that
+mattered are contracted; the rest are named here so the next pass starts from a decision
+rather than a number.
+
+**The pattern worth carrying forward:** a gate written `x>0` needs the case where `x` is
+exactly zero to be reachable *and asserted*, and for a pair of independent gates that means one
+case per gate, not one case for both. Three of the contracts written this pass survived their
+first mutant for exactly that reason.
 
 ## 17. A new module has three homes · **fixed** (this pass)
 

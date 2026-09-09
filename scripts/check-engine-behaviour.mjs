@@ -1563,6 +1563,36 @@ rule("a vendor leak reaches that vendor's customers and no one else", () => {
   assert(Math.abs(r.after - r.held) < 1e-9, "the disclosure moved coins by itself, which a customer-data breach does not do");
 });
 
+rule("the signing ceremony is described as the one the wallet actually has", () => {
+  /* `threshold>1` decides two things, and I contracted only the first. The fee premium is
+     asserted elsewhere; this is the sentence. Inclusive, and a single-key operator is told
+     their coins were released by "1 signatures gathered from 1 keys held apart" — quorum
+     language, wrong grammar, and a description of protection they do not have, in the feature
+     built to teach the difference. The activity ledger is where it lands, so that is where
+     this reads it rather than trusting the expression's shape. */
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");`)}
+    ${CONFIGURED_WALLET("single")}
+    state.activity=[];state.wallets.cold=5;state.wallets.hot=0;
+    transfer("cold","hot",.5);
+    const singleEntry=(state.activity.find(e=>/Cold spend signing started/.test(e.text))||{}).amount||"";
+    ${CONFIGURED_WALLET("2of3")}
+    state.coldSpends=[];state.activity=[];state.wallets.cold=5;state.wallets.hot=0;
+    transfer("cold","hot",.5);
+    const quorumEntry=(state.activity.find(e=>/Cold spend signing started/.test(e.text))||{}).amount||"";
+    return {single:String(singleEntry),quorum:String(quorumEntry)}})()`);
+  assert(r.single !== "", "a single-key cold spend logged nothing, so the rule tests nothing");
+  assert(r.quorum !== "", "a quorum cold spend logged nothing, so the rule tests nothing");
+  assert(/one key retrieved/.test(r.single),
+    `a single-key wallet should describe one key being retrieved, but logged: "${r.single}"`);
+  assert(!/signatures gathered/.test(r.single),
+    `a single-key wallet was described as gathering signatures from keys held apart: "${r.single}"`);
+  assert(/signatures gathered from/.test(r.quorum),
+    `a quorum wallet should describe gathering signatures, but logged: "${r.quorum}"`);
+  assert(/2 signatures gathered from 3 keys/.test(r.quorum),
+    `a 2-of-3 wallet should name its own threshold and key count: "${r.quorum}"`);
+});
+
 rule("moving coins between wallets conserves them, and leaving cold takes signing", () => {
   const r = json(`(()=>{
     ${CUSTODY_SITE(`state.time=at("2021-02-01");`)}
@@ -2737,6 +2767,62 @@ rule("a single-key wallet is not charged for a quorum it does not have", () => {
     `a quorum wallet costs more to pay out to, but single=${r.single} and quorum=${r.quorum}`);
   assert(Math.abs(r.ratio - 1.35) < 1e-9,
     `the quorum premium should be 1.35x, got ${r.ratio}x — a single-key wallet is being charged for a quorum`);
+});
+
+rule("a site over on both power and floor is told about both", () => {
+  /* siteStopReason builds its sentence from two independent shortfalls, and each is gated by
+     its own `>0`. Either gate made inclusive drops that half of the message: an operator over
+     on power AND floor is sent to free one of them, frees it, and the site stays dark with the
+     other still unmentioned. This is the function that exists because a 575k-machine site went
+     quiet with nothing on screen, so a half-explanation is the original bug wearing a sentence. */
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.facility="workshop";
+    state.region="texas";state.hardware={s19:400};`)}
+    const fs=fleet(),f=FACILITIES.find(x=>x.id==="workshop");
+    return {overKw:+(fs.kw-fs.cap).toFixed(1),overSpace:fs.space-f.space,
+      within:fs.within,reason:siteStopReason().slice(0,220)}})()`);
+  assert(r.overKw > 0, `this rule needs the site over on power, it is over by ${r.overKw} kW`);
+  assert(r.overSpace > 0, `this rule needs the site over on floor, it is over by ${r.overSpace} units`);
+  assert(r.reason !== "", "a site over on both power and floor gave no reason at all");
+  assert(/kW more than/.test(r.reason), `the power shortfall is not named: "${r.reason}"`);
+  assert(/floor units more than/.test(r.reason), `the floor shortfall is not named: "${r.reason}"`);
+
+  /* The complementary case, which is what the `>0` gates are actually for. Over on floor and
+     comfortably inside the power cap — every machine stopped, so nothing draws while the racks
+     stay full. An inclusive gate does not drop half the message here, it INVENTS half: the
+     operator is told they need "0 kW more than the workshop can supply", and sent to free
+     capacity that is not the problem. Asserting only the both-short case cannot see that,
+     which is why the first version of this rule survived both of those mutants. */
+  const only = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.facility="workshop";
+    state.region="texas";state.hardware={s19:400};`)}
+    state.poweredDownHardware={s19:400};
+    const fs=fleet(),f=FACILITIES.find(x=>x.id==="workshop");
+    return {kw:+fs.kw.toFixed(1),cap:+fs.cap.toFixed(1),overSpace:fs.space-f.space,
+      within:fs.within,reason:siteStopReason().slice(0,220)}})()`);
+  assert(only.kw <= only.cap,
+    `this arm needs the site inside its power cap, it draws ${only.kw} kW of ${only.cap} kW`);
+  assert(only.overSpace > 0, `this arm needs the site over on floor, it is over by ${only.overSpace}`);
+  assert(/floor units more than/.test(only.reason),
+    `the floor shortfall is not named: "${only.reason}"`);
+  assert(!/kW more than/.test(only.reason),
+    `the site is inside its power cap, yet the operator is told about a power shortfall: "${only.reason}"`);
+
+  /* And the mirror of it, because the two gates are independent and each needs the case where
+     ITS shortfall is the zero one. A single S19 in a home office draws 3.25 kW against a
+     1.5 kW circuit while occupying 2 of 5 floor units: over on power, plenty of room. An
+     inclusive floor gate tells that operator to find "0 floor units more than it can hold". */
+  const powerOnly = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.facility="home";
+    state.region="na";state.hardware={s19:1};`)}
+    const fs=fleet(),f=FACILITIES.find(x=>x.id==="home");
+    return {kw:+fs.kw.toFixed(2),cap:+fs.cap.toFixed(2),space:fs.space,siteSpace:f.space,
+      within:fs.within,reason:siteStopReason().slice(0,220)}})()`);
+  assert(powerOnly.kw > powerOnly.cap,
+    `this arm needs the site over on power, it draws ${powerOnly.kw} kW of ${powerOnly.cap} kW`);
+  assert(powerOnly.space <= powerOnly.siteSpace,
+    `this arm needs the fleet to fit the floor, it uses ${powerOnly.space} of ${powerOnly.siteSpace}`);
+  assert(/kW more than/.test(powerOnly.reason),
+    `the power shortfall is not named: "${powerOnly.reason}"`);
+  assert(!/floor units more than/.test(powerOnly.reason),
+    `the fleet fits the floor, yet the operator is told to find more of it: "${powerOnly.reason}"`);
 });
 
 rule("a site producing no hash says so", () => {
