@@ -2695,6 +2695,89 @@ rule("a build already in progress from an older save still completes", () => {
   assert(r.trail[2] > 0 && r.trail[2] < 120, `an old-shaped job did not ramp: ${r.trail.join(", ")}`);
 });
 
+rule("the only machine you own can still be stopped and retired", () => {
+  /* `owned<1` guards these actions against an empty fleet. Off by one in the inclusive
+     direction and owning exactly one machine means owning an untouchable one: no retiring it,
+     no powering it down, and no message explaining why. The whole of the early game is one
+     machine, so this is the boundary that matters most and it was asserted nowhere.
+
+     Uses an S1 rather than the starting laptop: the laptop is `permanent` and refuses
+     retirement by design, which would have made this rule pass for the wrong reason. */
+  const r = json(`(()=>{${SITE(`state.time=at("2013-06-01");state.facility="garage";
+    state.region="na";state.hardware={s1:1};`)}
+    state.poweredDownHardware={};state.retirementJobs=[];
+    setHardwarePower("s1",false,1);
+    const stopped=state.poweredDownHardware.s1||0;
+    setHardwarePower("s1",true,1);
+    const restarted=state.poweredDownHardware.s1||0;
+    decommissionHardware("s1",1);
+    const booked=state.retirementJobs.reduce((a,j)=>a+j.qty,0);
+    return {owned:state.hardware.s1,stopped,restarted,booked,
+      permanent:!!HARDWARE.find(h=>h.id==="s1").permanent}})()`);
+  assert(r.permanent === false, "this rule needs a machine that can actually be retired");
+  assert(r.stopped === 1, `the single machine could not be powered down (${r.stopped} stopped)`);
+  assert(r.restarted === 0, `the single machine could not be restarted (${r.restarted} still off)`);
+  assert(r.booked === 1, `the single machine could not be retired (${r.booked} booked)`);
+});
+
+rule("a single-key wallet is not charged for a quorum it does not have", () => {
+  /* `threshold>1` is what separates one key from several, and it decides both a fee premium
+     and the sentence describing the ceremony. Inclusive, and a single-key operator pays the
+     multisig surcharge on every payout and is told their coins were released by signatures
+     gathered from keys held apart — a fee for protection they do not have, and a lie about
+     how their own wallet works, in the part of the game meant to teach exactly this. */
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.hardware={s19:5};`)}
+    state.custody.policy="single";state.custody.assigned=[];
+    const single=payoutNetworkFee();
+    state.custody.policy="2of3";
+    const quorum=payoutNetworkFee();
+    return {single,quorum,ratio:+(quorum/single).toFixed(3)}})()`);
+  assert(r.single > 0 && r.quorum > 0, "a payout fee should never be free");
+  assert(r.quorum > r.single,
+    `a quorum wallet costs more to pay out to, but single=${r.single} and quorum=${r.quorum}`);
+  assert(Math.abs(r.ratio - 1.35) < 1e-9,
+    `the quorum premium should be 1.35x, got ${r.ratio}x — a single-key wallet is being charged for a quorum`);
+});
+
+rule("a site producing no hash says so", () => {
+  /* siteStopReason exists because an operator once watched a 575k-machine site sit idle with
+     nothing on screen explaining it. `fs.hash<=0` is the branch that answers the plainest
+     case of all. Made strict, a site at exactly zero hash falls through every branch and the
+     function returns nothing — which is the original bug, restored, in the code written to
+     stop it happening. */
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.facility="warehouse";
+    state.region="texas";state.hardware={s19:10};`)}
+    state.poweredDownHardware={s19:10};
+    const fs=fleet();
+    return {hash:fs.hash,reason:siteStopReason().slice(0,150)}})()`);
+  assert(r.hash === 0, `the fleet should be producing no hash for this rule, got ${r.hash}`);
+  assert(r.reason !== "", "a site producing no hash gave no reason for it");
+  assert(/hash/i.test(r.reason), `the reason should say nothing can hash: "${r.reason}"`);
+});
+
+rule("when every crate fits, nothing is held back and nothing says otherwise", () => {
+  /* stagedHoldReason returns "" when what fits covers what is waiting, and the comparison is
+     inclusive because fitting exactly is still fitting. Made strict and an operator whose
+     crates all fit is told they need more power and floor to rack them — advice to go and
+     free capacity they already have. */
+  /* Stages EXACTLY the room available, because that is the only quantity the boundary can be
+     read wrong at. Three crates in a warehouse with room for hundreds passes whether the
+     comparison is inclusive or not — which is how the first version of this rule survived its
+     own mutant. Fitting exactly is the case worth asserting. */
+  const r = json(`(()=>{${SITE(`state.time=at("2021-06-01");state.facility="warehouse";
+    state.region="texas";state.hardware={s19:5};`)}
+    const h=HARDWARE.find(x=>x.id==="s19");
+    const room=siteRackHeadroom(h);
+    state.inactiveHardware={s19:room};state.stagedCondition={s19:100};
+    const fits=stagedFitCount("s19"),reason=stagedHoldReason("s19");
+    return {crated:room,fits,reason:String(reason).slice(0,140)}})()`);
+  assert(r.crated > 0, "the site had no room at all, so the rule tests nothing");
+  assert(r.fits === r.crated,
+    `exactly ${r.crated} crates should fit the room measured for exactly ${r.crated}, but ${r.fits} do`);
+  assert(r.reason === "",
+    `every crate fits exactly, yet the operator is told: "${r.reason}"`);
+});
+
 rule("a job due at exactly this instant is due, and one with no due date is neither", () => {
   /* The boundary that had been written six different ways and asserted nowhere. Both mutation
      directions matter: make dueBy strict and every lead time in the game gains a day; make

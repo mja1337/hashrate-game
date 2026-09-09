@@ -215,6 +215,64 @@ wanting a different draw overrides it visibly.
 **Check:** run the suite six times and count failures. Anything other than an identical count
 every time means a rule is reading a random world.
 
+## 18. One question, six spellings · **fixed** (this pass)
+
+F4's surviving mutants were overwhelmingly one thing: the boundary on a due date, unasserted.
+I accepted them on the grounds that a one-day shift changes nothing observable, and that each
+would need its own contract. The second half was wrong, and it made the first half look
+reasonable.
+
+The question was written six ways — `job.due>t`, `t<job.due`, `t>=job.due`, `job.due<=t`, and
+two of those with the operands swapped. Each spelling was a separate chance to invert the
+boundary, and none had anywhere to be asserted because nothing owned the question. `dueBy()`
+and `pendingAt()` in `config/timeline.js` own it now; fourteen call sites read them, and the
+boundary is asserted once in the rule that owns it.
+
+**Two things worth keeping from this.** The contract found a bug in the helper on its first
+run: `Number(null)` is `0` and `Number("")` is `0`, so the obvious one-liner read a null due
+date as "due since 1970". And the pair are deliberately *not* complements for a missing date —
+both false — because that is what the hand-written comparisons did in both directions.
+
+**Check:** a class of survivors that "would each need its own contract" is usually a class
+that needs one shared definition instead. Count the spellings before writing the contracts.
+
+**And the "harmless one-day shift" reading was wrong.** With the due-date survivors gone, what
+remained was not more of the same. Four were plainly observable and are now contracted:
+
+- `owned<1` → `<=1`, twice: the only machine you own becomes untouchable — cannot be stopped,
+  cannot be retired, no message saying why. The whole early game is one machine.
+- `threshold>1` → `>=1`, twice: a single-key wallet pays the 1.35x quorum fee on every payout
+  and is told its coins were released by "signatures gathered from keys held apart" — a charge
+  for protection it does not have, in the part of the game built to teach the difference.
+- `fs.hash<=0` → `<0`: a site at exactly zero hash falls through every branch of
+  `siteStopReason` and returns nothing — the original 575k-machine bug, restored inside the
+  function written to prevent it.
+
+One is genuinely equivalent and now recorded as such rather than left ambiguous:
+`stagedFitCount>=staged` → `>` cannot be observed, because when the crates fit exactly both
+shortfalls compute to zero, `parts` is empty and the function returns `""` down either path.
+A later guard covers the boundary. That is an equivalent mutant, not a missing contract, and
+the difference is worth writing down once you have checked which it is.
+
+## 19. A mutation harness that mutated its own comments · **fixed** (this pass)
+
+The sweep skipped lines *starting* with a comment marker, so every continuation line inside a
+block comment was fair game. It reported six survivors in `config/timeline.js` that were all
+prose — inside the comment explaining the very operator being mutated — each costing a full
+suite run to discover it had changed nothing. Strings are the same trap: flipping a `>` inside
+`<h3>` yields different HTML, no failure, and a survivor that means nothing. Five of the other
+survivors were exactly that.
+
+`scripts/mutate-engine.mjs` now lexes the file into code, comment and string regions and
+mutates only code — while still treating a template literal's `${...}` as code, because that
+is where a label-picking ternary lives. On `timeline.js`: 2 real mutants, 0 survivors, 2,306
+comment and string positions skipped. The old sweep claimed 6 survivors there.
+
+It also lives in the repo now instead of `/tmp`, so the check below is reproducible.
+
+**Check:** `node scripts/mutate-engine.mjs [file ...]` — every survivor is either a missing
+contract or an equivalent mutant. Decide which, in writing, one at a time.
+
 ## 17. A new module has three homes · **fixed** (this pass)
 
 Extracting `render-queue.js` needed it added to `index.html`, the `expectedScripts` manifest in
@@ -345,6 +403,8 @@ and ask whether every name belongs there.
 
 | Date | Class | Finding | Commit |
 |---|---|---|---|
+| 2026-09-09 | 18 | F4 resolved at the cause: the due-date boundary was written six ways and owned by nothing. `dueBy`/`pendingAt` now own it, 14 call sites migrated, one contract pins the boundary, a guard stops the spellings returning. The contract caught a null-coercion bug in the helper on its first run | `81b8ceb` |
+| 2026-09-09 | 11 | `method-chapters.js` had 316 bytes of headroom — the real ceiling breach, not `simulation.js`. Fleet chapter extracted as the seam that grows | `b9e59a1` |
 | 2026-09-09 | 1 | F1: `queueRender`'s throttled paint sat on rAF alone, so a hidden tab never repainted and `renderQueued` stayed true, dropping every later repaint. Measured: first paint after load still pending 18s later in a permanently-hidden pane. Frame and timer now race, tokenised so the throttle holds | `ceb1089` |
 | 2026-09-09 | 17 | Adding one module required three separate lists to agree; two failed after the fact | `ceb1089` |
 | 2026-09-09 | 11 | `simulation.js` breached the 70KB ceiling. Extracted `render-queue.js` as a real seam — the clock and when its effects reach the glass — rather than trimming comments to fit | `ceb1089` |
