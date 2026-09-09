@@ -194,7 +194,6 @@ function skillRequirements(skill){
   return Array.isArray(skill.req)?skill.req.slice():[skill.req];
 }
 function skillName(id){return SKILLS.find(x=>x.id===id)?.name||id}
-function skillPrereqsMet(skill,s=state){return skillRequirements(skill).every(id=>(s.skills||[]).includes(id))}
 function skillGateReason(skill){
   const missing=skillRequirements(skill).filter(id=>!hasSkill(id));
   if(missing.length)return`Requires ${missing.map(skillName).join(" and ")}`;
@@ -224,7 +223,6 @@ function hardwareOfflineReason(h,s=state){
   if(condition<65)return "Maintenance required";
   return "";
 }
-function fitsInstalledFleet(s){const fs=fleet(s),f=FACILITIES.find(x=>x.id===s.facility)||FACILITIES[0];return fs.potentialKw<=fs.cap&&fs.space<=f.space}
 function fleet(s=state){
   let hash=0,minerW=0,space=0,value=0,count=0,activeCount=0,potentialW=0,offline=[];
   HARDWARE.forEach(h=>{const n=s.hardware[h.id]||0,reason=hardwareOfflineReason(h,s),rs=hardwareRepairState(h,s),{repairing,paused,active,servicing}=rs;space+=h.space*n;value+=h.cost*n;count+=n;{const immAll=immersionCount(h.id,s);potentialW+=h.w*(n-immAll+immAll*IMMERSION_POWER_GAIN)}if(n&&reason){offline.push({h,n,reason});return}if(repairing)offline.push({h,n:repairing,reason:servicing?"Repair in progress":"Unexpected hardware fault"});if(paused)offline.push({h,n:paused,reason:"Manually powered down"});const effectiveHash=h.hash*hardwareLaunchFactor(h,s.time);activeCount+=active;const imm=immersionActive(h,active,s),air=active-imm;hash+=effectiveHash*(air+imm*immersionHashGain(s));minerW+=h.w*(air+imm*IMMERSION_POWER_GAIN);if(s.skills.includes("asictune")&&(h.era==="ASIC"||h.era==="HYDRO ASIC"))hash+=effectiveHash*active*.05});

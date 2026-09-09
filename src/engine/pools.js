@@ -10,7 +10,6 @@ function availablePool(){return state.time>=at("2010-12-16")}
 function poolData(id=state.pool){return POOLS.find(x=>x.id===id)||POOLS.find(x=>x.id==="f2pool")}
 function poolClosed(id,t=state.time){const p=POOLS.find(x=>x.id===id);return !!p?.closed&&t>=at(p.closed)}
 function poolShareAt(id,t){const p=poolData(id);if(!p||id==="solo")return id==="solo"?0:0;const a=p.anchors.map(([d,v])=>[at(d),v]).sort((x,y)=>x[0]-y[0]);if(t<a[0][0])return 0;for(let i=0;i<a.length-1;i++){const [t0,v0]=a[i],[t1,v1]=a[i+1];if(t>=t0&&t<=t1){const f=(t-t0)/(t1-t0);return v0+(v1-v0)*f}}return a[a.length-1][1]}
-function activePoolShare(){return state.mode==="pool"?poolShareAt(state.pool,state.time):0}
 // A pool's payout scheme is not a fixed property: schemes were invented at
 // particular moments and pools migrated between them. Resolve against the date.
 function poolTermsAt(id=state.pool,t=state.time){

@@ -51,10 +51,8 @@ function coldSpendBlockReason(s=state){
   return "";
 }
 function coldSpends(s=state){return (s.coldSpends||(s.coldSpends=[]))}
-function coldSpendPending(s=state){return coldSpends(s).reduce((sum,j)=>sum+Math.max(0,Number(j.gross)||0),0)}
-/* What the operator could actually turn into money today, as opposed to what they own. The
-   difference between those two numbers is the whole of what cold storage costs. */
-function liquidSelfHeldBtc(s=state){return Math.max(0,Number(s.wallets?.hot)||0)}
+/* What the operator owns but cannot spend today. The gap between this and the hot wallet is
+   the whole of what cold storage costs, and treasuryDistanceDays() prices it in days. */
 function coldLockedBtc(s=state){return Math.max(0,Number(s.wallets?.cold)||0)}
 
 function beginColdSpend(to,gross,fee){

@@ -29,7 +29,6 @@ Found, reproduced, not yet fixed. Newest first.
 | # | Class | Finding | Reproduction | Severity |
 |---|-------|---------|--------------|----------|
 | F4 | 9 | 50 of 54 surviving mutants across `fleet-ops`, `facilities`, `payouts`, `signing` remain unkilled. Triaged: most are boundary (`>` vs `>=` on a due date, `add>0` vs `add>=0`) or message-shaping mutants where the outcome is asserted but the edge is not. The ones that change real behaviour and are still uncovered: `Math.max(0,paidTotal)`→`min` and `Math.min(fee,sent)`→`max` in payouts (fee accounting), `Math.max(0,…)`→`min` on `coldLockedBtc`/`liquidSelfHeldBtc` in signing (treasury distance reads zero), `Math.min(paused,qty)`→`max` in `setHardwarePower` (can un-pause more than are paused). | `node /tmp/mutate.mjs <file>` against a copy of the tree (`git archive HEAD | tar -x -C <dir>`), never the working tree — a sweep that rewrites source in place blocks every other edit for its duration and any concurrent test run loads a mutant. | Low-medium — none observed to strand or corrupt; they are unasserted edges, not known faults. |
-| F3 | 12 | Seven functions are still defined and never called: `fitsInstalledFleet`, `skillPrereqsMet`, `coldSpendPending`, `liquidSelfHeldBtc`, `pendingCoolingOrdersFor`, `activePoolShare`, `glossaryEntries`, plus `enhanceFacilities` (superseded by `enhanceFacilitiesV2`). **Two of the original nine turned out to mark real missing guards, not duplicates** — `retiringCount` (retirement double-booking, fixed `915fa67`) and `pendingCoolingOrdersFor` (cooling orders invisible to the move gate, fixed 2026-09-09). `pendingCoolingOrdersFor` is still uncalled because the fix iterates all orders rather than one id; either use it or delete it. The rest are verified duplicates: `skillPrereqsMet` (prerequisites enforced at `simulation.js:199`), `coldSpendPending` (cold is deducted at once, so a second transfer computes off the reduced balance), `fitsInstalledFleet` (the downsize gate and `rackLimits` both do this), `activePoolShare` (written out inline at `pools.js:4`), `liquidSelfHeldBtc`, and `glossaryEntries` — that last one a *second implementation* of glossary search, where the UI filters DOM nodes through `filterGlossary`/`glossarySearchKey` instead, so the two can drift apart without anyone noticing. | `grep -rho "^function [a-zA-Z0-9_]*" src/`, count each name across `src/` and `index.html`, keep the ones appearing once. For each, find what *does* enforce that rule. | Medium — the base rate is now two real bugs out of nine, so this list is worth finishing rather than filing as hygiene. |
 | F1 | 1 | `queueRender(true)` has no timer fallback, so a render requested while the tab is hidden waits for the tab to come back. Coin-loss modals and the 3D mount both had to grow their own `setTimeout` fallback separately; the shared path still has none. | Hide the tab, trigger any `queueRender(true)`, observe nothing is drawn until focus returns. | Low — every known caller has its own fallback. Ranked `accepted` until one does not. |
 
 ---
@@ -193,7 +192,30 @@ are worth chasing even though the suite is green.
 **Check:** when a rule fails that you did not touch, suspect the rule *above* it before the
 code. When a mutant kills more rules than it should, the harness is leaking.
 
-## 12. A guard that exists but was never wired in · **hunting**
+## 14. A suite that runs against a different world each time · **fixed** (this pass)
+
+`initialState()` seeds the engine's random stream from `Math.random()`, and `SITE()` did not
+override it — so all 119 rules ran against a different world on every invocation, sharing one
+advancing stream. Only one rule seeded deliberately. The racking rule failed once with three
+machines "missing" and then passed six runs in a row, which is the worst way a suite can
+behave: it teaches you to re-run rather than to look. `SITE()` now fixes the seed, and a rule
+wanting a different draw overrides it visibly.
+
+**Check:** run the suite six times and count failures. Anything other than an identical count
+every time means a rule is reading a random world.
+
+## 15. An assertion that matched the wrong file · **fixed** (this pass)
+
+`check-ui-contracts` concatenates every application script into one `inline` string, which is
+right for "does this call exist anywhere" and wrong for "does *this file* do this". A new
+assertion pinned the glossary DOM filter's query normalisation and passed against a mutant,
+because `glossary.js` contains the identical line and satisfied the match. Per-file sources
+already exist (`renderSource`, `glossarySource`); the assertion now uses one.
+
+**Check:** any assertion about how a *particular* file behaves must match that file's own
+source. If the same line legitimately appears in two files, matching `inline` proves nothing.
+
+## 12. A guard that exists but was never wired in · **swept** — F3 resolved
 
 `retiringCount()` was written to answer "how many of these are already on their way out", and
 nothing ever called it — so the retirement action caps on machines *owned* and lets the same
@@ -207,6 +229,22 @@ covers it.
 
 **Check:** list every `function` declaration whose name appears exactly once across `src/` and
 `index.html`. For each, find what *does* enforce that rule. If nothing does, that is the bug.
+Count *code* references only — a mention inside a comment satisfied the naive grep and hid
+`pendingCoolingOrdersFor` for a whole pass.
+
+**All nine resolved, and the split is the interesting part.** Two were real missing guards and
+are now wired in (`retiringCount`, `pendingCoolingOrdersFor`). Six were deleted as genuine
+duplicates of a guard enforced elsewhere. One was kept: `glossaryEntries` is the testable
+specification of glossary search, and the shipped DOM filter is a second implementation of the
+same rule that shares `glossarySearchKey` with it.
+
+**The one that nearly caused a bug is the lesson.** `activePoolShare()` looked like an obvious
+DRY win — `poolExplorerBody` contains that exact expression inline. But the helper hardcodes
+`state.time` while the caller takes `t` as a parameter, and `updatePoolExplorer` drives it with
+a historical scrubber clamped to `[START, now]`. Adopting the helper would have pinned the pool
+explorer to today, silently breaking every past date on the slider. **An extracted helper can
+be less general than the code it appears to duplicate**, so a wire-in is a behaviour change to
+be tested, never a tidy-up to be applied on sight.
 
 ## 13. Invariants nobody thought to assert · **swept** — now automated
 
@@ -268,6 +306,10 @@ and ask whether every name belongs there.
 
 | Date | Class | Finding | Commit |
 |---|---|---|---|
+| 2026-09-09 | 14 | All 119 behavioural rules ran against a `Math.random()`-seeded world; the racking rule failed once then passed six times | *pending* |
+| 2026-09-09 | 12 | F3 resolved: 2 of 9 never-called functions were real missing guards, 6 deleted as duplicates, 1 kept as the tested spec. `activePoolShare` would have broken the pool explorer's history slider if wired in | *pending* |
+| 2026-09-09 | 9 | A new glossary assertion matched the *same line in another file* — `glossary.js` and `render.js` both normalise the query identically, so testing the concatenated source passed whatever `render.js` did. Scoped to `renderSource` | *pending* |
+| 2026-09-09 | 8 | Two contracts asserted spares the game never consults (`skillPrereqsMet`, `coldSpendPending`) — repointed at the shipped paths | *pending* |
 | 2026-09-09 | 9 | Nothing asserted the shape of facility move risk: turning the `.48` ceiling into a floor made every expansion at least a coin-flip and the suite passed. Same for the `Math.min(state.cash,…)` clamp on incident fees — inverted, it drove cash to -73,471 from a balance of 500 | `c49c227` |
 | 2026-09-09 | 5 | Cooling on order was invisible to the move gate — plant ordered in a large site installs into whichever site you are standing in when the fitters finish. Third instance of the same in-flight-work class; `pendingCoolingOrdersFor()` was written for it and never called | `c49c227` |
 | 2026-09-09 | 13 | The fuzz power invariant threw instead of checking — a module constant referenced inside the VM-evaluated string — and 60 seeds could not reach the stranding precondition at all until an overshooting order action was added | `c49c227` |

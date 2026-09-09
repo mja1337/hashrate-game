@@ -41,6 +41,13 @@ const SITE = (overrides = "") => `
   state.ended=false;state.endReason=null;state.endDismissed=true;state.activeEvent=null;state.storyPause=false;
   state.mode="pool";state.pool="foundry";state.connectivity="fixed";state.contract="spot";
   state.node=0;state.cash=1e9;state.debt=0;state.power=true;state.policyLock=null;
+  /* And the engine's own random stream, which initialState() seeds from Math.random(). Without
+     this every rule ran against a different world each time the suite was invoked, and any rule
+     that ticks long enough became a coin flip: the racking rule failed once with three machines
+     "missing" and then passed six runs in a row, which is the worst possible way for a suite to
+     behave — it teaches you to re-run rather than to look. A rule that wants a different draw
+     overrides this after SITE(), deliberately and visibly. */
+  state.seed=20260909;state.rng=20260909;
   state.hardwareGlut=null;state.marketPressure={usd:0,at:0};
   state.ops={firmwarePatchedUntil:1e15,hijackUntil:0,outageUntil:0,powerOutageUntil:0,venueFreezes:{},riskMonth:""};
   state.thermal={temperature:22,orders:[],equipment:{}};
@@ -508,12 +515,15 @@ rule("a skill with two prerequisites needs both of them", () => {
     const reqs=skillRequirements(target);
     // One parent only: still refused, and the refusal names what is missing.
     state.skills=[reqs[0]];
-    const half={gate:skillGateReason(target),met:skillPrereqsMet(target)};
+    /* "met" reads the SHIPPED gate rather than a parallel predicate. It used to call
+       skillPrereqsMet(), which nothing in the game consulted — so this rule proved a spare
+       correct while unlockSkill's real guard went untested. */
+    const half={gate:skillGateReason(target),met:skillGateReason(target)===""};
     unlockSkill(target.id);
     const afterHalf=state.skills.includes(target.id);
     // Both parents: allowed.
     state.skills=reqs.slice();
-    const full={gate:skillGateReason(target),met:skillPrereqsMet(target)};
+    const full={gate:skillGateReason(target),met:skillGateReason(target)===""};
     unlockSkill(target.id);
     return{id:target.id,reqs,half,afterHalf,full,afterFull:state.skills.includes(target.id),
       names:reqs.map(skillName)}})()`);
@@ -1523,7 +1533,7 @@ rule("moving coins between wallets conserves them, and leaving cold takes signin
        hard for their owner. The coins have left cold and have not arrived: they are in flight,
        still the operator's, and not yet spendable. */
     const inflight={hot:state.wallets.hot,cold:state.wallets.cold,jobs:state.coldSpends.length,
-      pending:coldSpendPending(),days:coldSpendDays()};
+      pending:coldSpends().reduce((a,j)=>a+(Number(j.gross)||0),0),days:coldSpendDays()};
     /* Driven through tick(), not by calling the advance directly: a rule that calls the helper
        proves the helper works and passes with the tick call deleted. */
     let ticks=0;

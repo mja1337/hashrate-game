@@ -213,9 +213,9 @@ function facilityArrivalProbe(id,s=state){
      finish, and the gate measured installed equipment only — so tens of kW of inbound plant
      were invisible to the very check that exists to ask whether it fits. pendingCoolingOrdersFor
      was written to answer this and was never called by anything. */
-  for(const order of s.thermal?.orders||[]){
-    const item=COOLING_EQUIPMENT.find(x=>x.id===order.id);if(!item)continue;
-    equipment[order.id]=(equipment[order.id]||0)+Math.max(1,Number(order.qty)||1);
+  for(const item of COOLING_EQUIPMENT){
+    for(const order of pendingCoolingOrdersFor(item.id,s))
+      equipment[item.id]=(equipment[item.id]||0)+Math.max(1,Number(order.qty)||1);
   }
   shed.items.forEach(item=>{delete equipment[item.id]});
   return{...s,facility:id,thermal:{...(s.thermal||{}),equipment}};

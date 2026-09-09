@@ -894,6 +894,25 @@ for (const [query, expected] of [["fpps", "FPPS"], ["full pay per share", "FPPS"
   assert(hits.includes(expected), `Searching the glossary for "${query}" no longer finds ${expected}`);
 }
 assert(glossaryApi.glossaryEntries("").length === glossaryApi.GLOSSARY.length, "An empty glossary search should list every term");
+/* Everything above tests glossaryEntries(), and the shipped modal does NOT call it — it renders
+   every term once and hides the non-matching rows in the DOM, which is right for a list that
+   must not re-render under a cursor. So there are two implementations of one rule, and the
+   assertions above only mean something while the shipped one agrees with the tested one. The
+   binding is glossarySearchKey: the DOM key must be built from it, and the filter must apply
+   the same needle semantics — trimmed, lowercased, substring, empty shows everything. Without
+   these four lines glossaryEntries is a spare being tested while the real path runs untested,
+   which is exactly the trap this file has fallen into before. */
+assert(inline.includes("data-glossary-key=\"${escapeHtml(glossarySearchKey(entry))}\""),
+  "The glossary row key is no longer built from glossarySearchKey, so the tested search and the shipped search can disagree");
+/* Scoped to renderSource, not the concatenated inline: glossary.js contains this exact line
+   too, so matching against every file at once passed whatever render.js did. That mutant
+   survived on the first try and is the reason this assertion names its file. */
+assert(/const needle=String\(query\|\|""\)\.trim\(\)\.toLowerCase\(\)/.test(renderSource),
+  "The glossary DOM filter no longer normalises the query the way glossaryEntries does");
+assert(inline.includes('const match=!needle||(node.dataset.glossaryKey||"").includes(needle)'),
+  "The glossary DOM filter no longer matches on substring-of-key, so it can diverge from the tested search");
+assert(/function glossaryEntries\(query=""\)/.test(glossarySource),
+  "glossaryEntries is gone; it is the executable specification the DOM filter is checked against");
 assert(inline.includes("function glossaryModalHtml()") && inline.includes("${glossaryOpen?glossaryModalHtml():\"\"}") && inline.includes('else if(a==="glossary"){glossaryOpen=true'), "The glossary modal is missing or cannot be opened");
 assert(inline.includes('data-action="glossary">Open the glossary'), "Contextual help no longer offers a route into the glossary");
 assert(inline.includes("function filterGlossary(query)") && inline.includes('e.target.matches("[data-glossary-search]")'), "Glossary search is not wired to the search field");
