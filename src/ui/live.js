@@ -30,6 +30,8 @@ function refreshSpeedControls(){
 }
 function refreshDashboard(){
   if(activeTab!=="dashboard")return;
+  const chapter=document.querySelector("[data-opening-stage]");
+  if(chapter&&chapter.dataset.openingStage!==openingChapterStage()){chapter.dataset.openingStage=openingChapterStage();chapter.innerHTML=operatorBriefing()}
   const fs=fleet(),monthly=monthlyCost(),share=playerNetworkShareAt(state.time,fs.hash)*100,online=operating(),exp=online?expectedDay():0;
   const set=(id,value)=>{const el=document.getElementById(id);if(el)el.textContent=value};
   set("dashboard-status",online?"Your machines are securing the network.":state.policyLock?"Politics has shut the site.":gridCutOff()?"The grid has cut you off.":state.debt>0?"An unpaid bill is in arrears.":"Mining is offline.");

@@ -15,13 +15,14 @@ document.getElementById("app").addEventListener("click",e=>{
   if(CONFIRMABLE_ACTIONS.has(a)){requestTransactionConfirmation(b);return}
   if(a==="activity-filter"){activityFilter=ACTIVITY_CATEGORIES.includes(v)?v:"all";activityLimit=100;render();return}
   if(a==="activity-more"){activityLimit+=100;render();return}
-  if(a==="starting-mode"){if(STARTING_MODES.some(mode=>mode.id===v)){introDifficulty=v;render()}return}
+  if(a==="starting-mode"){if(STARTING_MODES.some(mode=>mode.id===v)){introDifficulty=v;introStep=1;render()}return}
   if(a==="dismiss-guidance"){if(id&&!state.guidance.dismissed.includes(id)){state.guidance.dismissed.push(id);save()}render();return}
   if(a==="mobile-menu"){mobileMenuOpen=!mobileMenuOpen;render(false);return}
   if(a==="mobile-menu-section"){mobileMenuSection=v;mobileMenuOpen=true;render(false);return}
-  if(a==="begin"){const mode=startingMode(introDifficulty),liquidity=clampStartingLiquidity(introStartingCash);state.cash=liquidity;state.startingCash=liquidity;state.time=mode.start;state.campaignStart=mode.start;state.lastMonth=new Date(mode.start).toISOString().slice(0,7);state.difficulty=mode.id;state.started=true;state.seen=["genesis"];log("Campaign start selected",`${mode.label} · ${dateFmt(mode.start)} · ${fmtUsd(liquidity)} starting liquidity`,"operations");awardLearning(LEARNING.find(x=>x.id==="cryptomailinglist"));if(!state.startingGrant){state.points+=1;state.startingGrant=true;log("Genesis operator grant","+1 skill point")}save();setTimer();render()}
+  if(a==="begin"){const mode=startingMode(introDifficulty),liquidity=clampStartingLiquidity(introStartingCash);state.cash=liquidity;state.startingCash=liquidity;state.time=mode.start;state.campaignStart=mode.start;state.lastMonth=new Date(mode.start).toISOString().slice(0,7);state.difficulty=mode.id;state.started=true;state.seen=["genesis"];log("Campaign start selected",`${mode.label} · ${dateFmt(mode.start)} · ${fmtUsd(liquidity)} starting liquidity`,"operations");awardLearning(LEARNING.find(x=>x.id==="cryptomailinglist"));if(!state.startingGrant){state.points+=1;state.startingGrant=true;log("Genesis operator grant","+1 skill point")}skipWalletSetup();if(mode.id==="hard"||mode.id==="impossible"){state.speed=0;save();setTimer();render()}}
   else if(a==="intro-next"){introStep=Math.min(INTRO_SLIDES.length-1,introStep+1);render()}
   else if(a==="intro-back"){introStep=Math.max(0,introStep-1);render()}
+  else if(a==="wallet-demo"){state.walletSetup={done:false,step:0,rolls:[],keyHex:"",demo:true,resumeSpeed:state.speed};state.speed=0;save();setTimer();render()}
   else if(a==="wallet-setup-start"){state.walletSetup.step=1;save();render()}
   else if(a==="dice-roll")rollDie();
   else if(a==="dice-finish")finishRolling();

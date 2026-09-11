@@ -47,38 +47,10 @@ const introStart = inline.indexOf("const INTRO_SLIDES=[");
 const introEnd = inline.indexOf("\n];", introStart) + 3;
 const introContext = {};
 vm.runInNewContext(inline.slice(introStart, introEnd).replace("const INTRO_SLIDES", "var INTRO_SLIDES"), introContext);
-// The count was pinned at three to keep the introduction from sprawling. That intent still
-// holds — this guards the ceiling rather than an exact number, because what matters is that
-// a new player is not made to click through a manual before they can play.
-assert(introContext.INTRO_SLIDES.length >= 3 && introContext.INTRO_SLIDES.length <= 4,
-  `The first-run introduction must stay a focused journey of three or four beats, not ${introContext.INTRO_SLIDES.length}`);
-// Coverage rather than exact titles: a player must be told what they are looking at, that
-// bills are due in cash while mining pays BTC, that most of this period is unprofitable for
-// a small operator, and what they are choosing before they choose it. Titles can be rewritten;
-// leaving one of these out is the regression worth catching.
-{
-  const introText = introContext.INTRO_SLIDES.map(slide => `${slide.kicker} ${slide.title} ${slide.lead} ${slide.body}`).join(" ").toLowerCase();
-  const mustCover = [
-    // "history" alone is satisfied by "the history of Bitcoin", which promises nothing. The
-    // claim that matters is that the DATA is real: the prices and events are the ones that
-    // happened, on the days they happened.
-    [/(real|recorded|actually happened)[^.]{0,90}(price|history|event|retarget|day)|(price|history|event|retarget)[^.]{0,90}(real one|recorded|actually happened)/,
-      "that the prices and events are the real recorded ones"],
-    // Adjacency, not just the word: "Starting Liquidity is cash" also contains "cash" and
-    // teaches a newcomer nothing about why runs end.
-    [/bills?[^.]{0,60}cash|cash[^.]{0,60}bills?/, "that the bills are due in cash"],
-    [/(earns?|earned|pays?|rewards?)[^.]{0,40}btc|btc[^.]{0,40}what you earn/, "that mining pays in BTC"],
-    [/unprofitable|solvent|takes its time|no optimal|no winning/, "an honest expectation of how the run will feel"],
-    [/method|manual/, "where the explanations live"],
-    [/starting liquidity/, "what Starting Liquidity is, before it is chosen"],
-    [/campaign start|starting era/, "what the campaign start changes"],
-  ];
-  for (const [pattern, what] of mustCover) {
-    assert(pattern.test(introText), `The introduction never tells a new player ${what}`);
-  }
-  assert(introContext.INTRO_SLIDES.every(slide => slide.facts && slide.facts.length === 3),
-    "Every introduction beat carries three summary facts; one has lost them");
-}
+assert(introContext.INTRO_SLIDES.length === 1, "Opening must reach play without a slideshow");
+assert(inline.includes('introDifficulty="easy"') && inline.includes('Customise your run'), "Opening must recommend 2009 and retain custom starts");
+assert(inline.includes('id:"first-work"') && inline.includes('id:"first-month"'), "First month needs work and completion guidance");
+assert(inline.includes('data-action="wallet-demo"'), "Wallet education must remain available after starting");
 assert(inline.includes("guidance:{dismissed:[]}") && inline.includes("state.guidance=Object.assign({dismissed:[]}") && inline.includes('if(a==="dismiss-guidance")'), "Save-compatible Operator briefing dismissals are missing");
 assert(inline.includes("function operatorBriefing()") && inline.includes("Operator briefing ·") && inline.includes("Recommended next step") && inline.includes("New to Bitcoin mining? Start with these terms"), "The state-aware newcomer Operator briefing is incomplete");
 assert(inline.includes('if(state.pendingSettlement)return""') && inline.includes('id:"grid-arrears"') && inline.includes('id:"high-temperature"') && inline.includes('id:"open-faults"') && inline.includes('id:"capacity-pressure"') && inline.includes('id:"first-run"') && inline.includes('id:"first-bill"') && inline.includes('id:"first-upgrade"') && inline.includes('id:"pool-available"') && inline.includes('id:"low-runway"'), "Operator briefing priority states are incomplete");

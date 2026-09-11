@@ -360,6 +360,7 @@ function finishRolling(){
 }
 function skipWalletSetup(){
   if(state.walletSetup.done)return;
+  if(state.walletSetup.demo){completeWalletSetup();return}
   const rolls=[];for(let i=0;i<99;i++)rolls.push(Math.floor(nextRand()*6)+1);
   state.walletSetup.rolls=rolls;state.walletSetup.keyHex=deriveWalletKeyHex(rolls);
   completeWalletSetup();
@@ -367,9 +368,9 @@ function skipWalletSetup(){
 function completeWalletSetup(){
   if(state.walletSetup.done)return;
   const tier=walletSoftwareTierAt(state.campaignStart);
-  state.walletSoftware=tier;state.walletSetup.done=true;
-  log("Wallet key generated",`${state.walletSetup.rolls.length} dice rolls · installed ${WALLET_SOFTWARE[tier].name}`,"custody");
-  state.speed=1;save();setTimer();render();
+  if(!state.walletSetup.demo)state.walletSoftware=tier;state.walletSetup.done=true;
+  if(!state.walletSetup.demo)log("Game wallet ready",`Installed ${WALLET_SOFTWARE[tier].name} · illustrative keys only`,"custody");
+  state.speed=state.walletSetup.demo?(state.walletSetup.resumeSpeed||0):1;save();setTimer();render();
 }
 function upgradeWalletSoftware(){
   const next=state.walletSoftware+1;if(next>=WALLET_SOFTWARE.length)return;
@@ -611,7 +612,7 @@ function venueAvailable(id){
   if(id==="etf")return state.time>=at("2024-01-10");return true;
 }
 function walletName(id){return({hot:"Node-connected hot wallet",cold:"Cold / hardware wallet",mtgox:"Mt. Gox",bitfinex:"Bitfinex",quadriga:"QuadrigaCX",frontier:"Frontier exchange",exchange:"Regulated exchange",etf:"ETF exposure",frozen:"Frozen claims"})[id]||id}
-function resetGame(){if(!confirm("Erase this run and return to the Genesis Block?"))return;state=initialState();OPERATOR_ERAS.forEach(era=>state.operator.eras[era.id]={months:0,solvent:0,profitable:0,uptime:0,competitive:0});migrateActivity(state);activeTab="dashboard";activityFilter="all";activityLimit=100;tradePercentages={};introDifficulty="hard";introStartingCash=STARTING_LIQUIDITY_MIN;introStep=0;clearTimeout(faucetTimer);faucet=null;save();setTimer();render()}
+function resetGame(){if(!confirm("Erase this run and return to the Genesis Block?"))return;state=initialState();OPERATOR_ERAS.forEach(era=>state.operator.eras[era.id]={months:0,solvent:0,profitable:0,uptime:0,competitive:0});migrateActivity(state);activeTab="dashboard";activityFilter="all";activityLimit=100;tradePercentages={};introDifficulty="easy";introStartingCash=STARTING_LIQUIDITY_MIN;introStep=0;clearTimeout(faucetTimer);faucet=null;save();setTimer();render()}
 function exportSave(){
   const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="hashrate-save.json";a.click();URL.revokeObjectURL(url);
 }

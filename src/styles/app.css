@@ -378,3 +378,6 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--orange);outline-off
 .floor-3d-readout{flex:1;margin:0;color:var(--dim);font:9px/1.5 var(--mono);min-height:15px;overflow:hidden;text-overflow:ellipsis}
 .floor-3d-canvas.dragging{cursor:grabbing}
 .floor-3d-readout.live{color:var(--orange2)}
+
+/* Opening chapter: optional configuration stays out of the first action. */
+.intro-customise{margin:22px 0;border-top:1px solid var(--line);padding-top:16px}.intro-customise summary{cursor:pointer;font-weight:600;padding:8px 0}.intro-customise .starting-capital{margin-top:16px}
