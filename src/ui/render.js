@@ -312,11 +312,19 @@ function restoreScrollAnchor(anchor){
 /* The tab row's height changes with the breakpoint, and anything sticking beneath it needs
    to know. Measured rather than hardcoded so the two cannot drift apart. */
 function measureTabRow(){
+  // What sticks beneath the topbar on a phone sits at the topbar's real height, not a guess.
+  const topbar=document.querySelector(".topbar");
+  if(topbar){
+    const bar=Math.round(topbar.getBoundingClientRect().height);
+    if(bar>0)document.documentElement.style.setProperty("--topbar-live-h",bar+"px");
+  }
   const tabs=document.querySelector("nav.tabs");
   if(!tabs)return;
   const height=Math.round(tabs.getBoundingClientRect().height);
   if(height>0)document.documentElement.style.setProperty("--tabs-h",height+"px");
 }
+// Rotating a phone or resizing a window changes the topbar's height without a repaint.
+window.addEventListener("resize",()=>measureTabRow());
 function renderMineContent(){
   if(deferWhilePressed(renderMineContent))return;
   if(activeTab!=="mine")return render();

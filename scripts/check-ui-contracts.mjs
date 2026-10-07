@@ -560,6 +560,21 @@ assert(/const FLOOR3D_RECOVERY_DELAYS=\[/.test(inline) && inline.includes("floor
   "Recovery is not bounded, so a floor that can never draw would rebuild forever");
 assert(/function floor3dDraw\(\)\{\s*try\{floor3dDrawNow\(\)\}/.test(inline) && /function floor3dUpdate\(\)\{\s*try\{floor3dUpdateNow\(\)\}/.test(inline),
   "An error while drawing or updating the 3D floor is not caught and reported");
+
+// A card whose height follows its contents moves everything beneath it every refresh. The mempool
+// mosaic is a window of fixed size: the same card height with no transactions as with three hundred.
+assert(/\.mp-mosaic\{[^}]*\bheight:240px;[^}]*overflow:hidden/.test(css) && !/\.mp-mosaic\{[^}]*max-height/.test(css),
+  "The mempool mosaic's height follows how many transactions it holds, so the dashboard jumps on every refresh");
+assert(/\.mp-mosaic\{height:200px;/.test(css), "The mempool mosaic has no fixed height on a phone");
+// On a phone the topbar has to stay put and the menu has to sit exactly beneath it. It was made
+// position:relative below 900px for the XP bar's sake, scrolled away, and left the open menu hung
+// 58px down the screen.
+assert(/@media\(max-width:800px\)\{\s*\.topbar\{position:sticky;top:0\}/.test(css),
+  "The phone topbar is not sticky, so it scrolls away and the menu is left floating below nothing");
+assert(/\.mobile-nav\.open\{top:var\(--topbar-live-h\)\}/.test(css) && /\.mine-sections\{top:var\(--topbar-live-h\)\}/.test(css),
+  "What sticks beneath the phone topbar is not offset by its measured height");
+assert(inline.includes('setProperty("--topbar-live-h",bar+"px")') && inline.includes('window.addEventListener("resize",()=>measureTabRow())'),
+  "The topbar's height is not measured, or not re-measured when the phone is rotated");
 assert(css.includes(".impact-flash{") && css.includes(".impact-shake{") && css.includes(".toast.toast-bad{"), "Impact-flash/shake CSS is missing");
 assert((inline.match(/,"bad"[,)]/g) || []).length >= 12, "Not enough bad-event call sites trigger the impact effect");
 assert(inline.includes("state.facilityUpgradeJob={id,due:state.time+Math.ceil(days)*DAY,cost:f.cost,risk}") && inline.includes("function upgradingFacility()") && inline.includes("function fleetGrounded()"), "Facility upgrades no longer resolve as a timed, power-down job");
