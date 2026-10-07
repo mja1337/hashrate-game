@@ -53,6 +53,7 @@ function coldSpendBlockReason(s=state,opts={}){
      clock, so one started now would never finish. Fetching the reserve from the settlement
      decision is the way to do it: it carries the bill and restarts the clock first. */
   if(s.pendingSettlement&&!opts.settling)return "A bill is waiting for a decision and the clock is stopped, so a signing started now could never finish. Use Fetch the reserve in the settlement decision: it carries the bill into the grace month and restarts the clock.";
+  if(s.custody&&s.custody.rotation)return "The coins are being swept to a new key. Signing is paused until the rotation finishes, because the old and new wallets cannot both be spent from at once.";
   const set=custodySetup(s);
   if(!set.ready)return `This wallet cannot sign: ${set.distinct} of the ${set.policy.keys} keys its policy requires are assigned. Coins in cold storage are only yours while a satisfiable quorum exists.`;
   if(set.liveDistinct<set.policy.threshold)return set.usable>=set.policy.threshold

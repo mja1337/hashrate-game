@@ -386,6 +386,7 @@ function advanceOperationalRisks(next,silent=false){
   const month=new Date(next).toISOString().slice(0,7);if(state.ops.riskMonth===month)return;state.ops.riskMonth=month;
   advanceCustodyRisks(next,silent);
   advancePlaceRisks(next,silent);
+  advanceInsiderRisk(next);
   advanceHotWalletRisk();
   if(firmwarePatchDue()&&!firmwareHijacked()&&nextRand()<firmwareHijackRisk()){state.ops.hijackUntil=next+DAY*(10+Math.floor(nextRand()*21));log("ASIC fleet hijacked","35% of hash diverted");showToast("Firmware compromise","Unpatched ASIC firmware is pointing part of your hash rate to an attacker. Patch it now.","bad");}
   const r=region(),outageRisk=connectivityIncidentRisk(),gridRisk=Math.min(.28,Math.max(.004,(1-r.rely)*1.15));
@@ -579,6 +580,7 @@ function tick(silent=false){
   advancePoolPayouts();
   advanceColdSpends(silent);
   advanceCustodyMoves(silent);
+  advanceRotation(silent);
   advanceFleetLifecycle();
   const crossed=EVENTS.filter(e=>at(e.date)>prev&&at(e.date)<=next&&!state.seen.includes(e.id)).sort((a,b)=>at(a.date)-at(b.date));
   crossed.forEach(e=>{state.seen.push(e.id);applyEvent(e)});

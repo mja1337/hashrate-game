@@ -42,12 +42,12 @@ function custodyDevicesCard(){
         ${!key?`<button class="action small primary" data-action="custody-genkey" data-id="${d.uid}">Generate a key</button>`:""}
         ${!key&&c.keys.length?`<button class="action small" data-action="custody-restore" data-id="${d.uid}">Restore an existing seed</button>`:""}
         ${key&&!key.backup?CUSTODY_PRODUCTS.filter(x=>x.kind==="backup"&&custodyProductAvailable(x)).map(x=>`<button class="action small" data-action="custody-backup" data-id="${key.id}" data-value="${x.id}"${(x.cost||0)>0&&(c.parts[x.id]||0)<1?" disabled":""}>Back up: ${x.name}${(x.cost||0)>0?` (${c.parts[x.id]||0} in stock)`:""}</button>`).join(""):""}
-        ${key&&!assigned?`<button class="action small primary" data-action="custody-assign" data-id="${key.id}">Assign to wallet</button>`:""}
+        ${key&&!assigned&&!key.retired?`<button class="action small primary" data-action="custody-assign" data-id="${key.id}">Assign to wallet</button>`:""}
         ${key&&assigned?`<button class="action small" data-action="custody-unassign" data-id="${key.id}">Remove from wallet</button>`:""}
-      </div></article>`;
+      </div>${key?custodyHolderControls(key):""}</article>`;
   }).join("");
   return `<section class="card span-12"><div class="card-head"><h2>Devices you own</h2><div class="meta">${devices.length} DEVICE${devices.length===1?"":"S"} · ${new Set(c.keys.map(k=>k.seed)).size} DISTINCT KEY${new Set(c.keys.map(k=>k.seed)).size===1?"":"S"}</div></div>
-  <div class="card-pad venue-grid">${devices.length?rows:`<p class="modal-note">No custody hardware yet. A device is not custody on its own — it becomes custody when a key is generated on it and that key is assigned to a wallet.</p>`}</div></section>`;
+  <div class="card-pad">${custodyRotationRows()}<div class="venue-grid">${devices.length?rows:`<p class="modal-note">No custody hardware yet. A device is not custody on its own — it becomes custody when a key is generated on it and that key is assigned to a wallet.</p>`}</div></div></section>`;
 }
 
 function custodyShopCard(){

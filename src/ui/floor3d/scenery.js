@@ -11,7 +11,7 @@
 /* Static site dressing and staff. No vehicles or people run simulation logic.
    Landmark positions also drive the lightweight 2D plan. */
 const FloorScenery=(()=>{
-  const roleColors={fieldtech:0xf7a13d,logistics:0xe7ce68,procurementlead:0x68bafa,treasurer:0xb69ce0};
+  const roleColors={fieldtech:0xf7a13d,logistics:0xe7ce68,procurementlead:0x68bafa,treasurer:0xb69ce0,security:0x5fd0c0};
   function plan(s){
     const {p,h}=FloorModel.definitions(s),large=FloorModel.presets.indexOf(p)>=3,w=p.width,d=p.depth;
     const items=[{type:'workbench',name:'Service bay',x:-w/2+1.4,z:d/2-2,w:2.1,d:1.1},

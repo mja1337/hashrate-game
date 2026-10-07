@@ -112,5 +112,6 @@ const STAFF=[
     desc:"Keeps consumables stocked without being asked: fans and thermal paste are reordered as soon as the fleet's faults call for more than the shelf holds."},
   {id:"mrplead",name:"MRP lead",salary:3200,supersedes:"inventorycontroller",
     desc:"Plans the whole bill of materials, orders to a buffer ahead of the shortfall rather than after it, and consolidates purchase orders for 8% off every spare part."},
-  {id:"treasurer",name:"Treasury manager",salary:2600,desc:"Reduces project-loan interest by 25%."}
+  {id:"treasurer",name:"Treasury manager",salary:2600,desc:"Reduces project-loan interest by 25%. Can hold a key of your wallet."},
+  {id:"security",name:"Security officer",salary:2800,desc:"Can hold a key of your wallet, and halves the chance that a former employee who knew one ever uses it."}
 ];

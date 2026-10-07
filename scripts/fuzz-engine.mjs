@@ -34,7 +34,8 @@ for (const seed of SEEDS) {
         backup:{product:"steelplate",durability:i===1?"steel":"paper",at:state.time,place:["site","bank","home"][i]}});
       state.custody.devices.push({uid:"d"+(i+1),product:"trezorone",supplier:"trezor",boughtAt:state.time,keyId:id,place:["site","site","home"][i]});
       state.custody.assigned.push(id)}
-    state.custody.configBackedUp=true;state.custody.configPlace="site";state.custody.seq=6;
+    state.custody.devices.push({uid:"d4",product:"trezorone",supplier:"trezor",boughtAt:state.time,keyId:null,place:"site"});
+    state.custody.configBackedUp=true;state.custody.configPlace="site";state.custody.seq=7;
     state.wallets.hot=20;state.wallets.cold=80;
     /* The engine keeps its OWN random stream — faults, events, weather, market noise — and
        initialState() seeds it from Math.random(). Seeding only the action chooser made a run
@@ -89,6 +90,9 @@ for (const seed of SEEDS) {
       ()=>{const d=((state.custody&&state.custody.devices)||[]).filter(x=>!x.destroyed&&!x.keyId);if(d.length)generateCustodyKey(pick(d).uid)},
       ()=>{const k=((state.custody&&state.custody.keys)||[]).filter(x=>!x.backup||x.backup.destroyed);if(k.length)backupCustodyKey(pick(k).id,"paperbackup")},
       ()=>backupCustodyConfig(),
+      // People: who holds a key, who leaves, and replacing a key onto a spare signer.
+      ()=>{const k=((state.custody&&state.custody.keys)||[]).filter(x=>!x.retired);if(k.length)setKeyHolder(pick(k).id,pick(CUSTODY_HOLDERS))},
+      ()=>{const c=state.custody||{},spare=(c.devices||[]).filter(d=>!d.destroyed&&!d.keyId&&d.place!=="transit");if(spare.length&&c.assigned.length)rotateCustodyKey(pick(c.assigned),pick(spare).uid)},
       /* Places: where things are kept, journeys, copies of the descriptor, and what a fire or a thief does. */
       ()=>{const d=(state.custody&&state.custody.devices)||[];if(d.length)moveCustodyItem("device",pick(d).uid,pick(["site","home","bank","trusted"]))},
       ()=>{const k=((state.custody&&state.custody.keys)||[]).filter(x=>x.backup);if(k.length)moveCustodyItem("backup",pick(k).id,pick(["site","home","bank","trusted"]))},

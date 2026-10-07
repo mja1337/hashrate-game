@@ -2033,6 +2033,164 @@ rule("machines lost in a move or seized by a receiver cannot leave a stale stopp
   assert(r.afterReceiver.stopped <= r.afterReceiver.owned, `after receivership ${r.afterReceiver.stopped} were stopped of ${r.afterReceiver.owned} owned: buying more would bring them back stopped`);
 });
 
+/* ---- PEOPLE: a key is a secret, and a secret somebody knows leaves with them ---- */
+
+rule("a key is held by its owner unless somebody on the payroll holds it", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${CONFIGURED_WALLET("2of3")}
+    const k=state.custody.keys[0],start=custodyHolder(k);
+    setKeyHolder("k0","treasurer");const refused=custodyHolder(k);
+    state.staff=["treasurer"];setKeyHolder("k0","treasurer");
+    const hired={holder:custodyHolder(k),known:[...custodyKnownBy(k)]};
+    setKeyHolder("k0","owner");
+    return{start,refused,hired,back:custodyHolder(k),stillKnown:[...custodyKnownBy(k)]};})()`);
+  assert(r.start === "owner", `a key nobody was given was held by "${r.start}"`);
+  assert(r.refused === "owner", "a key was handed to somebody who is not on the payroll");
+  assert(r.hired.holder === "treasurer", "a key could not be handed to the treasury manager once hired");
+  assert(r.stillKnown.includes("treasurer"), "handing a key back made the treasury manager forget it");
+});
+
+rule("dismissing a holder exposes the keys they ever knew, and no others", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${CONFIGURED_WALLET("2of3")}
+    state.staff=["treasurer","security"];
+    setKeyHolder("k0","treasurer");setKeyHolder("k1","security");
+    setKeyHolder("k2","treasurer");setKeyHolder("k2","owner");   // handed back, but not forgotten
+    const factor0=custodyCompromiseFactor();
+    dismissStaff("treasurer");
+    const exposed=state.custody.keys.map(k=>k.exposed?k.exposed.cause+":"+k.exposed.role:null);
+    return{exposed,label:custodyReadiness().label,detail:custodyReadiness().detail,factor0,factor:custodyCompromiseFactor(),
+      ready:custodySetup().ready,note:custodyDismissNote("security")};})()`);
+  assert(r.exposed[0] === "former-employee:treasurer", "the key the treasury manager held was not exposed when they left");
+  assert(r.exposed[2] === "former-employee:treasurer", "a key handed back was exposed on dismissal as though they had forgotten it");
+  assert(r.exposed[1] === null, "a key held by someone still employed was exposed");
+  assert(/exposed/i.test(r.label) && /former/i.test(r.detail), `the readiness card said "${r.label}: ${r.detail}"`);
+  assert(r.factor > r.factor0, "exposed keys did not raise the compromise risk");
+  assert(r.ready, "an exposed key stopped the owner signing; it is a risk, not a failure");
+  assert(/Security officer knows/.test(r.note), `the dismiss button gave no warning: "${r.note}"`);
+});
+
+rule("one key known to a former employee is the whole wallet in single signature, and nothing in a quorum", () => {
+  const months = setup => json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${setup}
+    let hit=null;
+    for(let m=0;m<1500&&!hit;m++){advanceInsiderRisk(Date.UTC(2021,1+m,1));if(pendingLoss())hit=m}
+    const loss=pendingLoss();
+    return{hit,kind:loss&&loss.kind,cause:loss&&loss.cause,held:state.wallets.hot+state.wallets.cold,exposed:custodySetup().exposed,can:custodyInsiderCanSpend()};})()`);
+  const single = months(`${CONFIGURED_WALLET("single")}state.staff=["treasurer"];setKeyHolder("k0","treasurer");dismissStaff("treasurer");`);
+  const quorum = months(`${CONFIGURED_WALLET("2of3")}state.staff=["treasurer"];setKeyHolder("k0","treasurer");dismissStaff("treasurer");`);
+  assert(single.exposed === 1 && single.can, "a dismissed holder of the only key was not an insider risk");
+  assert(single.hit !== null && single.kind === "stolen" && single.cause === "insider", "a former employee holding the only key never used it in 125 years");
+  assert(quorum.exposed === 1 && !quorum.can, "one exposed key of a 2-of-3 was treated as enough to spend");
+  assert(quorum.hit === null, "a former employee spent from a quorum with one key");
+});
+
+rule("a security officer halves the chance an ex-employee uses a key", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");`)}
+    state.staff=[];const without=insiderMonthlyRisk();
+    state.staff=["security"];const withOfficer=insiderMonthlyRisk();
+    return{without,withOfficer,salary:STAFF.find(r=>r.id==="security").salary};})()`);
+  close(r.withOfficer, r.without / 2, 1e-12, "a security officer did not halve the insider risk");
+  assert(r.salary > 0, "a security officer is free");
+});
+
+rule("a dismissed field technician exposes a key in proportion to how many there were", () => {
+  const exposedAmong = count => json(`(()=>{
+    ${CUSTODY_SITE(`state.facility="warehouse";`)}
+    ${CONFIGURED_WALLET("single")}
+    let n=0;
+    for(let i=0;i<900;i++){
+      state.time=at("2021-02-01")+i*DAY;state.custody.keys[0].holder="fieldtech";delete state.custody.keys[0].exposed;
+      custodyOnDismiss("fieldtech",${count});
+      if(state.custody.keys[0].exposed)n++;
+    }
+    return n;})()`);
+  assert(exposedAmong(1) === 900, "dismissing the only technician did not always expose the key they held");
+  const three = exposedAmong(3);
+  assert(three > 220 && three < 380, `one technician of three exposed the key ${three} times in 900; it should be about a third`);
+});
+
+rule("rotation is a job: it costs the sweep fee, takes days, pauses signing and consolidates the coins", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${CONFIGURED_WALLET("2of3")}
+    state.custody.devices=[{uid:"dSpare",product:"trezorone",supplier:"trezor",boughtAt:0,keyId:null,place:"site"}];
+    state.custody.keys[0].exposed={cause:"former-employee",role:"treasurer",at:state.time};
+    state.utxo={cold:60,hot:1};
+    const cold0=state.wallets.cold,quote=transferNetworkFee("cold",1);
+    rotateCustodyKey("k0","dSpare");
+    const during={job:!!custodyRotation(),cold:state.wallets.cold,reason:coldSpendBlockReason(),again:rotateBlockReason("k1","dSpare"),
+      assigned:[...state.custody.assigned],exposedStill:!!state.custody.keys[0].exposed,days:custodyRotation().days};
+    let t=0;while(custodyRotation()&&t<30){tick(true);t++}
+    const k=state.custody.keys;
+    return{cold0,quote,during,t,after:{assigned:[...state.custody.assigned],old:k[0].retired,oldExposed:!!k[0].exposed,
+      coins:utxoState().cold,config:state.custody.configBackedUp,copies:state.custody.configCopies||[],insider:custodyInsiderCanSpend(),
+      reason:coldSpendBlockReason(),newKey:k[k.length-1].label}};})()`);
+  close(r.cold0 - r.during.cold, r.quote, 1e-12, "the rotation did not charge the sweep fee for the coins being gathered");
+  assert(r.during.job && /swept|rotation/i.test(r.during.reason), `signing was not paused during a rotation: "${r.during.reason}"`);
+  assert(r.during.exposedStill, "the exposure ended before the coins had moved");
+  assert(r.during.days >= 2 && r.t >= r.during.days - 1, `a rotation took ${r.t} days against ${r.during.days}`);
+  assert(r.after.assigned.includes("k4") && !r.after.assigned.includes("k0"), `the new key did not take the old one's place: ${JSON.stringify(r.after.assigned)}`);
+  assert(r.after.old === true && !r.after.oldExposed, "the old key was not retired and cleared");
+  assert(r.after.coins === 1, `${r.after.coins} coins remain after a sweep; it should have consolidated them into one`);
+  assert(r.after.config === false && r.after.copies.length === 0, "a quorum's descriptor was still recorded after its keys changed");
+  assert(!r.after.insider, "a retired key still counted as an insider risk");
+});
+
+rule("a retired key cannot be put back in the wallet", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${CONFIGURED_WALLET("single")}
+    const k=state.custody.keys[0];k.retired=true;state.custody.assigned=[];
+    assignCustodyKey("k0");
+    return{assigned:[...state.custody.assigned]};})()`);
+  assert(r.assigned.length === 0, "a key retired by a rotation was assigned to the wallet again");
+});
+
+rule("a rotation needs an empty signer and a key that is in the wallet", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${PLACED_WALLET("single", [{device:"site",backup:"bank",steel:true}])}
+    state.custody.devices.push({uid:"dFree",product:"trezorone",supplier:"trezor",boughtAt:0,keyId:null,place:"site"});
+    state.custody.devices.push({uid:"dGone",product:"trezorone",supplier:"trezor",boughtAt:0,keyId:null,place:"site",destroyed:{cause:"fire"}});
+    state.custody.keys.push({id:"kOut",seed:"sOut",label:"OUT",backup:null});
+    return{ok:rotateBlockReason("k0","dFree"),holds:rotateBlockReason("k0","d0"),gone:rotateBlockReason("k0","dGone"),
+      outside:rotateBlockReason("kOut","dFree")};})()`);
+  assert(r.ok === "", `a valid rotation was refused: "${r.ok}"`);
+  assert(/holds none|independent/i.test(r.holds), `a signer already holding a key was accepted: "${r.holds}"`);
+  assert(/not available/i.test(r.gone), `a destroyed signer was accepted: "${r.gone}"`);
+  assert(/in the wallet/i.test(r.outside), `a key outside the wallet was accepted: "${r.outside}"`);
+});
+
+rule("a field technician busy on a repair is a day later to sign, and the owner never is", () => {
+  const days = (holder, staff, jobs) => json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${CONFIGURED_WALLET("single")}
+    state.staff=${JSON.stringify(staff)};state.custody.keys[0].holder="${holder}";
+    state.maintenance.serviceJobs=${JSON.stringify(jobs)};
+    return coldSpendDays();})()`);
+  const busy = [{id:"s9",crew:1,contracted:false}];
+  assert(days("fieldtech", ["fieldtech"], busy) === days("fieldtech", ["fieldtech"], []) + 1, "a technician on a repair crew was no slower to sign");
+  assert(days("fieldtech", ["fieldtech","fieldtech"], busy) === days("fieldtech", ["fieldtech","fieldtech"], []), "a second, idle technician did not cover for the busy one");
+  assert(days("owner", [], busy) === days("owner", [], []) && days("treasurer", ["treasurer"], busy) === days("treasurer", ["treasurer"], []), "a repair crew slowed a signing that does not need a technician");
+});
+
+rule("a save from before holders still opens, and every key is the owner's", () => {
+  const save = JSON.parse(fs.readFileSync(new URL("./fixtures/save-pre-custody-sprint.json", import.meta.url), "utf8"));
+  const loaded = loadWithSave(save);
+  assert(loaded.ok, `the pre-sprint save could not be opened: ${loaded.message}`);
+  const read = makeEval(loaded.sandbox);
+  const r = JSON.parse(read(`JSON.stringify({holders:custodyAssignedKeys().map(custodyHolder),exposed:custodySetup().exposed,
+    note:custodyDismissNote("treasurer"),rotation:custodyRotation(),can:custodyInsiderCanSpend(),days:coldSpendDays()})`));
+  assert(r.holders.length === 3 && r.holders.every(h => h === "owner"), `old keys were held by ${JSON.stringify(r.holders)}`);
+  assert(r.exposed === 0 && r.note === "" && r.rotation === null && !r.can, "an old save arrived with people problems it never had");
+  assert(r.days === 2, `an old 2-of-3 takes ${r.days} days to sign`);
+});
+
 rule("creditors can sell only the cold coins a wallet could actually sign for", () => {
   const taken = wallet => json(`(()=>{
     ${CUSTODY_SITE(`state.time=at("2021-02-01");`)}

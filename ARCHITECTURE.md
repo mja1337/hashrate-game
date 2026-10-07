@@ -35,6 +35,8 @@
 - `src/engine/treasury.js` — how far away the money is and what it costs to bring it: the count of coins to gather, the fee by weight at that day's rate, reach, and fetching the reserve for a bill. Extends `signing.js`.
 - `src/data/custody.js` — the equipment catalogue and the places things are kept, plus `hashRoll` and `normalizeCustodyPlaces`. Everything the load-time migration needs is here because it loads before `simulation.js`.
 - `src/engine/places.js` — where devices, seed backups and the wallet descriptor are kept: which places survive a fire, a flood or a break-in, how long a signing takes given where the keys are, journeys, and what the border does. Every roll is `hashRoll(state.seed, ...)`, never `nextRand()`.
+- `src/engine/keyholders.js` — who holds each key, what dismissing a holder exposes, the insider risk, and rotation: replacing a key as a job that sweeps every coin at the real fee. Rolls are `hashRoll`, never `nextRand()`.
+- `src/ui/enhance/people.js` — the holder controls on each key, rotation progress, and the warning on a staff card before somebody who knows a key is dismissed.
 - `src/ui/enhance/places.js` — the "Where things are kept" card.
 - `src/ui/enhance/treasury.js` — the settlement reserve card, the cold-spend review and the cost line, as sentences over the engine's numbers.
 - `src/engine/actions.js` — player mutations, transactions, imports and exports.

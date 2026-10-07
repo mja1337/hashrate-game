@@ -168,3 +168,9 @@ function normalizeCustodyPlaces(c){
   if(c.configPlace==="transit")c.configPlace="site";
   return c;
 }
+
+/* WHO CAN HOLD A KEY. The owner always can. The rest are the people on the payroll who could
+   reasonably be trusted with one, and each is a role rather than a named person, which is how
+   the rest of the staff are modelled. A field technician is one of several, so the engine treats
+   a dismissed technician as the holder only in proportion to how many there were. */
+const CUSTODY_HOLDERS=["owner","treasurer","security","fieldtech"];

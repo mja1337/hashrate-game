@@ -119,8 +119,11 @@ function custodyReadiness(s=state){
     detail:`${set.distinct} of ${set.policy.keys} keys assigned`};
   if(!set.configOk)return{label:"Config not backed up",tone:"bad",
     detail:"Seeds alone cannot rebuild a multisig wallet"};
-  if(set.exposed>0)return{label:"Key exposed",tone:"bad",
-    detail:"A backup of an assigned key was stolen. Replace that key: until you do, somebody else holds it"};
+  if(set.exposed>0){
+    const first=set.assigned.find(k=>k.exposed);
+    return{label:"Key exposed",tone:"bad",detail:first&&first.exposed.cause==="former-employee"
+      ?`A former ${STAFF.find(r=>r.id===first.exposed.role)?.name?.toLowerCase()||"employee"} knew ${first.label}. Rotate it onto a spare signer`
+      :"A backup of an assigned key was stolen. Replace that key: until you do, somebody else holds it"}}
   if(set.liveDistinct<set.policy.threshold)return{label:"Signers destroyed",tone:"bad",
     detail:set.usable>=set.policy.threshold?"Restore the keys from their backups onto new devices":"Not enough keys survive to sign or to rebuild. The coins are stranded"};
   if(set.unbacked>0)return{label:"Keys not backed up",tone:"warn",
@@ -318,6 +321,7 @@ function setCustodyPolicy(id){
 function assignCustodyKey(keyId){
   const c=state.custody,policy=custodyPolicy(c.policy),key=custodyKey(keyId);
   if(!key)return;
+  if(key.retired)return showToast("That key is retired","It was replaced because somebody else may know it. Putting it back would undo the rotation.","bad","custody");
   if(c.assigned.includes(keyId))return;
   if(c.assigned.length>=policy.keys)return showToast("Wallet is full",`${policy.name} takes ${policy.keys} key${policy.keys===1?"":"s"}.`);
   const seeds=custodyAssignedKeys().map(k=>k.seed);

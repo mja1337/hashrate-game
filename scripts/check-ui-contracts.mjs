@@ -420,6 +420,32 @@ assert(inline.includes('boughtAt:order.boughtAt||when,keyId:null,place:"site"') 
   "New devices, backups or descriptors no longer start at the mine, so nothing begins in one place and the lesson is lost");
 assert(inline.includes("if(set.placed&&set.fragile)risk*=1.8;"),
   "Keeping the backups and the signers in one place is no longer priced");
+
+// PEOPLE. A key a person knows leaves with them, and replacing one is a job with a price.
+{
+  const holdersSource = await readFile(new URL("src/engine/keyholders.js", root), "utf8");
+  const code = holdersSource.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  assert(!/nextRand\(/.test(code),
+    "A people risk draws from the shared random stream, which shifts every seeded run after it. Roll it with hashRoll(state.seed, ...)");
+}
+assert(inline.includes("custodyOnDismiss(id,countBefore);") && inline.includes("const countBefore=state.staff.filter(x=>x===id).length;"),
+  "Dismissing somebody no longer exposes the keys they knew");
+assert(inline.includes("advanceInsiderRisk(next);") && inline.includes("advanceRotation(silent);"),
+  "Insider risk or a rotation is no longer advanced by the tick");
+assert(inline.includes('else if(a==="custody-holder")setKeyHolder(id,v);') && inline.includes('else if(a==="custody-rotate")rotateCustodyKey(id,v);'),
+  "The hand-over and rotate buttons are not wired to anything");
+assert(inline.includes("${key?custodyHolderControls(key):\"\"}") && inline.includes("${custodyRotationRows()}"),
+  "The key cards no longer say who holds a key or offer to replace it");
+assert(inline.includes("${hired&&custodyDismissNote(s.id)?"),
+  "The staff card no longer warns that dismissing somebody exposes a key before it happens");
+assert(inline.includes('{id:"security",name:"Security officer"') && (await readFile(new URL("src/ui/floor3d/scenery.js", root), "utf8")).includes("security:0x5fd0c0"),
+  "The security officer is missing from the roster or from the 3D floor's crew colours");
+assert(inline.includes('if(s.custody&&s.custody.rotation)return "The coins are being swept'),
+  "A wallet can be spent from while its coins are being swept to a new key");
+assert(inline.includes('if(key.retired)return showToast("That key is retired"') && inline.includes('${key&&!assigned&&!key.retired?`<button class="action small primary" data-action="custody-assign"'),
+  "A key retired by a rotation can be assigned to the wallet again, which undoes the rotation");
+assert(inline.includes("const countBefore")&&/function custodyOnDismiss\(roleId,countBefore=1\)/.test(inline),
+  "A dismissed technician no longer exposes a key in proportion to how many there were");
 assert(inline.includes("function coldSpendCard()"),
   "Nothing shows coins that have left cold storage and not yet arrived, so a transfer looks like the game eating them");
 /* And a shortfall is a different problem depending on how far away the treasury is. */

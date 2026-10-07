@@ -426,12 +426,14 @@ function dismissStaff(id){
     const committed=(state.maintenance.serviceJobs||[]).reduce((sum,job)=>sum+(job.contracted?0:Number(job.crew||0)),0);
     if(fieldTechnicianCount()-1<committed)return showToast("Technician still on a job",`${committed} technician${committed===1?" is":"s are"} assigned to active repairs. Wait for a service job to finish before cutting the crew.`);
   }
+  const countBefore=state.staff.filter(x=>x===id).length;
   state.staff.splice(state.staff.indexOf(id),1);
   state.billLedger.staff=(state.billLedger.staff||0)+role.salary;state.bill+=role.salary;
   const techs=fieldTechnicianCount();
   if(!techs&&state.autoRepair)state.autoRepair=false;
   log(`Dismissed ${role.name}`,`One month notice · ${fmtUsd(role.salary)} added to this month's bill${id==="fieldtech"?` · ${techs} technician${techs===1?"":"s"} remaining`:""}`);
   showToast(`${role.name} dismissed`,`Salary stops now. One month's notice (${fmtUsd(role.salary)}) is added to the accrued bill.${id==="fieldtech"&&!techs?" You are back to servicing the fleet yourself.":""}`,"info");
+  custodyOnDismiss(id,countBefore);
   save();render();
 }
 function toggleInsurance(){state.insured=!state.insured;log(state.insured?"Migration insurance bound":"Migration insurance cancelled",state.insured?`${fmtUsd(insuranceMonthlyCost())}/month`:"");save();render()}

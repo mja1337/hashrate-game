@@ -114,7 +114,7 @@ function custodyKeyAccessDays(key,s=state){
    what it always was. */
 function custodySignerDays(s=state){
   const policy=custodyPolicy(s.custody.policy);
-  const days=custodyAssignedKeys(s).filter(k=>custodyKeyLive(k,s)).map(k=>custodyKeyAccessDays(k,s)).sort((a,b)=>a-b);
+  const days=custodyAssignedKeys(s).filter(k=>custodyKeyLive(k,s)).map(k=>custodyKeyAccessDays(k,s)+custodyHolderDelay(k,s)).sort((a,b)=>a-b);
   while(days.length<policy.threshold)days.push(0);   // a key that is missing is nowhere yet; the refusal says so
   return days.slice(0,policy.threshold).reduce((sum,a,i)=>sum+(i===0?a:Math.max(COLD_SIGNER_DAYS,a)),0);
 }
