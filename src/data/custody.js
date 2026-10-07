@@ -104,3 +104,67 @@ const CUSTODY_POLICIES=[
   {id:"2of3",name:"2-of-3 multisig",keys:3,threshold:2,
     desc:"Three independently generated keys; any two can spend. One compromised key cannot move anything, and one lost key does not strand the wallet."},
 ];
+
+/* PLACES — where a device, a seed backup or the wallet's descriptor is KEPT.
+
+   A backup is only a backup if it does not share a fate with the thing it backs up. Two seed
+   cards in the same drawer as the signer are one point of failure with three labels on it, and
+   the game already refuses to count three devices holding one seed as three keys; this extends
+   the same honesty to where they are.
+
+   Each place trades the same three things against each other. ACCESS is how many days it takes
+   to get something out, which is added to every signing that needs it. The RATES are the chance
+   per month of a fire, a flood and a break-in reaching what is kept there. And a few places cost
+   money. Nothing is free of all three: the mine is the closest and the likeliest to burn, a bank
+   box is the safest and the slowest and is billed monthly.
+
+   Rates are modelled, set to give roughly one incident per run at the mine and almost none in a
+   bank, and are meant to be tuned by simulation rather than argued from. */
+const CUSTODY_PLACES=[
+  {id:"site",name:"The mine",access:0,fee:0,rates:{fire:.0015,flood:.0010,burglary:.0020},
+    blurb:"Where the fleet is. Nothing is closer to the signers, and it burns, floods and is broken into with them."},
+  {id:"home",name:"Home",access:1,fee:0,rates:{fire:.0010,flood:.0007,burglary:.0015},
+    blurb:"Away from the fleet, so a fire at the mine does not reach it. An ordinary house."},
+  {id:"bank",name:"Bank deposit box",access:2,fee:15,rates:{fire:.0001,flood:.0001,burglary:.00005},
+    blurb:"Fireproof and guarded, and open only in banking hours. It costs a fee every month."},
+  {id:"trusted",name:"A trusted person's house",access:2,fee:0,rates:{fire:.0008,flood:.0006,burglary:.0010},
+    blurb:"Free, and exactly as safe as their house and your friendship."},
+];
+const CUSTODY_PLACE_KINDS=["fire","flood","burglary"];
+
+function custodyPlace(id){return CUSTODY_PLACES.find(p=>p.id===id)||null}
+function custodyPlaceName(id){return id==="transit"?"In transit":(custodyPlace(id)?.name||"Unrecorded")}
+/* While the mine IS the house, "home" and "the mine" are the same building. Once the fleet moves
+   out they are different places, and anything kept at home stays there. */
+function custodyPlaceId(place,s=state){return place==="home"&&s.facility==="home"?"site":place}
+
+/* A deterministic number in [0,1) from the run's seed and whatever names the event. A new risk
+   uses this rather than nextRand(): drawing from the shared stream would shift every outcome
+   after it in every seeded run, and a risk that only fires when something is actually kept in a
+   place must not change the history of a run that keeps nothing anywhere. */
+function hashRoll(seed,...parts){
+  const text=[seed,...parts].join("|");
+  let h=2166136261>>>0;
+  for(let i=0;i<text.length;i++){h^=text.charCodeAt(i);h=Math.imul(h,16777619)>>>0}
+  h^=h>>>15;h=Math.imul(h,2246822507)>>>0;h^=h>>>13;h=Math.imul(h,3266489909)>>>0;h^=h>>>16;
+  return (h>>>0)/4294967296;
+}
+
+/* An old save has no places, and a hand-edited or damaged one may carry nonsense. Unrecorded is
+   a legal answer and must stay one: every rule written before places existed relies on it. */
+function normalizeCustodyPlaces(c){
+  if(!c||typeof c!=="object")return c;
+  const ok=id=>typeof id==="string"&&(id==="transit"||CUSTODY_PLACES.some(p=>p.id===id));
+  (c.devices||[]).forEach(d=>{if(d.place!==undefined&&!ok(d.place))delete d.place;
+    if(d.destroyed&&typeof d.destroyed!=="object")d.destroyed={cause:"lost"}});
+  (c.keys||[]).forEach(k=>{if(k.backup&&typeof k.backup==="object"&&k.backup.place!==undefined&&!ok(k.backup.place))delete k.backup.place});
+  if(c.configPlace!==undefined&&!ok(c.configPlace))delete c.configPlace;
+  c.configCopies=(Array.isArray(c.configCopies)?c.configCopies:[]).filter(p=>ok(p)&&p!=="transit");
+  c.moves=(Array.isArray(c.moves)?c.moves:[]).filter(m=>m&&ok(m.to)&&m.to!=="transit"&&Number.isFinite(Number(m.due))&&typeof m.kind==="string");
+  // Something marked in transit with no journey under way would be stuck there for ever.
+  const travelling=(kind,id)=>c.moves.some(m=>m.kind===kind&&m.id===id);
+  (c.devices||[]).forEach(d=>{if(d.place==="transit"&&!travelling("device",d.uid))d.place="site"});
+  (c.keys||[]).forEach(k=>{if(k.backup&&k.backup.place==="transit"&&!travelling("backup",k.id))k.backup.place="site"});
+  if(c.configPlace==="transit")c.configPlace="site";
+  return c;
+}

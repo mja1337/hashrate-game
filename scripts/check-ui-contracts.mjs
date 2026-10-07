@@ -392,6 +392,32 @@ assert(inline.includes("function advanceColdSpends(silent=false)") && inline.inc
   "A cold spend landing during a catch-up replays as a burst of toasts");
 assert(inline.includes("${coldSpendCostLine()}") && inline.includes("network fee${j.rush?"),
   "The cold-spend card does not say what leaving costs");
+
+// PLACES. Where a device or a backup is kept decides what a fire, a flood or a burglar can do to it.
+{
+  const placesSource = await readFile(new URL("src/engine/places.js", root), "utf8");
+  const code = placesSource.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  assert(!/nextRand\(/.test(code),
+    "A place risk draws from the shared random stream, which shifts every seeded run after it. Roll it with hashRoll(state.seed, ...)");
+  assert(/hashRoll\(state\.seed,"place",month,place\.id,kind\)/.test(code),
+    "The monthly place incident is no longer a hash of the seed, the month, the place and the kind");
+}
+assert(inline.includes("${custodyDevicesCard()}${custodyPlacesCard()}${custodyShopCard()}"),
+  "The custody tab no longer shows where things are kept");
+assert(inline.includes('else if(a==="custody-move")moveCustodyItem(b.dataset.kind,id,v);') && inline.includes('else if(a==="custody-restore-key")restoreCustodyKey(id,v);'),
+  "The move and restore buttons on the places card are not wired to anything");
+assert(inline.includes("function custodyKeyRestorable(key)") && inline.includes("function custodyConfigLocations(c)"),
+  "The places card calls a helper that no longer exists, and the custody tab stops drawing");
+assert(inline.includes("advancePlaceRisks(next,silent);") && inline.includes("advanceCustodyMoves(silent);") && inline.includes("function advanceOperationalRisks(next,silent=false)"),
+  "Place incidents or journeys are no longer advanced by the tick, or ignore silent catch-up");
+assert(inline.includes("enforceConnectivityAvailability();custodyOnRelocation(job.id);") && inline.includes("custodyRelocationNotice();save();render();"),
+  "Moving the fleet no longer warns what is kept at the mine, or no longer carries it across the border");
+assert(inline.includes("normalizeCustodyPlaces(state.custody);") && inline.includes("if(restored.custody)normalizeCustodyPlaces(restored.custody);"),
+  "A loaded or imported save is not cleaned of places that do not exist");
+assert(inline.includes('boughtAt:order.boughtAt||when,keyId:null,place:"site"') && inline.includes('at:state.time,place:"site"};') && inline.includes('c.configBackedUp=true;c.configPlace="site";'),
+  "New devices, backups or descriptors no longer start at the mine, so nothing begins in one place and the lesson is lost");
+assert(inline.includes("if(set.placed&&set.fragile)risk*=1.8;"),
+  "Keeping the backups and the signers in one place is no longer priced");
 assert(inline.includes("function coldSpendCard()"),
   "Nothing shows coins that have left cold storage and not yet arrived, so a transfer looks like the game eating them");
 /* And a shortfall is a different problem depending on how far away the treasury is. */

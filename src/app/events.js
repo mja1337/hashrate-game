@@ -62,6 +62,8 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(a==="custody-unassign")unassignCustodyKey(id);
   else if(a==="custody-policy")setCustodyPolicy(id);
   else if(a==="custody-config")backupCustodyConfig();
+  else if(a==="custody-move")moveCustodyItem(b.dataset.kind,id,v);
+  else if(a==="custody-restore-key")restoreCustodyKey(id,v);
   else if(a==="custody-lesson"){custodyLesson=v;render()}
   else if(a==="select-venue"){selectedVenue=v;render()}
   else if(a==="patch-firmware")patchFirmware();

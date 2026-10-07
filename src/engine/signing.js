@@ -39,7 +39,8 @@ function coldSpendDays(s=state,opts={}){
   let days=COLD_BASE_DAYS;
   if(s.skills?.includes("airgap"))days+=COLD_AIRGAP_DAYS;
   // Every signature beyond the first is another key in another place.
-  days+=Math.max(0,(set.policy.threshold||1)-1)*COLD_SIGNER_DAYS;
+  // Which keys are needed, and how far each is from where they would be signed.
+  days+=custodySignerDays(s);
   /* A rush pays a priority fee and skips the slow, careful steps, but it cannot make two keys that
      are kept apart in two places arrive together: a quorum is never faster than two days. */
   if(opts.rush)days=Math.max(set.policy.threshold>1?2:1,Math.ceil(days/2));
@@ -54,6 +55,9 @@ function coldSpendBlockReason(s=state,opts={}){
   if(s.pendingSettlement&&!opts.settling)return "A bill is waiting for a decision and the clock is stopped, so a signing started now could never finish. Use Fetch the reserve in the settlement decision: it carries the bill into the grace month and restarts the clock.";
   const set=custodySetup(s);
   if(!set.ready)return `This wallet cannot sign: ${set.distinct} of the ${set.policy.keys} keys its policy requires are assigned. Coins in cold storage are only yours while a satisfiable quorum exists.`;
+  if(set.liveDistinct<set.policy.threshold)return set.usable>=set.policy.threshold
+    ?"A signer is gone: its device was destroyed or is still on its way. Restore the key from its backup onto a new device, or wait for it to arrive."
+    :"Too few keys survive to sign, and not enough backups remain to rebuild them. The coins in this wallet can no longer be moved.";
   if(!set.configOk)return "A quorum wallet needs its configuration, not just its seeds. Without the descriptor backed up there is nothing to rebuild the wallet from, and nothing to sign with.";
   return "";
 }

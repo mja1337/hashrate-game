@@ -1773,6 +1773,246 @@ rule("a save from before the coin count still opens, and its reserve is not free
   assert(r.reach.cold === r.cold && r.total >= r.cold, "an old save's reserve is missing from its totals");
 });
 
+/* ---- PLACES: where the keys are decides what a fire, a flood or a burglar can do ---- */
+
+/* A wallet whose devices and backups are somewhere. Each entry is one key: where its signer is,
+   where its backup is, and whether the backup is steel. `device` and `backup` may be left out to
+   leave them unrecorded. */
+const PLACED_WALLET = (policy, keys, configPlace = "bank") => `
+  setCustodyPolicy("${policy}");
+  state.custody.keys=[];state.custody.assigned=[];state.custody.devices=[];state.custody.moves=[];
+  ${JSON.stringify(keys)}.forEach((spec,i)=>{
+    const id="k"+i;
+    state.custody.keys.push({id,seed:"s"+i,label:"KEY "+i,weakEntropy:false,
+      backup:spec.backup?{product:spec.steel?"steelplate":"paperbackup",durability:spec.steel?"steel":"paper",place:spec.backup}:null});
+    state.custody.devices.push({uid:"d"+i,product:"trezorone",supplier:"trezor",boughtAt:0,keyId:id,place:spec.device});
+    state.custody.assigned.push(id);
+  });
+  state.custody.configBackedUp=true;state.custody.configPlace="${configPlace}";`;
+
+rule("a backup beside the signer is one point of failure, and the wallet says so", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${PLACED_WALLET("single", [{device:"site",backup:"site",steel:true}])}
+    const together={fragile:custodySetup().fragile,at:custodySetup().fragileAt,risk:custodyLossRisk(),label:custodyReadiness().label};
+    ${PLACED_WALLET("single", [{device:"site",backup:"bank",steel:true}])}
+    const apart={fragile:custodySetup().fragile,risk:custodyLossRisk(),label:custodyReadiness().label};
+    return{together,apart};})()`);
+  assert(r.together.fragile && r.together.at === "site", "a signer and its only backup in the same place were not flagged as one point of failure");
+  assert(!r.apart.fragile, "a backup in a bank box was flagged against a signer at the mine");
+  assert(r.together.risk > r.apart.risk * 1.5, `keeping everything together cost ${r.together.risk} against ${r.apart.risk} apart; the correlation is not priced`);
+  assert(/one place/i.test(r.together.label) && !/one place/i.test(r.apart.label), `the readiness card said "${r.together.label}" and "${r.apart.label}"`);
+});
+
+rule("a setup that records no places prices exactly as it did before places existed", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");`)}
+    ${CONFIGURED_WALLET("2of3")}
+    const bare={risk:custodyLossRisk(),compromise:custodyCompromiseFactor(),days:coldSpendDays(),placed:custodySetup().placed,fragile:custodySetup().fragile};
+    ${PLACED_WALLET("2of3", [{device:undefined,backup:undefined},{},{}], undefined)}
+    return{bare};})()`);
+  assert(!r.bare.placed && !r.bare.fragile, "an unrecorded setup was treated as having places");
+  // 0.0016 base, x0.35 everything backed up, x0.45 all steel, x0.3 multisig with its descriptor recorded.
+  close(r.bare.risk, .0016 * .35 * .45 * .3, 1e-9, "an unrecorded 2-of-3 no longer prices the way it always did");
+  assert(r.bare.days === 2, `an unrecorded 2-of-3 took ${r.bare.days} days to sign; it was always two`);
+});
+
+rule("fire takes the signer and the paper, and steel is what survives", () => {
+  const steel = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${PLACED_WALLET("single", [{device:"site",backup:"site",steel:true}])}
+    const held=state.wallets.hot+state.wallets.cold;
+    applyPlaceIncident("site","fire",state.time,true);
+    const set=custodySetup();
+    const afterFire={device:state.custody.devices[0].destroyed?.cause,backup:!!state.custody.keys[0].backup.destroyed,
+      operable:custodyOperable(),live:set.liveDistinct,usable:set.usable,reason:coldSpendBlockReason(),held:state.wallets.hot+state.wallets.cold,losses:pendingLoss()};
+    // Rebuilding the key from its backup onto a replacement device is the whole recovery.
+    state.custody.devices.push({uid:"dNew",product:"trezorone",supplier:"trezor",boughtAt:0,keyId:null,place:"site"});
+    restoreCustodyKey("dNew","k0");
+    return{held,afterFire,rebuilt:{live:custodySetup().liveDistinct,reason:coldSpendBlockReason()}};})()`);
+  assert(steel.afterFire.device === "fire" && !steel.afterFire.backup, "a fire should destroy the signer and leave a steel backup");
+  assert(steel.afterFire.operable && steel.afterFire.live === 0 && steel.afterFire.usable === 1, "the wallet should be rebuildable, and not yet signing");
+  assert(/destroyed|device/i.test(steel.afterFire.reason), `the refusal did not say a signer was gone: "${steel.afterFire.reason}"`);
+  assert(steel.afterFire.held === steel.held && !steel.afterFire.losses, "coins were lost although a steel backup survived");
+  assert(steel.rebuilt.live === 1 && steel.rebuilt.reason === "", `restoring the key onto a new device did not bring the wallet back: "${steel.rebuilt.reason}"`);
+  // The same fire with a paper backup beside the signer takes everything with it.
+  const paper = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${PLACED_WALLET("single", [{device:"site",backup:"site",steel:false}])}
+    const held=state.wallets.hot+state.wallets.cold;
+    applyPlaceIncident("site","fire",state.time,true);
+    return{held,operable:custodyOperable(),after:state.wallets.hot+state.wallets.cold,loss:pendingLoss()};})()`);
+  assert(!paper.operable, "paper beside the signer survived the fire that destroyed the signer");
+  assert(paper.after < paper.held * 0.7 && paper.loss && paper.loss.kind === "unrecoverable", "coins were not stranded when the only backup burned with the signer");
+});
+
+rule("a backup kept elsewhere is why a fire at the mine costs nothing", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${PLACED_WALLET("single", [{device:"site",backup:"bank",steel:false}])}
+    const held=state.wallets.hot+state.wallets.cold;
+    applyPlaceIncident("site","fire",state.time,true);
+    return{held,after:state.wallets.hot+state.wallets.cold,operable:custodyOperable(),loss:pendingLoss(),backupAlive:!state.custody.keys[0].backup.destroyed};})()`);
+  assert(r.operable && r.backupAlive, "a paper backup in a bank box was destroyed by a fire at the mine");
+  assert(r.after === r.held && !r.loss, "coins were lost although the only backup was somewhere else");
+});
+
+rule("a copy of the descriptor in another place survives the fire that takes the first", () => {
+  const scenario = copies => json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${PLACED_WALLET("2of3", [{device:"home",backup:"bank",steel:true},{device:"home",backup:"trusted",steel:true},{device:"home",backup:"home",steel:true}], "site")}
+    state.custody.configCopies=${JSON.stringify(copies)};
+    const held=state.wallets.hot+state.wallets.cold,before=custodySetup().fragile;
+    applyPlaceIncident("site","fire",state.time,true);
+    return{held,before,after:state.wallets.hot+state.wallets.cold,operable:custodyOperable(),config:state.custody.configBackedUp,
+      primary:state.custody.configPlace,copies:state.custody.configCopies,loss:pendingLoss()};})()`);
+  const alone = scenario([]), copied = scenario(["bank"]);
+  assert(!alone.operable && alone.config === false && alone.after < alone.held, "the only copy of the descriptor burned and the quorum was still usable");
+  assert(copied.operable && copied.config === true && copied.after === copied.held && !copied.loss, "a copy of the descriptor in a bank box did not save the quorum");
+  assert(copied.primary === "bank" && copied.copies.length === 0, `the surviving copy was not promoted: ${copied.primary}, ${JSON.stringify(copied.copies)}`);
+});
+
+rule("copying the descriptor is a journey that leaves the original where it is", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${PLACED_WALLET("2of3", [{device:"home",backup:"bank",steel:true},{device:"home",backup:"trusted",steel:true},{device:"home",backup:"home",steel:true}], "site")}
+    moveCustodyItem("configcopy","config","bank");
+    const during={primary:state.custody.configPlace,copies:[...(state.custody.configCopies||[])],jobs:custodyMoves().length,intact:custodyConfigIntact()};
+    moveCustodyItem("configcopy","config","bank");
+    const doubled=custodyMoves().length;
+    let t=0;while(custodyMoves().length&&t<20){tick(true);t++}
+    moveCustodyItem("configcopy","config","bank");
+    return{during,doubled,t,primary:state.custody.configPlace,copies:state.custody.configCopies,again:custodyMoves().length};})()`);
+  assert(r.during.primary === "site" && r.during.copies.length === 0 && r.during.jobs === 1 && r.during.intact, "a copy in progress moved or removed the original");
+  assert(r.doubled === 1, "the same copy was started twice");
+  assert(r.t >= 1 && r.primary === "site" && r.copies.length === 1 && r.copies[0] === "bank", `the copy did not arrive as a second location: ${r.primary}, ${JSON.stringify(r.copies)}`);
+  assert(r.again === 0, "a place that already holds a copy was offered another");
+});
+
+rule("a break-in takes steel too, and a thief holding enough seeds holds the coins", () => {
+  const single = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${PLACED_WALLET("single", [{device:"site",backup:"site",steel:true}])}
+    const held=state.wallets.hot+state.wallets.cold;
+    applyPlaceIncident("site","burglary",state.time,true);
+    return{held,backupGone:!!state.custody.keys[0].backup.destroyed,after:state.wallets.hot+state.wallets.cold,loss:pendingLoss()};})()`);
+  assert(single.backupGone, "steel survived a break-in; nothing survives a break-in");
+  assert(single.loss && single.loss.kind === "stolen" && single.after < single.held, "a thief with the only seed did not take the coins");
+  const quorum = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${PLACED_WALLET("2of3", [{device:"home",backup:"site",steel:true},{device:"home",backup:"bank",steel:true},{device:"home",backup:"trusted",steel:true}])}
+    const held=state.wallets.hot+state.wallets.cold,factor0=custodyCompromiseFactor();
+    applyPlaceIncident("site","burglary",state.time,true);
+    return{held,after:state.wallets.hot+state.wallets.cold,loss:pendingLoss(),exposed:custodySetup().exposed,
+      label:custodyReadiness().label,factor:custodyCompromiseFactor(),factor0};})()`);
+  assert(!quorum.loss && quorum.after === quorum.held, "one stolen seed of a 2-of-3 took coins; a quorum is what makes that not matter");
+  assert(quorum.exposed === 1 && /exposed/i.test(quorum.label), `the stolen seed was not flagged: ${quorum.exposed}, "${quorum.label}"`);
+  assert(quorum.factor > quorum.factor0, "an exposed key did not raise the compromise risk");
+});
+
+rule("signing takes as long as it takes to fetch the keys, and the safest place is the slowest", () => {
+  const days = (policy, keys) => json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${PLACED_WALLET(policy, keys)}
+    return coldSpendDays();})()`);
+  const atSite = days("single", [{device: "site", backup: "bank", steel: true}]);
+  const atBank = days("single", [{device: "bank", backup: "site", steel: true}]);
+  assert(atBank > atSite, `a signer in a bank box (${atBank} days) was not slower than one at the mine (${atSite})`);
+  const near = days("2of3", [{device: "site"}, {device: "home"}, {device: "bank"}]);
+  const far = days("2of3", [{device: "bank"}, {device: "bank"}, {device: "bank"}]);
+  assert(far > near, `a quorum entirely in a bank box (${far} days) was not slower than one near at hand (${near})`);
+});
+
+rule("a journey takes days, and what is on it is nowhere and cannot sign", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${PLACED_WALLET("single", [{device:"site",backup:"site",steel:true}])}
+    moveCustodyItem("device","d0","bank");
+    const during={place:state.custody.devices[0].place,live:custodyKeyLive(state.custody.keys[0]),reason:coldSpendBlockReason(),jobs:custodyMoves().length,
+      days:custodyMoveDays("site","bank")};
+    let t=0;while(custodyMoves().length&&t<20){tick(true);t++}
+    return{during,t,after:state.custody.devices[0].place,live:custodyKeyLive(state.custody.keys[0])};})()`);
+  assert(r.during.place === "transit" && !r.during.live, "a signer on a journey could still sign");
+  assert(/destroyed|arrive|way/i.test(r.during.reason), `the refusal did not say the signer was away: "${r.during.reason}"`);
+  assert(r.during.days >= 2, `the mine to a bank box took ${r.during.days} day`);
+  assert(r.after === "bank" && r.live && r.t >= r.during.days - 1, "the signer never arrived, or arrived without the journey taking time");
+});
+
+rule("new risks are rolled from the seed and draw nothing from the shared stream", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${PLACED_WALLET("single", [{device:"site",backup:"bank",steel:true}])}
+    const same=hashRoll(20260909,"a","b")===hashRoll(20260909,"a","b"),other=hashRoll(20260909,"a","c")!==hashRoll(20260909,"a","b");
+    let sum=0,low=0,n=20000;for(let i=0;i<n;i++){const v=hashRoll(20260909,"u",i);sum+=v;if(v<.0045)low++}
+    const rng=state.rng;
+    for(let m=0;m<600;m++)advancePlaceRisks(at("2021-02-01")+m*30*DAY,true);
+    return{same,other,mean:sum/n,low:low/n,rngMoved:state.rng!==rng};})()`);
+  assert(r.same && r.other, "the same roll gave different answers, or different rolls gave the same");
+  close(r.mean, .5, .01, "the roll is not uniform");
+  close(r.low, .0045, .0015, "a threshold of .0045 does not fire about .45% of the time");
+  assert(!r.rngMoved, "a place risk drew from the shared random stream, which would shift every seeded run after it");
+});
+
+rule("nothing is rolled where nothing is kept, and a bank box charges its fee only when used", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    state.custody.devices=[];state.custody.keys=[];state.custody.assigned=[];state.custody.configBackedUp=false;
+    const cash0=state.cash;advancePlaceRisks(at("2021-03-01"),true);const empty={cash:state.cash-cash0};
+    ${PLACED_WALLET("single", [{device:"site",backup:"bank",steel:true}])}
+    const cash1=state.cash;advancePlaceRisks(at("2021-04-01"),true);
+    return{empty,used:state.cash-cash1};})()`);
+  assert(r.empty.cash === 0, "a bank box was billed with nothing in it");
+  assert(r.used < 0, "a bank box held a backup for free");
+});
+
+rule("the mine and home are the same building while the fleet lives at home", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="home";`)}
+    ${PLACED_WALLET("single", [{device:"home",backup:"home",steel:false}])}
+    const atHome=placeItems("site").devices.length;
+    state.facility="warehouse";
+    const afterMove=placeItems("site").devices.length,stillHome=placeItems("home").devices.length;
+    return{atHome,afterMove,stillHome};})()`);
+  assert(r.atHome === 1, "keys kept at home were not at the mine while the mine was the house");
+  assert(r.afterMove === 0 && r.stillHome === 1, "keys left at the house moved to the warehouse with the fleet");
+});
+
+rule("a border is a place things get stopped, and the destination decides how likely", () => {
+  const stopped = region => json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    let taken=0;
+    for(let i=0;i<3000;i++){
+      ${PLACED_WALLET("single", [{device:"site",backup:"bank",steel:true}])}
+      state.time=at("2021-02-01")+i*DAY;
+      custodyOnRelocation("${region}",true);
+      if(state.custody.devices[0].destroyed)taken++;
+    }
+    return taken;})()`);
+  const iran = stopped("iran"), iceland = stopped("iceland");
+  assert(iran > iceland * 3, `Iran stopped ${iran} of 3000 crossings and Iceland ${iceland}; the destination does not matter`);
+  assert(iran > 60 && iran < 220, `${iran} of 3000 crossings into Iran were stopped; the chance is not about 4.5%`);
+});
+
+rule("a save from before places still opens, and its keys price as they did", () => {
+  const save = JSON.parse(fs.readFileSync(new URL("./fixtures/save-pre-custody-sprint.json", import.meta.url), "utf8"));
+  const dirty = JSON.parse(JSON.stringify(save));
+  dirty.custody.devices = [{uid:"d9",product:"trezorone",supplier:"trezor",boughtAt:0,keyId:"k1",place:"the moon"}];
+  dirty.custody.keys[0].backup.place = "mars";
+  dirty.custody.configPlace = "nowhere";
+  for (const [name, input] of [["fixture", save], ["damaged", dirty]]) {
+    const loaded = loadWithSave(input);
+    assert(loaded.ok, `the ${name} save could not be opened: ${loaded.message}`);
+    const read = makeEval(loaded.sandbox);
+    const r = JSON.parse(read(`JSON.stringify({placed:custodySetup().placed,fragile:custodySetup().fragile,
+      devicePlace:state.custody.devices[0]?state.custody.devices[0].place:null,backupPlace:state.custody.keys[0].backup.place,
+      configPlace:state.custody.configPlace,moves:Array.isArray(state.custody.moves),days:coldSpendDays()})`));
+    assert(!r.placed && !r.fragile, `the ${name} save was treated as having places`);
+    assert(r.moves, `the ${name} save has no list of journeys`);
+    assert(r.devicePlace == null && r.backupPlace == null && r.configPlace == null, `the ${name} save kept a place that does not exist`);
+    assert(r.days === 2, `the ${name} 2-of-3 save takes ${r.days} days to sign`);
+  }
+});
+
 rule("a quorum you cannot assemble is permanent, not slow", () => {
   const r = json(`(()=>{
     ${CUSTODY_SITE(`state.time=at("2021-02-01");`)}

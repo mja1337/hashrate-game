@@ -126,6 +126,7 @@ state.custody.devices=state.custody.devices.filter(d=>d&&CUSTODY_PRODUCTS.some(p
 state.custody.keys=state.custody.keys.filter(k=>k&&k.id);
 state.custody.assigned=state.custody.assigned.filter(id=>state.custody.keys.some(k=>k.id===id));
 state.custody.seq=Math.max(Number(state.custody.seq)||0,state.custody.devices.length+state.custody.keys.length);
+normalizeCustodyPlaces(state.custody);
 Object.keys(state.strategy).forEach(k=>{if(!Number.isFinite(Number(state.strategy[k])))state.strategy[k]=0;else state.strategy[k]=Number(state.strategy[k])});
 state.nodeStorage=Math.max(50,Number(state.nodeStorage)||50);state.nodePruned=!!state.nodePruned;state.nodeMode=NODE_MODES.some(x=>x.id===state.nodeMode)?state.nodeMode:(state.nodePruned?"pruned":"archival");state.nodePruned=state.nodeMode==="pruned";
 state.staff=Array.isArray(state.staff)?state.staff:[];state.contract=POWER_CONTRACTS.some(x=>x.id===state.contract)?state.contract:"standard";state.connectivity=CONNECTIVITY_PLANS.some(x=>x.id===state.connectivity)?state.connectivity:"fixed";state.projectLoan=Math.max(0,Number(state.projectLoan)||0);state.milestones=Array.isArray(state.milestones)?state.milestones:[];
@@ -379,11 +380,12 @@ function advanceNodeSync(silent=false){
   syncPath("primaryLag","primaryPeak",primaryNodeReady(),primaryNodeCatchupRate(),"Primary full node");
   if(state.backupNode.enabled)syncPath("backupLag","backupPeak",backupNodeReady(),4,"Geographic backup node");
 }
-function advanceOperationalRisks(next){
+function advanceOperationalRisks(next,silent=false){
   if(state.ops.outageUntil&&next>=state.ops.outageUntil){state.ops.outageUntil=0;log("Connectivity restored",`${region().name} upstream service resumed`,`operations`);showToast("Internet restored",`${connectivityPlan().name} service is back. Mining and primary-node connectivity can resume.`,"info","facilities")}
   if(state.ops.powerOutageUntil&&next>=state.ops.powerOutageUntil){state.ops.powerOutageUntil=0;log("Grid power restored",`${region().name} site energized`,`operations`);showToast("Grid restored",`Power is back at ${facility().name}. The fleet can resume hashing.`,"info","facilities")}
   const month=new Date(next).toISOString().slice(0,7);if(state.ops.riskMonth===month)return;state.ops.riskMonth=month;
   advanceCustodyRisks(next);
+  advancePlaceRisks(next,silent);
   advanceHotWalletRisk();
   if(firmwarePatchDue()&&!firmwareHijacked()&&nextRand()<firmwareHijackRisk()){state.ops.hijackUntil=next+DAY*(10+Math.floor(nextRand()*21));log("ASIC fleet hijacked","35% of hash diverted");showToast("Firmware compromise","Unpatched ASIC firmware is pointing part of your hash rate to an attacker. Patch it now.","bad");}
   const r=region(),outageRisk=connectivityIncidentRisk(),gridRisk=Math.min(.28,Math.max(.004,(1-r.rely)*1.15));
@@ -443,7 +445,7 @@ function advanceFleetLifecycle(){
     renderFullQueued=true;
     return false});
   const job=state.relocationJob;if(job&&dueBy(job,state.time)){const destination=REGIONS.find(r=>r.id===job.id);state.region=job.id;
-    enforceConnectivityAvailability();state.relocationJob=null;state.policyLock=null;state.power=state.debt<=0;log(`Fleet arrived in ${destination?.name||job.id}`,"Site commissioning complete","operations");showToast("Relocation complete",`The fleet is live at ${destination?.name||job.id}.`);renderFullQueued=true}
+    enforceConnectivityAvailability();custodyOnRelocation(job.id);state.relocationJob=null;state.policyLock=null;state.power=state.debt<=0;log(`Fleet arrived in ${destination?.name||job.id}`,"Site commissioning complete","operations");showToast("Relocation complete",`The fleet is live at ${destination?.name||job.id}.`);renderFullQueued=true}
   advanceFacilityMove();
 }
 function recordOperatorMonth(snapshot,solvent){
@@ -574,12 +576,13 @@ function tick(silent=false){
   advanceStagedIntake();
   advancePoolPayouts();
   advanceColdSpends(silent);
+  advanceCustodyMoves(silent);
   advanceFleetLifecycle();
   const crossed=EVENTS.filter(e=>at(e.date)>prev&&at(e.date)<=next&&!state.seen.includes(e.id)).sort((a,b)=>at(a.date)-at(b.date));
   crossed.forEach(e=>{state.seen.push(e.id);applyEvent(e)});
   queueAsicReleases(prev,next);
   queueExposureWarnings(prev,next);
-  advanceOperationalRisks(next);
+  advanceOperationalRisks(next,silent);
   advanceNodeSync(silent);
   if(!silent&&!faucet&&faucetActive(next)&&nextRand()<.05)triggerFaucet(next);
   const fs=fleet(),r=region(),f=facility(),nodeW=nodePowerWatts();state.operator.periodDays++;

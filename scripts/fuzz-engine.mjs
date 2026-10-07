@@ -74,6 +74,16 @@ for (const seed of SEEDS) {
       /* Spending from the reserve: the coin count, the fee and the in-flight accounting all move here. */
       ()=>transfer(pick(["hot","cold"]),pick(["hot","cold","exchange"]),.05+rnd()*.95),
       ()=>{if(state.pendingSettlement)fetchReserve(rnd()<.5)},
+      // Give the place actions something to act on: a key on every device, a paper backup on every key, and the descriptor.
+      ()=>{const d=((state.custody&&state.custody.devices)||[]).filter(x=>!x.destroyed&&!x.keyId);if(d.length)generateCustodyKey(pick(d).uid)},
+      ()=>{const k=((state.custody&&state.custody.keys)||[]).filter(x=>!x.backup||x.backup.destroyed);if(k.length)backupCustodyKey(pick(k).id,"paperbackup")},
+      ()=>backupCustodyConfig(),
+      /* Places: where things are kept, journeys, copies of the descriptor, and what a fire or a thief does. */
+      ()=>{const d=(state.custody&&state.custody.devices)||[];if(d.length)moveCustodyItem("device",pick(d).uid,pick(["site","home","bank","trusted"]))},
+      ()=>{const k=((state.custody&&state.custody.keys)||[]).filter(x=>x.backup);if(k.length)moveCustodyItem("backup",pick(k).id,pick(["site","home","bank","trusted"]))},
+      ()=>moveCustodyItem("configcopy","config",pick(["site","home","bank","trusted"])),
+      ()=>applyPlaceIncident(pick(["site","home","bank","trusted"]),pick(["fire","flood","burglary"]),state.time,true),
+      ()=>{const c=state.custody||{},spare=(c.devices||[]).filter(d=>!d.destroyed&&!d.keyId),dead=(c.keys||[]).filter(k=>!custodyKeyLive(k)&&custodyKeyRestorable(k));if(spare.length&&dead.length)restoreCustodyKey(pick(spare).uid,pick(dead).id)},
     ];
     /* Over capacity is not automatically wrong, and the first version of this check did not
        know that. Overdrive deliberately pushes draw past the cap — the operator's decision to

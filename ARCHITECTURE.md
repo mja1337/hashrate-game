@@ -26,6 +26,9 @@
 - `src/engine/payouts.js` — pool payout destinations and thresholds; `creditPayout` is the single point where coins arrive.
 - `src/engine/signing.js` — spending from cold storage as a ceremony that takes days.
 - `src/engine/treasury.js` — how far away the money is and what it costs to bring it: the count of coins to gather, the fee by weight at that day's rate, reach, and fetching the reserve for a bill. Extends `signing.js`.
+- `src/data/custody.js` — the equipment catalogue and the places things are kept, plus `hashRoll` and `normalizeCustodyPlaces`. Everything the load-time migration needs is here because it loads before `simulation.js`.
+- `src/engine/places.js` — where devices, seed backups and the wallet descriptor are kept: which places survive a fire, a flood or a break-in, how long a signing takes given where the keys are, journeys, and what the border does. Every roll is `hashRoll(state.seed, ...)`, never `nextRand()`.
+- `src/ui/enhance/places.js` — the "Where things are kept" card.
 - `src/ui/enhance/treasury.js` — the settlement reserve card, the cold-spend review and the cost line, as sentences over the engine's numbers.
 - `src/engine/actions.js` — player mutations, transactions, imports and exports.
 - `src/ui/presentation.js` — formatting, charts and reusable visual helpers.

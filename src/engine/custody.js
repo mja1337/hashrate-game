@@ -56,14 +56,18 @@ function custodySetup(s=state){
   // Distinct SEEDS, not distinct devices. Restoring one seed onto three signers is one key.
   const distinct=new Set(assigned.map(k=>k.seed||k.id)).size;
   const ready=distinct>=policy.keys;
-  const backed=assigned.filter(k=>k.backup);
+  const backed=assigned.filter(k=>k.backup&&!k.backup.destroyed);
   const steel=backed.filter(k=>k.backup.durability==="steel");
   // A single-sig wallet is fully described by its seed. A multisig is not: without the
   // descriptor the seeds are not enough to rebuild the wallet.
   const configOk=policy.threshold===1?true:!!c.configBackedUp;
+  const where=custodyPlaceSummary(s);
   return {policy,assigned,distinct,ready,
     backedUp:backed.length,steelBacked:steel.length,
-    unbacked:assigned.length-backed.length,configOk};
+    unbacked:assigned.length-backed.length,configOk,
+    // Distinct seeds that can still produce a signature: a working device, or a backup to rebuild one from.
+    usable:custodyUsableSeeds(s).size,liveDistinct:new Set(assigned.filter(k=>custodyKeyLive(k,s)).map(k=>k.seed||k.id)).size,
+    exposed:assigned.filter(k=>k.exposed).length,placed:where.placed,fragile:where.fragile,fragileAt:where.fragileAt};
 }
 
 /* Multiplies the chance somebody else spends your coins. An unconfigured wallet gets no
@@ -73,9 +77,11 @@ function custodyCompromiseFactor(s=state){
   // Signing offline narrows what a compromised machine can reach, whatever the policy is.
   const airgap=s.skills?.includes("airgap")?.7:1;
   if(!set.ready)return 1;
-  if(set.policy.threshold<=1)return .55*airgap;
+  // A stolen backup is a seed somebody else holds. Until it is replaced it widens every risk.
+  const leaked=Math.pow(1.6,Math.min(3,set.exposed));
+  if(set.policy.threshold<=1)return .55*airgap*leaked;
   // Requiring two independent secrets is the single largest reduction available here.
-  return .18*airgap;
+  return .18*airgap*leaked;
 }
 
 /* The chance per month that a self-custody setup becomes unrecoverable: a device dies, a
@@ -93,6 +99,9 @@ function custodyLossRisk(s=state){
     // rebuilt at all, and seeds alone cannot rebuild a multisig.
     risk*=set.configOk?.3:2.4;
   }
+  /* Everything that could rebuild the wallet sharing one fate. Only counted for a setup that has
+     said where things are, so a save from before places existed prices exactly as it did. */
+  if(set.placed&&set.fragile)risk*=1.8;
   return risk;
 }
 /* Whether an incident is survivable rather than terminal. This is the question the whole
@@ -110,8 +119,14 @@ function custodyReadiness(s=state){
     detail:`${set.distinct} of ${set.policy.keys} keys assigned`};
   if(!set.configOk)return{label:"Config not backed up",tone:"bad",
     detail:"Seeds alone cannot rebuild a multisig wallet"};
+  if(set.exposed>0)return{label:"Key exposed",tone:"bad",
+    detail:"A backup of an assigned key was stolen. Replace that key: until you do, somebody else holds it"};
+  if(set.liveDistinct<set.policy.threshold)return{label:"Signers destroyed",tone:"bad",
+    detail:set.usable>=set.policy.threshold?"Restore the keys from their backups onto new devices":"Not enough keys survive to sign or to rebuild. The coins are stranded"};
   if(set.unbacked>0)return{label:"Keys not backed up",tone:"warn",
     detail:`${set.unbacked} of ${set.assigned.length} keys have no backup`};
+  if(set.placed&&set.fragile)return{label:"One place holds too much",tone:"warn",
+    detail:`Losing ${set.fragileAt?`${custodyPlaceName(set.fragileAt)}`:"one place"} would leave the wallet unrecoverable. Keep backups apart from the signers`};
   if(set.steelBacked<set.assigned.length)return{label:"Paper backups",tone:"warn",
     detail:"Durable backups survive what paper does not"};
   return{label:"Ready",tone:"good",detail:"Keys assigned, backed up and recoverable"};
@@ -191,7 +206,7 @@ function receiveCustodyOrder(order,when){
     for(let i=0;i<order.qty;i++){
       c.seq=(c.seq||0)+1;
       c.devices.push({uid:`d${c.seq}`,product:p.id,supplier:order.supplier||p.supplier,
-        boughtAt:order.boughtAt||when,keyId:null});
+        boughtAt:order.boughtAt||when,keyId:null,place:"site"});
     }
   } else if(p.kind==="kit"){
     for(const [pid,n] of Object.entries(p.contains||{}))add(pid,n*order.qty);
@@ -212,7 +227,7 @@ function advanceCustodyOrders(next){
     if(pendingAt(b,next))return true;
     const build=CUSTODY_BUILDS[b.build];
     c.seq=(c.seq||0)+1;
-    c.devices.push({uid:`d${c.seq}`,product:build.id,supplier:"selfbuilt",boughtAt:b.startedAt,keyId:null,
+    c.devices.push({uid:`d${c.seq}`,product:build.id,supplier:"selfbuilt",boughtAt:b.startedAt,keyId:null,place:"site",
       enclosed:!!b.enclosed});
     log(`Assembled ${build.name}`,b.enclosed?"Verified and enclosed":"Verified, no enclosure","custody");
     showToast("SeedSigner assembled",`The build is verified and ready to generate a key.`,"info","custody");
@@ -285,7 +300,7 @@ function backupCustodyKey(keyId,productId){
     if((c.parts[p.id]||0)<1)return showToast("None in stock",`Order ${p.name} before backing a key up with it.`);
     c.parts[p.id]-=1;
   }
-  key.backup={product:p.id,durability:p.durability||"paper",at:state.time};
+  key.backup={product:p.id,durability:p.durability||"paper",at:state.time,place:"site"};
   log(`Backed up key ${key.label}`,p.name,"custody");
   showToast("Key backed up",`${key.label} is recorded on ${p.name}.`,"info","custody");
   save();render();
@@ -323,7 +338,7 @@ function unassignCustodyKey(keyId){
 function backupCustodyConfig(){
   const c=state.custody,set=custodySetup();
   if(!set.ready)return showToast("Nothing to record yet","Assign every key the policy needs before writing the configuration down.");
-  c.configBackedUp=true;
+  c.configBackedUp=true;c.configPlace="site";
   log("Backed up the wallet configuration","Policy, key fingerprints and derivation recorded","custody");
   showToast("Configuration backed up",
     "The descriptor is written down alongside the seeds. Without it, seeds alone cannot rebuild a multisig wallet.","info","custody");
