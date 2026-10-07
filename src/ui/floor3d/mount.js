@@ -26,12 +26,63 @@ let floor3dState="idle";      // idle | loading | ready | unsupported | failed
 let floor3dRenderer=null,floor3dCanvas=null,floor3dCamera=null;
 let floor3dBuilt=null,floor3dSignature="",floor3dStatusSignature="",floor3dRaf=0,floor3dReason="";
 
+/* WHAT HAPPENED, FOR WHOEVER HAS TO FIND OUT. Every interruption leaves a line here, readable as
+   window.__floor3dLog, so a crash on a phone can be read off the phone rather than guessed at. */
+const floor3dEvents=[];
+function floor3dLog(event,detail){
+  floor3dEvents.push(Object.assign({t:Date.now(),event,hidden:!!document.hidden},detail||{}));
+  if(floor3dEvents.length>40)floor3dEvents.shift();
+  try{window.__floor3dLog=floor3dEvents}catch(e){}
+}
+
+/* A LOST CONTEXT IS AN INTERRUPTION, NOT AN ENDING.
+
+   Browsers take a WebGL context back for ordinary reasons — a backgrounded tab, a phone short of
+   graphics memory, a GPU switched out under the page — and usually hand it straight back. This
+   used to treat the first loss as permanent: it switched the player to the flat floor for the
+   rest of the session even when the browser had restored the context a moment later. Now the
+   renderer and scene are thrown away and rebuilt from the game's own state, which is the one
+   thing that cannot be lost, on a short backoff. Only a floor that fails again and again inside
+   a minute gives up, and says so. */
+const FLOOR3D_RECOVERY_DELAYS=[400,1500,4000];   // ms before each rebuild attempt
+const FLOOR3D_STABLE_MS=60000;                    // a floor that lasts this long has recovered
+const FLOOR3D_NOTICE_MS=10000;                    // how long the player is told what happened
+let floor3dRecoveries=0,floor3dRecoverTimer=0,floor3dLastLossAt=0;
+
+/* Tell the player what happened, in words, for ten seconds. */
+function floor3dReport(title,happened,outcome){
+  floor3dLog(title,{happened});
+  try{if(typeof showToast==="function")showToast(title,`${happened} ${outcome}`,"warning",null,null,FLOOR3D_NOTICE_MS)}catch(e){}
+}
+function floor3dLossCause(){
+  if(document.hidden||document.visibilityState==="hidden")
+    return "The tab was in the background, so the browser took back the graphics memory the 3D floor was using.";
+  return "The browser reset the graphics card while the floor was on screen. That usually means the device is short of graphics memory, or the graphics driver restarted.";
+}
+
+/* ASKED ONCE, NOT ON EVERY REPAINT.
+
+   This used to open a throwaway WebGL context on every call, and it is called from the render
+   path — the signature, the floor card's markup twice, the viewport. Opening the Mine tab made
+   nine of them and a clock at sixteen times speed made one a second. Browsers allow about
+   sixteen live contexts and evict the OLDEST when that is exceeded, and the oldest is the
+   real renderer, which is then lost and the floor drops to the flat view for good. Measured: a
+   single laptop, 24 probes in 14.5 seconds, context lost. The same run with the answer cached
+   made none and held for 60 seconds. Capability does not change within a page's life, so the
+   answer is remembered, and the probe context is released at once rather than left for the
+   garbage collector. */
+let floor3dSupportProbe=null;
 function floor3dSupported(){
   if(floor3dState==="unsupported")return false;
+  if(floor3dSupportProbe!==null)return floor3dSupportProbe;
   try{
     const probe=document.createElement("canvas");
-    return !!(probe.getContext("webgl2")||probe.getContext("webgl"));
-  }catch(e){return false}
+    const gl=probe.getContext("webgl2")||probe.getContext("webgl");
+    floor3dSupportProbe=!!gl;
+    const lose=gl&&gl.getExtension&&gl.getExtension("WEBGL_lose_context");
+    if(lose)lose.loseContext();
+  }catch(e){floor3dSupportProbe=false}
+  return floor3dSupportProbe;
 }
 function floor3dUnavailableReason(){
   if(floor3dReason)return floor3dReason;
@@ -62,6 +113,7 @@ function ensureFloor3dLoaded(){
     .catch(error=>{
       floor3dState="failed";
       floor3dReason=`The 3D floor could not load (${error.message}). The flat floor is unchanged.`;
+      floor3dReport("3D floor could not load",`The game could not fetch one of the files it draws the 3D floor from (${error.message}).`,"The flat floor is showing instead. Check your connection and reload to try again.");
       state.floorView="2d";save();render();
     });
 }
@@ -121,17 +173,70 @@ function floor3dEnsureRenderer(){
     floor3dCanvas.className="floor-3d-canvas";
     floor3dCanvas.setAttribute("aria-label","Three-dimensional view of the mining floor. The flat floor above carries the same information.");
     floor3dCamera=new FloorThree.OrthographicCamera(-10,10,10,-10,.1,150);
-    // A lost context is not recoverable here; fall back rather than leave a dead rectangle.
-    floor3dCanvas.addEventListener("webglcontextlost",event=>{
-      event.preventDefault();floor3dStop();
-      floor3dState="failed";floor3dReason="The browser dropped the 3D context. The flat floor is unchanged.";
-      state.floorView="2d";save();render();
-    });
+    floor3dCanvas.addEventListener("webglcontextlost",floor3dOnContextLost);
+    floor3dCanvas.addEventListener("webglcontextrestored",floor3dOnContextRestored);
     return true;
   }catch(e){
-    floor3dState="failed";floor3dReason="A 3D context could not be created.";
+    floor3dRenderer=null;floor3dCanvas=null;
+    if(floor3dRecoveries>0)floor3dScheduleRecovery("The browser would not give the 3D floor a new graphics context.");
+    else{
+      floor3dReport("3D floor unavailable","The browser would not give the game a graphics context.","The flat floor is showing instead.");
+      floor3dFailPermanently("A 3D context could not be created.");
+    }
     return false;
   }
+}
+
+function floor3dFailPermanently(reason){
+  floor3dStop();clearTimeout(floor3dRecoverTimer);floor3dRecoverTimer=0;
+  floor3dState="failed";floor3dReason=reason;
+  state.floorView="2d";save();render();
+}
+function floor3dOnContextLost(event){
+  event.preventDefault();
+  if(event.target!==floor3dCanvas)return;
+  floor3dScheduleRecovery(floor3dLossCause());
+}
+/* The browser handed it back before the timer fired: no reason to wait. */
+function floor3dOnContextRestored(event){
+  floor3dLog("context restored",{ours:event.target===floor3dCanvas});
+  if(event.target===floor3dCanvas&&floor3dRecoverTimer)floor3dRecover();
+}
+function floor3dScheduleRecovery(happened){
+  floor3dStop();
+  const now=Date.now();
+  if(now-floor3dLastLossAt>FLOOR3D_STABLE_MS)floor3dRecoveries=0;
+  floor3dLastLossAt=now;
+  if(floor3dRecoveries>=FLOOR3D_RECOVERY_DELAYS.length){
+    floor3dReport("3D floor switched off",happened,"It has now failed several times in a row, so the flat floor is showing instead. Reload the page to try 3D again.");
+    floor3dFailPermanently("The 3D floor kept losing its graphics context. The flat floor is unchanged.");
+    return;
+  }
+  const delay=FLOOR3D_RECOVERY_DELAYS[floor3dRecoveries++];
+  floor3dReport("3D floor interrupted",happened,"It is being rebuilt now and the flat floor shows in the meantime.");
+  floor3dReason="Restoring the 3D floor after a graphics interruption.";
+  clearTimeout(floor3dRecoverTimer);
+  floor3dRecoverTimer=setTimeout(floor3dRecover,delay);
+  render();
+}
+/* Nothing of the old renderer is trusted: the canvas, the camera, the lights and every buffer
+   are dropped, and the next mount builds them again from the game's state. */
+function floor3dTearDown(){
+  floor3dStop();
+  if(floor3dHoverRaf){cancelAnimationFrame(floor3dHoverRaf);floor3dHoverRaf=0}
+  try{floor3dDisposeScene()}catch(e){}
+  try{if(floor3dRenderer)floor3dRenderer.dispose()}catch(e){}
+  if(floor3dCanvas&&floor3dCanvas.parentElement)floor3dCanvas.remove();
+  floor3dRenderer=null;floor3dCanvas=null;floor3dCamera=null;floor3dScene=null;floor3dKeyLight=null;
+  floor3dShadowKey="";floor3dPickTable=null;floor3dBounds=null;floor3dBaseColours=null;floor3dAlertMap=null;floor3dHover=null;
+}
+function floor3dRecover(){
+  clearTimeout(floor3dRecoverTimer);floor3dRecoverTimer=0;
+  if(floor3dState!=="ready")return;
+  floor3dLog("rebuilding",{attempt:floor3dRecoveries});
+  floor3dTearDown();
+  floor3dReason="";
+  render();
 }
 
 /* WHAT A MACHINE IN TROUBLE LOOKS LIKE.
@@ -222,8 +327,15 @@ function floor3dDisposeScene(){
   floor3dBuilt=null;floor3dSignature="";floor3dStatusSignature="";
 }
 
+/* Any error while drawing is treated like a lost context: rebuild, and say what happened. */
 function floor3dDraw(){
+  try{floor3dDrawNow()}
+  catch(error){floor3dScheduleRecovery(`The 3D floor hit an error while drawing (${error.message}).`)}
+}
+function floor3dDrawNow(){
   if(!floor3dBuilt||!floor3dRenderer)return;
+  const lostGl=floor3dRenderer.getContext&&floor3dRenderer.getContext();
+  if(lostGl&&lostGl.isContextLost())return;   // the loss event is already on its way
   const host=floor3dCanvas.parentElement;
   if(!host)return;
   const width=Math.max(1,host.clientWidth);
@@ -505,9 +617,8 @@ function floor3dBuildScene(){
     catch(error){
       floor3dDisposeScene();
       if(relief===4){
-        floor3dState="failed";
-        floor3dReason=`The 3D floor could not be built at this fleet size (${error.message}).`;
-        state.floorView="2d";save();render();return;
+        floor3dReport("3D floor could not be built",`The device ran out of room while building the floor (${error.message}).`,"The flat floor is showing instead.");
+        floor3dFailPermanently(`The 3D floor could not be built at this fleet size (${error.message}).`);return;
       }
     }
   }
@@ -697,10 +808,14 @@ function mountFloor3d(){
   floor3dPendingTimer=setTimeout(run,120);
 }
 function floor3dUpdate(){
+  try{floor3dUpdateNow()}
+  catch(error){floor3dScheduleRecovery(`The 3D floor hit an error while updating (${error.message}).`)}
+}
+function floor3dUpdateNow(){
   const host=document.querySelector(".floor-3d-mount");
   if(!host){floor3dStop();return}
   if(floor3dState!=="ready")return;
-  if(!floor3dEnsureRenderer()){render();return}
+  if(!floor3dEnsureRenderer())return;
   /* A context that has already gone cannot be drawn into, and hammering it is how a recoverable
      hiccup becomes a permanent fallback. */
   const gl=floor3dRenderer.getContext&&floor3dRenderer.getContext();
@@ -720,9 +835,11 @@ function floor3dUpdate(){
   const still=typeof reducedMotion==="function"&&reducedMotion();
   if(!still&&floor3dBuilt&&(floor3dBuilt.animated||floor3dAnythingWrong())){
     const step=time=>{
-      if(document.hidden||!floor3dCanvas.parentElement){floor3dRaf=0;return}
-      if(floor3dBuilt.animated)floor3dBuilt.animate(time);
-      floor3dPulse(time);
+      if(!floor3dCanvas||document.hidden||!floor3dCanvas.parentElement){floor3dRaf=0;return}
+      try{
+        if(floor3dBuilt.animated)floor3dBuilt.animate(time);
+        floor3dPulse(time);
+      }catch(error){floor3dRaf=0;floor3dScheduleRecovery(`The 3D floor hit an error while animating (${error.message}).`);return}
       floor3dDraw();
       floor3dRaf=requestAnimationFrame(step);
     };

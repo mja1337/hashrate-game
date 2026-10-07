@@ -14,7 +14,7 @@ const initialState=()=>{const seed=Math.floor(Math.random()*4294967296);return{
   giftCards:{spentBtc:0,spentUsd:0,cards:0},floorView:"3d",
   hardware:{laptop:1},poweredDownHardware:{},facility:"home",region:"na",thermal:{temperature:22,orders:[],equipment:{}},overdrive:false,settlementSaleMode:false,autoRepair:false,node:0,nodeStorage:50,nodePruned:false,nodeMode:"archival",nodeSync:{primaryLag:0,primaryPeak:0,backupLag:0,backupPeak:0},backupNode:{enabled:false,outageUntil:0},mode:"solo",pool:"f2pool",
   skills:[],points:0,startingGrant:false,seen:[],activeEvent:null,pendingLosses:[],poolAccount:{balance:0,frozen:0,threshold:.01,destination:"hot",paidTotal:0,feesPaid:0,payouts:0,lastPayout:0},coldSpends:[],lossResume:false,storyPause:true,shoppingPause:false,speculations:[],powerRateShock:null,hardwareGlut:null,hardwareAlerts:{seen:[],queue:[],active:null,resumeSpeed:0},hardwareToastSeen:[],exposureWarned:[],
-  treasuryPolicy:"cover",pendingSettlement:null,endReason:null,arrearsDue:0,gridCutAnnounced:false,marketPressure:{usd:0,at:0},
+  pendingSettlement:null,endReason:null,arrearsDue:0,gridCutAnnounced:false,marketPressure:{usd:0,at:0},
   operator:{eras:{},periodMined:0,periodUptime:0,periodDays:0,lastRevenueUsd:0,totalMonths:0,solventMonths:0,profitableMonths:0,competitiveMonths:0,bridgeLoans:0,restructures:0},
   xp:{total:0,level:1,peakLevel:1,bestDifficulty:0,shares:0,sources:{shares:0,record:0,deploy:0,repair:0,spend:0}},
   knowledge:0,nextKnowledge:5,learning:null,completedLearning:[],custody:{devices:[],keys:[],policy:"single",assigned:[],configBackedUp:false,orders:[],parts:{},builds:[],exposure:[],seq:0,lastScare:0},maintenance:{condition:{},faults:{},faultsByPart:{},selfRepairs:{},dryFit:{},parts:0,inventory:{fan:0,hashboard:0,powerPcb:0,coolantPump:0,coolingManifold:0,laptopfan:0,asicfan:0,hashboardearly:0,hashboardmodern:0},inventoryMigrated:true,orders:[],serviceJobs:[]},procurementOrders:[],inactiveHardware:{},commissioningJobs:[],retirementJobs:[],decommissionedHardware:{},relocationJob:null,facilityUpgradeJob:null,ops:{firmwarePatchedUntil:0,hijackUntil:0,outageUntil:0,powerOutageUntil:0,venueFreezes:{},riskMonth:""},strategy:{mstr:0,strk:0,strf:0,strd:0,strc:0,yieldEarned:0},sandbox:false,contract:"standard",staff:[],projectLoan:0,insured:false,milestones:[],milestoneLog:[],walletSetup:{done:false,step:0,rolls:[],keyHex:""},immersion:{},mineSection:"floor",priceChartRange:"all",secondary:{stock:{},month:""},stagedCondition:{},planning:{month:""},guidance:{dismissed:[]},walletSoftware:0,donations:[],
@@ -140,7 +140,7 @@ state.maintenance.selfRepairs=state.maintenance.selfRepairs&&typeof state.mainte
 state.xp=normalizeXp(state.xp);
 state.startingGrant=!!state.startingGrant;
 state.autoRepair=!!state.autoRepair;
-state.treasuryPolicy=TREASURY_POLICIES.some(x=>x.id===state.treasuryPolicy)?state.treasuryPolicy:"cover";
+delete state.treasuryPolicy;
 state.debt=Math.max(0,Number(state.debt)||0);state.arrearsDue=Number(state.arrearsDue)||0;state.gridCutAnnounced=!!state.gridCutAnnounced;if(state.debt<=0){state.arrearsDue=0;state.gridCutAnnounced=false}
 state.pendingSettlement=state.pendingSettlement&&typeof state.pendingSettlement==="object"?state.pendingSettlement:null;
 state.operator=Object.assign({eras:{},periodMined:0,periodUptime:0,periodDays:0,lastRevenueUsd:0,totalMonths:0,solventMonths:0,profitableMonths:0,competitiveMonths:0,bridgeLoans:0,restructures:0},state.operator||{});
@@ -455,12 +455,10 @@ function sellControlledBtc(amount){
 }
 function queueMonthlySettlement(due,month,loanInterest,silent=false){
   const snapshot=settlementSnapshot(due,month),resumeSpeed=state.speed||state.returnSpeed||0;
-  /* Whether the treasury had to be sold is the fact that matters, not which policy is set.
-     A well-funded operation on the cover policy sells nothing and is simply solvent; one
-     that had to liquidate to meet payroll is not, however smoothly it happened. */
-  const soldForBill=treasurySaleForSettlement(due,silent);
-  state.pendingSettlement={due,month,loanInterest,snapshot,resumeSpeed,coveredBySale:soldForBill>0};
-  if(state.cash+1e-8>=due){finishMonthlySettlement(soldForBill>0?"policy":"cash",true);return}
+  /* Nothing is sold on the player's behalf. Cash covers the bill or the clock stops and the
+     player has to go and raise it. */
+  state.pendingSettlement={due,month,loanInterest,snapshot,resumeSpeed};
+  if(state.cash+1e-8>=due){finishMonthlySettlement("cash",true);return}
   state.speed=0;renderFullQueued=true;log("Settlement decision required",`${fmtUsd(due-state.cash)} short`);if(!silent)showToast("Settlement paused","Choose how to cover the shortfall. Time will not move until the decision is resolved.","bad","finance");setTimer();
 }
 function liquidationCandidates(onlyId=null){

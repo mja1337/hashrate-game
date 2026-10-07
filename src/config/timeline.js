@@ -2,7 +2,7 @@
 
 /* DATA LAYER — compact, offline historical anchors and gameplay estimates. */
 const LIGHTNING=Date.parse("2018-03-15T00:00:00Z"),PROJECT_FINANCE_START=Date.parse("2014-01-01T00:00:00Z");
-const DAY=86400000, GENESIS=Date.parse("2009-01-03T00:00:00Z"), START=Date.parse("2009-02-03T00:00:00Z"), END=Date.parse("2026-08-29T00:00:00Z"), MARKET=Date.parse("2010-07-17T00:00:00Z");
+const DAY=86400000, GENESIS=Date.parse("2009-01-03T00:00:00Z"), START=Date.parse("2009-02-03T00:00:00Z"), END=Date.parse("2026-10-06T00:00:00Z"), MARKET=Date.parse("2010-07-17T00:00:00Z");
 const SANDBOX_END=END+DAY*365.25*100;
 const at=d=>Date.parse(d+"T00:00:00Z");
 /* IS THIS PIECE OF WORK DUE YET?
@@ -33,10 +33,6 @@ const dueStamp=job=>{
 const dueBy=(job,t)=>dueStamp(job)<=t;
 const pendingAt=(job,t)=>dueStamp(job)>t;
 const FAUCET_START=at("2010-06-11"), FAUCET_END=at("2012-06-11");
-const TREASURY_POLICIES=[
-  {id:"cover",name:"Cover the bill",short:"Sell only what settlement needs",consequence:"At each settlement the operation sells just enough BTC to pay the bill, and nothing more. Time never pauses for a shortfall you could have covered."},
-  {id:"hodl",name:"Hold everything",short:"Never sell automatically",consequence:"Nothing is sold on your behalf. If liquid cash cannot meet the bill, the run pauses and you choose the rescue yourself."}
-];
 const OPERATOR_ERAS=[
   {id:"frontier",name:"CPU frontier",start:GENESIS,end:at("2011-01-01")},
   {id:"garage",name:"GPU garage",start:at("2011-01-01"),end:at("2013-01-01")},

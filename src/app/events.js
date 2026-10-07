@@ -74,7 +74,6 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(a==="sell-strategy")sellStrategy(id,Number(v));
   else if(a==="contract")setContract(id);
   else if(a==="connectivity")setConnectivityPlan(id);
-  else if(a==="treasury-policy")setTreasuryPolicy(id);
   else if(a==="settle-btc"){state.settlementSaleMode=true;activeTab="market";save();render()}
   else if(a==="cancel-settlement-sale"){state.settlementSaleMode=false;render()}
   else if(a==="settle-liquidate")liquidateForSettlement();

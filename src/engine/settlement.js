@@ -2,9 +2,11 @@
 
 /* SETTLEMENT — the month boundary, where the operation either pays for itself or does not.
    Costs accrue daily into a ledger; at each boundary that ledger is presented as one bill and
-   has to be met from liquid cash. Everything about the shortfall lives here too: the treasury
-   conversion that sells BTC to cover it, and the four explicit rescues -- sell, liquidate,
-   bridge finance, receivership -- that a player picks between when the cash is not there.
+   has to be met from liquid cash. Nothing is sold on the player's behalf: mining pays in BTC
+   and the bill is due in cash, so a shortfall stops the clock and the player chooses -- sell on
+   an exchange at the Market, liquidate miners, bridge finance, miss the bill, receivership.
+   An automatic "cover the bill" sale used to sit here and made idling through the game close to
+   free: the treasury quietly paid every bill and nothing ever asked for a decision.
 
    Split out of simulation.js, which had reached the 70KB per-module ceiling. Nothing here is
    called before the page has finished parsing, so it can load in any order after the engine. */
@@ -21,8 +23,6 @@ function deferSettlement(){
   showToast("Bill missed, grid still on",`${fmtUsd(carried)} is now in arrears. The site keeps running until the next bill on ${dateFmt(state.arrearsDue)}; if the arrears are still owed then, power and internet are cut until they are paid.`,"warning","finance");
   state.speed=pending.resumeSpeed||state.returnSpeed||0;setTimer();save();render();
 }
-
-function treasuryPolicy(){return TREASURY_POLICIES.find(x=>x.id===state.treasuryPolicy)||TREASURY_POLICIES[0]}
 
 function monthlyCost(){
   const fs=fleet(),r=region(),f=facility(),nodeW=nodePowerWatts();
@@ -58,25 +58,6 @@ function settlementForecast(){
 function settlementSnapshot(due,month){
   const days=Math.max(1,state.operator.periodDays||1),uptime=state.operator.periodUptime/days,marketOpen=state.time>=MARKET,revenueUsd=marketOpen?state.operator.periodMined*priceAt(state.time):0,expectedGross=marketOpen?expectedDailyBtcForHash(fleet().hash)*priceAt(state.time)*days:0,competitive=operating()&&(marketOpen?expectedGross>=due*.75:playerNetworkShareAt(state.time,fleet().hash)>=.0001);
   return{due,month,era:operatorEraAt(Math.max(START,state.time-DAY)).id,mined:state.operator.periodMined,revenueUsd,days,uptime,profitable:marketOpen?uptime>=.25&&revenueUsd>0&&revenueUsd>=due:uptime>=.65,competitive};
-}
-
-function treasurySaleForSettlement(due,silent=false){
-  if(state.time<MARKET)return 0;const policy=treasuryPolicy(),fee=.006,price=priceAt(state.time);let btc=0;
-  if(policy.id!=="cover")return 0;const need=Math.max(0,due-state.cash);btc=need/(price*(1-fee));
-  // The automatic sale is charged the same order-book impact as a manual one, so routing a
-  // large liquidation through the settlement path is not a way around the book. Impact
-  // grows with size and size grows with impact, so the amount needed is solved iteratively.
-  for(let i=0;i<5&&btc>0;i++){const slip=tradeImpact(Math.min(state.wallets.hot,btc)*price,1);btc=need/(price*(1-fee)*(1-slip))}
-  btc=Math.min(state.wallets.hot,btc);if(btc<=0)return 0;const impact=tradeImpact(btc*price,1);if(impact>0)addPressure(btc*price,1);state.wallets.hot-=btc;const proceeds=btc*price*(1-fee)*(1-impact);state.cash+=proceeds;
-  log(`Settlement conversion: ${policy.name}`,`${fmtBtc(btc)} sold · +${fmtUsd(proceeds)} · the month does not count as solvent`,"trade");
-  const left=controlled(),drained=btc/Math.max(btc+left,1e-12);
-  if(!silent){
-    const heavy=left<=0||drained>=.5;
-    showToast(heavy?"Treasury nearly emptied to pay the bill":"Bill covered by selling BTC",
-      `${fmtBtc(btc)} was sold at ${fmtUsd(price)} to raise ${fmtUsd(proceeds)} for the operating bill, because liquid cash did not cover it. Your standing instruction is Cover the bill, so it sold the shortfall and nothing more. ${left>0?`${fmtBtc(left)} is still self-held.`:"You now hold no BTC, so the next bill has to come from cash."}`,
-      heavy?"bad":"success","finance");
-  }
-  return proceeds;
 }
 
 function finishMonthlySettlement(kind="cash",automatic=false){

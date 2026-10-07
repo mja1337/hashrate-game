@@ -28,16 +28,16 @@ function dismissToast(){clearTimeout(toastTimer);toastTimer=null;toast=null;docu
 const TOAST_COALESCE_MS=9000,TOAST_BASE_MS=8500,TOAST_MAX_MS=20000;
 let toastRepeats=0,toastLastTitle="",toastLastAt=0;
 function toastLife(){return Math.min(TOAST_MAX_MS,TOAST_BASE_MS+toastRepeats*1200)}
-function showToast(title,message,kind="info",tab=null,anchor=null){
+function showToast(title,message,kind="info",tab=null,anchor=null,lifeMs=0){
   kind=feedbackKind(title,kind);
   const now=Date.now(),repeat=title===toastLastTitle&&now-toastLastAt<TOAST_COALESCE_MS&&!!document.querySelector(".toast");
   toastRepeats=repeat?toastRepeats+1:0;
   toastLastTitle=title;toastLastAt=now;
-  toast={title,message,kind,tab,anchor,repeats:toastRepeats};
+  toast={title,message,kind,tab,anchor,repeats:toastRepeats,life:lifeMs};
   const markup=toastMarkup(toast),existing=document.querySelector(".toast"),host=document.getElementById("app");
   if(existing)existing.outerHTML=markup;else if(host&&state.started)host.insertAdjacentHTML("beforeend",markup);
   clearTimeout(toastTimer);
-  toastTimer=setTimeout(()=>{toast=null;document.querySelector(".toast")?.remove()},toastLife());
+  toastTimer=setTimeout(()=>{toast=null;document.querySelector(".toast")?.remove()},lifeMs>0?lifeMs:toastLife());
   // The flash marks the START of a run of trouble, not each item in it.
   if(kind==="bad"&&state.started&&!repeat)triggerImpactEffect();
 }

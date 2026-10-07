@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUTPUT = resolve(ROOT, "historical-data.js");
 const START = "2009-01-03";
-const END = "2026-08-29";
+const END = "2026-10-06";
 const DAY = 86_400_000;
 const METRICS = ["PriceUSD", "HashRate", "FeeTotNtv", "BlkCnt", "TxCnt", "CapMrktCurUSD"];
 const ENDPOINT = "https://community-api.coinmetrics.io/v4/timeseries/asset-metrics";

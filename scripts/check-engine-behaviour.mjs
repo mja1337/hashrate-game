@@ -41,6 +41,8 @@ const SITE = (overrides = "") => `
   state.ended=false;state.endReason=null;state.endDismissed=true;state.activeEvent=null;state.storyPause=false;
   state.mode="pool";state.pool="foundry";state.connectivity="fixed";state.contract="spot";
   state.node=0;state.cash=1e9;state.debt=0;state.power=true;state.policyLock=null;
+  // A rule that ends on an unpaid bill must not stop the clock for every rule after it.
+  state.pendingSettlement=null;state.settlementSaleMode=false;
   /* And the engine's own random stream, which initialState() seeds from Math.random(). Without
      this every rule ran against a different world each time the suite was invoked, and any rule
      that ticks long enough became a coin flip: the racking rule failed once with three machines
@@ -1647,7 +1649,7 @@ rule("a bill met by selling the treasury is not a solvent month", () => {
     const run=(startingCash)=>{
       ${SITE(``)}
       state.time=at("2017-01-01");state.facility="warehouse";state.region="na";
-      state.hardware={s9:100};state.cash=startingCash;state.treasuryPolicy="cover";
+      state.hardware={s9:100};state.cash=startingCash;
       state.wallets={hot:1000,cold:0,mtgox:0,exchange:0,frozen:0,bitfinex:0,quadriga:0,etf:0,frontier:0};
       state.projectLoan=0;state.debt=0;state.arrearsDue=0;
       state.operator=Object.assign(state.operator,{restructures:0,bridgeLoans:0,
@@ -1656,7 +1658,9 @@ rule("a bill met by selling the treasury is not a solvent month", () => {
       for(let i=0;i<420&&!state.ended;i++){
         tick();
         if(state.pendingSettlement){
-          treasurySaleForSettlement(state.pendingSettlement.due,true);
+          /* The player going to the Market and selling what the bill needs, at the 0.6% fee. */
+          const need=Math.max(0,state.pendingSettlement.due-state.cash),px=priceAt(state.time)*.994;
+          if(need>0){const btc=Math.min(state.wallets.hot,need/px);state.wallets.hot-=btc;state.cash+=btc*px}
           if(state.cash+1e-8>=state.pendingSettlement.due)finishMonthlySettlement("btc-rescue");
           else enterReceivership();
         }
@@ -1678,7 +1682,7 @@ rule("an operation with nothing left to sell reaches an end", () => {
   const r = json(`(()=>{
     ${SITE(``)}
     state.time=at("2017-01-01");state.facility="warehouse";state.region="na";
-    state.hardware={s9:100};state.cash=0;state.treasuryPolicy="hodl";
+    state.hardware={s9:100};state.cash=0;
     state.wallets={hot:0,cold:0,mtgox:0,exchange:0,frozen:0,bitfinex:0,quadriga:0,etf:0,frontier:0};
     state.projectLoan=0;state.debt=0;state.arrearsDue=0;state.gridCutAnnounced=false;
     state.operator=Object.assign(state.operator,{restructures:0,bridgeLoans:0});
@@ -1874,19 +1878,24 @@ rule("key backups reduce the risk, and a configured wallet reduces it further", 
 
 /* ---- SETTLEMENT: the month boundary has to behave ---- */
 
-rule("the treasury conversion raises exactly what the bill needs", () => {
-  const rows = json(`(()=>{const out=[];
-    for(const [d,hw,fac,due] of [["2010-12-01",{laptop:1},"home",50.7],["2013-06-01",{avalon:10},"warehouse",42000],
-                                 ["2021-06-01",{s19:600},"campus",900000]]){
-      ${SITE(``)}
-      state.time=at(d);state.facility=fac;state.hardware=hw;state.region="texas";
-      state.treasuryPolicy="cover";state.wallets.hot=5000;state.cash=0;
-      treasurySaleForSettlement(due,true);
-      out.push({due,cash:state.cash});
-    } return out})()`);
-  for (const row of rows) {
-    close(row.cash, row.due, Math.max(0.01, row.due * 1e-6), `a ${row.due} bill was covered with ${row.cash}`);
-  }
+rule("nothing is sold for the player: a shortfall at settlement stops the clock", () => {
+  /* There used to be a standing "cover the bill" instruction that sold BTC at settlement so
+     the run never paused. An idle operator could then coast through the whole game on the
+     treasury. A bill the cash cannot meet now stops the clock with the coins untouched. */
+  const r = json(`(()=>{
+    ${SITE(``)}
+    state.time=at("2017-01-01");state.facility="warehouse";state.region="na";
+    state.hardware={s9:100};state.cash=0;
+    state.wallets={hot:1000,cold:0,mtgox:0,exchange:0,frozen:0,bitfinex:0,quadriga:0,etf:0,frontier:0};
+    state.projectLoan=0;state.debt=0;state.arrearsDue=0;
+    let days=0;
+    for(let i=0;i<120&&!state.pendingSettlement&&!state.ended;i++){tick();days++}
+    const p=state.pendingSettlement;
+    return {paused:!!p,due:p?p.due:0,cash:state.cash,hot:state.wallets.hot,speed:state.speed,days};})()`);
+  assert(r.paused, `no settlement was queued in ${r.days} days, so this rule proves nothing`);
+  assert(r.hot >= 1000, `${1000 - r.hot} BTC was sold automatically to meet the bill`);
+  assert(r.cash < r.due, `the bill was met with ${r.cash} cash that the player never raised`);
+  assert(r.speed === 0, "the clock kept running past a bill the cash could not meet");
 });
 
 /* ---- REGIONS: cheap power must not simply be correct ---- */

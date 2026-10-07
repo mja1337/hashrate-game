@@ -102,7 +102,7 @@ The early years are deliberately damped and the game says so: run the honest for
 
 ## Core mechanics worth knowing
 
-**Cash and BTC are separate.** Mining pays in BTC; bills are due in cash. One standing instruction decides the conversion at settlement: *Cover the bill* sells the smallest amount that clears it, *Hold everything* sells nothing and turns a shortfall into a decision.
+**Cash and BTC are separate.** Mining pays in BTC; bills are due in cash. Nothing converts one into the other automatically: if cash does not cover the bill at settlement, time stops and the player raises it — usually by selling BTC at the Market — or takes one of the other rescues. There is deliberately no auto-sell; it made idling through the game close to free.
 
 **The operating bill can be missed.** If cash cannot cover it, time pauses and the settlement offers routes: sell BTC, liquidate miners, bridge finance, miss the bill, or receivership. Missing it carries the shortfall into arrears and keeps the site running until the next bill date; if the arrears are still owed then, power and internet are cut until they are paid. Owing money and being cut off are different states, and only the second stops the site.
 

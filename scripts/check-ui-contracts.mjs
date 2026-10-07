@@ -449,6 +449,13 @@ assert(/signature!==floor3dSignature/.test(inline),
 assert(inline.includes('state.floorView="2d";save();render()'),
   "A 3D failure does not fall back to the flat floor");
 assert(inline.includes('webglcontextlost'), "A lost 3D context is not handled");
+/* The support probe opens a WebGL context, and it is reachable from the render path. Uncached it
+   opened one per repaint, the browser evicted its oldest live context — the real renderer — and
+   the floor fell to the flat view for the rest of the session. */
+assert(/let floor3dSupportProbe=null;[\s\S]*?function floor3dSupported\(\)\{[\s\S]*?if\(floor3dSupportProbe!==null\)return floor3dSupportProbe;/.test(inline),
+  "The 3D support probe is not cached, so every repaint opens a WebGL context and the real one is eventually evicted");
+assert(/WEBGL_lose_context/.test(inline),
+  "The 3D support probe does not release its context, leaving it live until the garbage collector runs");
 // A dynamically loaded script must come from this bundle, not from anywhere else.
 assert(/const FLOOR3D_SCRIPTS=\[[^\]]*\]/.test(inline), "The 3D script list is missing");
 {
@@ -512,11 +519,6 @@ assert(inline.includes("function addPressure(") && inline.includes("PRESSURE_HAL
   "Standing market pressure and its decay are missing, so slicing an order would dodge the impact");
 assert(/sellBtc[\s\S]{0,400}tradeImpact\(/.test(inline), "sellBtc does not apply order-book impact");
 assert(/buyBtc[\s\S]{0,400}tradeImpact\(/.test(inline), "buyBtc does not apply order-book impact");
-assert(inline.includes("const impact=tradeImpact(btc*price,1);if(impact>0)addPressure(btc*price,1);")
-  && inline.includes("const proceeds=btc*price*(1-fee)*(1-impact)"),
-  "The automatic settlement sale does not pay order-book impact, making it a way around depth");
-assert(/for\(let i=0;i<5&&btc>0;i\+\+\)\{const slip=tradeImpact\(/.test(inline),
-  "The settlement sale does not solve for the impact it will itself cause, so it under-sells and leaves the bill short");
 assert(inline.includes("marketPressure:{usd:0,at:0}"), "marketPressure is missing from the initial state");
 assert(/state\.marketPressure=state\.marketPressure&&/.test(inline), "marketPressure has no save migration");
 assert(inline.includes("transaction.depth"), "The confirmation modal does not show order-book impact before confirming");
@@ -543,7 +545,21 @@ assert(inline.includes("state.pendingSettlement&&!state.settlementSaleMode?settl
 assert(inline.includes("MARKET_VENUES") && css.includes(".exchange-ticket-quote") && css.includes(".ticket-side.buy"), "Exchange trade-ticket redesign is missing");
 assert(inline.includes('selectedVenue="mtgox"') && inline.includes('a==="select-venue"') && inline.includes("venueCard(selectedVenue)"), "Market tab no longer shows one selected venue ticket at a time");
 assert(inline.includes('set("live-network-hash",fmtHash(competitiveHashAt(state.time,fs.hash)))') && inline.includes("competitiveHashAt(state.time,fs.hash))}</div><div class=\"subvalue\">recorded + unseen-miner floor"), "Displayed network hash no longer matches the effective competitive figure used for mining odds");
-assert(inline.includes("function triggerImpactEffect()") && inline.includes('showToast(title,message,kind="info",tab=null,anchor=null)'), "Bad-event impact effect is not wired into showToast");
+assert(inline.includes("function triggerImpactEffect()") && inline.includes('showToast(title,message,kind="info",tab=null,anchor=null,lifeMs=0)'), "Bad-event impact effect is not wired into showToast");
+// The 3D floor tells the player what happened for ten seconds, and a lost context is rebuilt rather
+// than being the end of the 3D floor for the session.
+assert(inline.includes("lifeMs>0?lifeMs:toastLife()") && inline.includes("const FLOOR3D_NOTICE_MS=10000;"),
+  "The 3D floor's notice does not last ten seconds, or showToast cannot be given a lifetime");
+assert(inline.includes('showToast(title,`${happened} ${outcome}`,"warning",null,null,FLOOR3D_NOTICE_MS)'),
+  "A 3D failure is not reported to the player with what happened");
+assert(inline.includes('addEventListener("webglcontextlost",floor3dOnContextLost)') && inline.includes('addEventListener("webglcontextrestored",floor3dOnContextRestored)'),
+  "The 3D floor does not handle both a lost and a restored context");
+assert(/function floor3dOnContextLost\(event\)\{[\s\S]*?floor3dScheduleRecovery\(/.test(inline) && !/function floor3dOnContextLost\(event\)\{[\s\S]{0,200}state\.floorView="2d"/.test(inline),
+  "A lost WebGL context switches the player to the flat floor for good instead of being rebuilt");
+assert(/const FLOOR3D_RECOVERY_DELAYS=\[/.test(inline) && inline.includes("floor3dRecoveries>=FLOOR3D_RECOVERY_DELAYS.length"),
+  "Recovery is not bounded, so a floor that can never draw would rebuild forever");
+assert(/function floor3dDraw\(\)\{\s*try\{floor3dDrawNow\(\)\}/.test(inline) && /function floor3dUpdate\(\)\{\s*try\{floor3dUpdateNow\(\)\}/.test(inline),
+  "An error while drawing or updating the 3D floor is not caught and reported");
 assert(css.includes(".impact-flash{") && css.includes(".impact-shake{") && css.includes(".toast.toast-bad{"), "Impact-flash/shake CSS is missing");
 assert((inline.match(/,"bad"[,)]/g) || []).length >= 12, "Not enough bad-event call sites trigger the impact effect");
 assert(inline.includes("state.facilityUpgradeJob={id,due:state.time+Math.ceil(days)*DAY,cost:f.cost,risk}") && inline.includes("function upgradingFacility()") && inline.includes("function fleetGrounded()"), "Facility upgrades no longer resolve as a timed, power-down job");
@@ -592,7 +608,7 @@ assert(css.includes(".thermal-console{display:grid;grid-template-columns:repeat(
 
 const sandboxContext={};
 vm.runInNewContext(timelineSource.replace("const SANDBOX_END","var SANDBOX_END").replace("const OPERATOR_ERAS","var OPERATOR_ERAS"), sandboxContext);
-assert(sandboxContext.SANDBOX_END===4943721600000, "SANDBOX_END drifted from the intended ~100-year horizon");
+assert(sandboxContext.SANDBOX_END===4947004800000, "SANDBOX_END drifted from the intended ~100-year horizon");
 assert(sandboxContext.OPERATOR_ERAS.length===7 && sandboxContext.OPERATOR_ERAS[6].id==="frontier2", "Procedural-frontier operator era is missing or out of place");
 assert(/performance=eraPoints\/\(OPERATOR_ERAS\.length\*100\)\*\d+/.test(inline), "Operator performance subscore still divides by a hardcoded era count");
 assert(inline.includes("next>=SANDBOX_END&&state.sandbox&&!state.pendingSettlement") && inline.includes('state.endReason="sandbox-complete"'), "Sandbox continuation has no second, finite auto-end trigger");
@@ -1313,23 +1329,21 @@ assert(inline.includes("function partFitSummary(partId)") && inline.includes('<d
 assert(inline.includes("Nothing in your fleet uses this") && inline.includes("const spares=SPARE_PARTS.map(part=>{const fit=partFitSummary(part.id)"), "A part no machine in the fleet uses must say so rather than looking like a valid purchase");
 assert(css.includes(".part-fit{") && css.includes(".part-fit.unused{"), "Part-fit lines are missing their styling");
 
-// Five treasury policies were really two. Measured over an identical seeded run,
-// "Cover the bill" and "HODL everything" were byte-identical whenever the operation
-// stayed solvent, and the fixed-ratio policies traded BTC for a fraction of its value
-// in cash. The screen now carries the one decision that exists.
-const policyContext = {};
-vm.runInNewContext(timelineSource.replace("const TREASURY_POLICIES", "var TREASURY_POLICIES") + "\nglobalThis.policies=TREASURY_POLICIES;", policyContext);
-const policies = policyContext.policies;
-assert(policies.length === 2, `Settlement conversion is one decision with two sides, not ${policies.length} options`);
-assert(policies[0].id === "cover" && policies[1].id === "hodl", "The two settlement-conversion instructions should be cover and hold");
-assert(policies.every(p => p.consequence && p.consequence.length > 40), "Each instruction must state its consequence, not just its name");
-assert(!policies.some(p => "ratio" in p), "The fixed-ratio policies are gone; nothing should still carry a ratio");
-assert(inline.includes('if(policy.id!=="cover")return 0;'), "Holding must sell nothing at settlement");
-assert(!/sell25|sell50|sell100/.test(inline.replace(/const CHANGELOG=[\s\S]*?\n\];/, "")), "A removed treasury policy is still referenced outside the changelog");
-assert(inline.includes("state.treasuryPolicy=TREASURY_POLICIES.some(x=>x.id===state.treasuryPolicy)?state.treasuryPolicy:\"cover\""), "A save holding a removed policy must fall back to covering the bill");
-assert(inline.includes("Settlement conversion") && !inline.includes('<h2>Treasury policy</h2>'), "The panel should be named for the decision it carries");
-assert(inline.includes('log("Settlement conversion changed"') && inline.includes("log(`Settlement conversion: ${policy.name}`"), "Ledger entries still call this a treasury policy");
-assert(inline.includes("Next automatic sale") && inline.includes("Forecast shortfall"), "The panel no longer shows what the current instruction will actually do at the next settlement");
+// THERE IS NO AUTO-SELL. A standing "cover the bill" instruction used to sell just enough BTC
+// at settlement that the run never paused, so an operator could idle through the whole game on
+// the treasury while nothing ever asked for a decision. A bill the cash cannot meet now stops
+// the clock and the player raises it, usually by selling at the Market. The behaviour is proved
+// in check-engine-behaviour.mjs; these pin that the machinery is really gone and not just unused.
+assert(!/TREASURY_POLICIES|treasuryPolicy\b|treasurySaleForSettlement|setTreasuryPolicy|treasury-policy|coveredBySale/.test(inline.replace(/const CHANGELOG=[\s\S]*?\n\];/, "").replace(/delete (state|restored)\.treasuryPolicy;/g, "")),
+  "An automatic settlement sale, or the policy that switched it on, is still referenced");
+assert(inline.includes("delete state.treasuryPolicy;") && inline.includes("delete restored.treasuryPolicy;"),
+  "A save or import that still carries the removed policy is not cleaned up");
+assert(inline.includes('if(state.cash+1e-8>=due){finishMonthlySettlement("cash",true);return}'),
+  "Settlement meets a bill from something other than cash on the player's behalf");
+assert(inline.includes("function settlementOutlookVisual()") && inline.includes("NOTHING IS SOLD FOR YOU") && inline.includes("Forecast shortfall") && inline.includes('data-action="tab" data-value="market"'),
+  "The finance panel no longer says nothing is sold automatically, or no longer shows the shortfall and the way to the Market");
+assert(!inline.includes("Next automatic sale") && !inline.includes('data-action="treasury-policy"'),
+  "The panel still offers an automatic sale");
 
 // A home-built tower takes standard case fans; only the laptop takes a laptop fan.
 // The mapping lives on the machine so a new entry declares its own part.
@@ -1419,12 +1433,7 @@ assert(inline.includes("state.debt=0;state.arrearsDue=0;state.gridCutAnnounced=f
 assert(inline.includes("state.arrearsDue=Number(state.arrearsDue)||0") && inline.includes("if(state.debt<=0){state.arrearsDue=0;state.gridCutAnnounced=false}"), "Old saves must load with a coherent arrears state");
 assert(inline.includes('showToast("Power and internet cut off"'), "The disconnection has to announce itself; it was silent before");
 
-// A run under Cover the bill can sit at $0.00 cash for months while the treasury quietly
-// sells BTC to keep the lights on. That is the policy working, but with only a Ledger
-// line it was indistinguishable from a stuck game.
-assert(inline.includes('showToast(heavy?"Treasury nearly emptied to pay the bill":"Bill covered by selling BTC"'), "Selling BTC to cover a bill must say so, and escalate when it is eating the last of the treasury");
-assert(inline.includes("const left=controlled(),drained=btc/Math.max(btc+left,1e-12)") && inline.includes("const heavy=left<=0||drained>=.5"), "The treasury notice does not distinguish a routine conversion from one that empties the wallet");
-assert(inline.includes("function treasurySaleForSettlement(due,silent=false)") && inline.includes("treasurySaleForSettlement(due,silent)") && inline.includes("queueMonthlySettlement(due,month,loanInterest,silent)"), "Settlement notices must respect silent ticks, or a catch-up after the tab was hidden fires a month of toasts at once");
+assert(inline.includes("queueMonthlySettlement(due,month,loanInterest,silent)"), "Settlement notices must respect silent ticks, or a catch-up after the tab was hidden fires a month of toasts at once");
 assert(inline.includes('if(!silent)showToast("Settlement paused"'), "The settlement-paused toast still fires on silent catch-up ticks");
 // The forecast drives the whole cash-runway story, and miners keep running through arrears.
 assert(inline.includes("const minerWatts=state.power&&!gridCutOff()&&!state.policyLock?fs.w*contractLoadFactor():0"), "The settlement forecast assumes miners are off the moment arrears exist, understating the bill for the entire grace month");
