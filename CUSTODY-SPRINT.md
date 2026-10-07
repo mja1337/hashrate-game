@@ -10,7 +10,7 @@ Plan: five workstreams, built and reviewed one at a time. Nothing is pushed unti
 | 1 | The bill is a custody event (reach, fetch the reserve, rush, fee by weight) | pushed |
 | 2 | Places (devices and backups live somewhere; incidents hit places) | pushed |
 | 3 | People (key holders are staff; Security officer; rotation) | committed locally, awaiting review |
-| 4 | Counterparties (posture pricing, coin-theft cover, audit, BTC-secured loan) | committed locally, awaiting review |
+| 4 | Counterparties (posture pricing, coin-theft cover, audit, BTC-secured loan) | committed locally; stock-take 2 done |
 | 5 | One Treasury tab | not started |
 
 ## When to take stock
@@ -41,16 +41,37 @@ the feature, a number that cannot be made to behave in simulation, or a decision
 | 13 | Bank-box seizure after regional bans (uses the existing `fx` event hook) | plan | follow-up |
 
 | 21 | After a rotation the old signer still holds the retired key, so it cannot serve as a spare. A real operator wipes it. Needs a "wipe this signer" action | WS3 | small follow-up; low priority |
-| 22 | Insider numbers are first-pass: hostile half climbs 0.4% a day per day (cap 35%), patient half silent for 90 days then 0.02% a day per day (cap 10%), a security officer halves it, a sweep takes 60-100%. The user set the shape; the figures are mine | WS3 | stock-take 2 |
 | 23 | The security officer's other job (running an audit) arrives with WS4. Today the role only holds a key and halves insider risk | WS3 | WS4 |
 | 24 | A rotation cannot be rushed, and does not offer to start itself when somebody is dismissed | WS3 | only if play shows it is missed |
 
-| 25 | `netWorth()` subtracts the loan against coins but not the operating loan (`projectLoan`), which it has never subtracted. Borrowing the operating loan still inflates net worth by its principal | WS4 | its own small change; it moves scores and some tests |
-| 26 | A margin call can arrive and be liquidated the next day when the price falls fast (21-22 Jan 2022 and 8-9 May 2022 in the real series). Accurate, but harsh; the UI shows the loan to value but nothing warns before the call line | WS4 | stock-take 2: consider an early warning at 70% |
-| 27 | Loan terms (LTV 50%/40%, rates 0.7%/1.0%, call 80%/75%, sale 90%/85%, 5% penalty, 14 days) and cover terms (1.5% a year, pays 50/70/85%, 30-day wait) and audit terms ($4,000, 14 days) are first-pass | WS4 | stock-take 2 |
 | 28 | Only one loan against coins at a time, and no partial repayment. Both are simplifications | WS4 | only if play shows it is missed |
 | 29 | The lender-failure event applies to one real episode (Celsius, 12 June 2022). Voyager and BlockFi are not modelled separately | WS4 | probably leave |
 | 30 | Cover and the loan are only on the custody tab; the Finance tab still shows only migration cover and the operating loan | WS4 | WS5 puts them together |
+
+## Stock-take 2
+
+Measured, not argued: the engine's own functions run over the real price series and many seeded runs
+(scripts were throwaway; the findings and the rules that now pin them are below).
+
+| Question | Finding | Decision |
+|---|---|---|
+| How often does a place incident reach a player? | Everything at the mine on paper: 49% of runs over 12 years have an incident, 31% strand coins, 18% have coins stolen. Steel at the mine: 23% (break-ins only). Signer at the mine with steel in a bank box: **0.75%**. | Rates kept. About one incident per run for the careless is the intent. |
+| Is a bank box a real trade-off? | **No.** Backups never need to be fetched to sign, so the only cost of the safest place is $15 a month, and it dominates. Access days only bite for SIGNERS. | Left as it is, and raised below as a design question. |
+| How fast does an exposed key get swept? | Single signature, no officer: 40% within 30 days, 46% within 90, 77% within 180, all within a year; median 113 days. With an officer: 27% / 46% / 67% / 99%. Half hostile (46% in the sample), half patient. | Kept. It is the shape asked for. The hostile and patient caps are never reached before the person has acted, so they do not matter. A spare signer takes 9-18 days to arrive, so a player without one is swept before rotating roughly one time in six. |
+| Is coin cover worth buying? | **No, by a mile.** At 1.5% a year the premium was 17 times the expected payout for a player 50% hot, 92 times at 20% hot, 281 times in a 2-of-3. | **Cut to 0.35% a year at a strong posture.** Now about 4 times the expected payout for a hot-heavy player and 22 times for a careful one: a real decision for the first and rightly not worth it for the second. A rule pins "2 to 60 times", not the number. |
+| How often does a loan against coins end in a sale? | Weekly starts 2018-2025, held a year, no action. Pledge at the limit: 24% called, **17% sold**. Collaborative at the limit: 29% called, **30% sold**. Call-to-sale gap is only about 6 points of price, so in a crash the fortnight rarely matters. | The remedy in the sale notice, "borrow well below the limit", **could not be done**: principal was always the full loan to value. **Added a loan size: borrow all it allows, 80%, 60% or 40% of that.** At 60% of the limit the one-year sale rate is **2% (pledge) and 4% (collaborative)**. Default is 60%. |
+| Does the player get warning? | 65% of eventual sales came less than a week after the loan first reached 70%. | **Added a notice five points before the call**, cleared when the loan recovers. |
+| What does a bill-paying loan do? | It pledged just enough to start at the limit, the worst moment to be at it. | **Settlement loans now start at 60% of the limit.** |
+| Does borrowing make a player richer? | Yes, for the operating loan: net worth ignored it (open point 25). | **Fixed.** `netWorth()` subtracts both. |
+
+Two numbers I could not settle from data and have left first-pass: the audit ($4,000, 14 days) and the
+posture-to-premium and rate discounts. Both are small next to the figures above and nothing in the data argues for
+moving them.
+
+**A design question for the user, not decided here:** a bank box dominates because nothing makes the safest place
+cost anything where it hurts. The honest fix is that restoring a key from a backup should take the backup's access
+days (two days from a bank, none at the mine), so a fire just before a bill makes the distance matter. It is a new
+mechanic, not a number, so it is not in this pass.
 
 ## Closed in the fix-up pass (before pushing WS1 and WS2)
 
@@ -82,6 +103,8 @@ the feature, a number that cannot be made to behave in simulation, or a decision
   audits run by the security officer; coin cover priced and paid by posture, refusing neglect, paid inside
   `reportCoinLoss`; two ways to borrow against coins (collaborative custody and a full-custody pledge) with margin calls,
   liquidation, interest in the bill, both usable to pay a settlement; the 2022 lender failure; the Market's reserve note.
+- Stock-take 2: cover repriced from 1.5% to 0.35% a year; loans can be sized below the limit and warn five points before a
+  call; settlement loans start at 60% of the limit; net worth subtracts the operating loan.
 - WS3: holders (owner, treasury manager, security officer, field technician), dismissal exposes every key a person ever
   knew, insider risk (a daily hazard that rises every day: half hostile and likely to act within a month, half patient and silent for a quarter; halved by a security officer; only if the exposed keys alone satisfy the wallet),
   rotation as a job (new key, real sweep fee, days, consolidates to one coin, descriptor re-recorded), busy technicians a

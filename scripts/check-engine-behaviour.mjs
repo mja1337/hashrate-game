@@ -2645,6 +2645,81 @@ rule("borrowing at the November 2021 peak and doing nothing ends in a margin cal
   assert(r.loss && r.loss.kind === "seized" && r.loss.cause === "margin", `the collateral was not reported as sold on a margin call: ${JSON.stringify(r.loss)}`);
 });
 
+rule("borrowing less than the coins allow starts the loan lower, and survives what sells a loan at the limit", () => {
+  const through = use => json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-04-14");state.facility="warehouse";state.hardware={};state.cash=1e7;`)}
+    // The April 2021 peak, and the fall to July. A pledge is lost to the lender that fails in June 2022 whatever its size, so the question here is the price alone.
+    borrowSecured("pledge",.5,{use:${use}});
+    const l=securedLoan(),ltv0=securedLtv(),principal=l.principal;
+    let soldOn=null;const stop=Date.UTC(2021,9,1);
+    for(let n=0;n<400&&!soldOn&&state.time<stop;n++){tick(true);if(!securedLoan())soldOn=new Date(state.time).toISOString().slice(0,10)}
+    return{ltv0,principal,soldOn,alive:!!securedLoan(),date:new Date(state.time).toISOString().slice(0,10)};})()`);
+  const max = through(1), safer = through(.6);
+  close(max.ltv0, .4, 1e-9, "a pledge at the limit did not start at 40%");
+  close(safer.ltv0, .24, 1e-9, "borrowing 60% of what the coins allow did not start at 24%");
+  close(safer.principal / max.principal, .6, 1e-9, "borrowing 60% of the limit did not lend 60% as much");
+  assert(max.soldOn !== null && max.soldOn < "2021-09-01", `a loan at the limit survived the fall from the April 2021 peak: ${JSON.stringify(max)}`);
+  assert(safer.alive && safer.soldOn === null, `a loan at 60% of the limit was sold in the same fall: ${JSON.stringify(safer)}`);
+  // An unsupported size is not trusted: it lends at the limit rather than at whatever was asked.
+  const odd = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    borrowSecured("pledge",.5,{use:7});return securedLtv();})()`);
+  assert(odd <= .4 + 1e-9, `an absurd loan size lent at ${odd} of the coins' value`);
+});
+
+rule("a loan gives notice before it is called, and the notice clears when the price recovers", () => {
+  const step = ratio => json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    borrowSecured("pledge",.5);
+    const l=securedLoan(),price=priceAt(state.time);
+    l.principal=l.pledged*price*.72;advanceSecuredLoan(state.time,true);
+    const warned={warned:!!securedLoan().warned,call:!!securedLoan().call,loss:!!pendingLoss()};
+    l.principal=l.pledged*price*${ratio};advanceSecuredLoan(state.time,true);
+    return{warned,after:{warned:!!securedLoan().warned,call:!!securedLoan().call}};})()`);
+  const worse = step(.78), better = step(.6);
+  assert(worse.warned.warned && !worse.warned.call && !worse.warned.loss, `a loan at 72% should warn and not yet be called: ${JSON.stringify(worse.warned)}`);
+  assert(worse.after.call, "a loan at 78% was not called after the warning");
+  assert(!better.after.warned && !better.after.call, "the warning did not clear when the loan came back to 60%");
+});
+
+rule("paying a bill with a loan borrows well below the limit", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-10");state.facility="warehouse";state.hardware={s9:100};state.cash=0;state.speed=1;`)}
+    for(let n=0;n<60&&!state.pendingSettlement;n++)tick(true);
+    const plan=settlementBorrowPlan("pledge");
+    borrowForSettlement("pledge");
+    return{planLtv:plan.ltv,startLtv:securedLtv(),covers:plan.covers};})()`);
+  assert(r.covers, "the plan did not cover the bill, so this rule proves nothing");
+  close(r.planLtv, .24, 1e-9, "paying a bill pledged for a loan at the limit instead of at 60% of it");
+  assert(r.startLtv < .3, `a loan taken to pay a bill started at ${r.startLtv} of the coins' value`);
+});
+
+rule("coin cover is priced within reach of what it can be expected to pay", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";state.skills=["backups"];`)}
+    ${PLACED_WALLET("single", [{device:"site",backup:"bank",steel:true}])}
+    state.wallets.hot=50;state.wallets.cold=50;
+    const tier=custodyPosture().tier,q=coinCoverQuote(tier),price=priceAt(state.time);
+    const expectedLoss=12*hotWalletIncidentRisk()*.26*state.wallets.hot,expectedPaid=expectedLoss*q.pays;
+    return{tier,premiumYear:q.premium*12/price,expectedPaid,holdings:100,rate:q.premium*12/(price*100)};})()`);
+  assert(r.tier === "strong", `the wallet was ${r.tier}`);
+  const loading = r.premiumYear / r.expectedPaid;
+  assert(loading > 2 && loading < 60, `cover costs ${loading.toFixed(0)} times what it is expected to pay; it should be a decision, not an obvious yes or an obvious no`);
+  assert(r.rate < .01, `cover at a strong posture costs ${(r.rate * 100).toFixed(2)}% of the coins a year`);
+});
+
+rule("borrowing does not make a player richer: cash in and a debt of the same size cancel", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";state.cash=500000;`)}
+    state.operator.lastRevenueUsd=400000;
+    const w0=netWorth();takeProjectLoan();const afterOperating=netWorth(),borrowed=state.projectLoan;
+    borrowSecured("pledge",.5);const feeValue=securedQuote("pledge",.5).fee*priceAt(state.time);
+    return{w0,afterOperating,borrowed,afterBoth:netWorth(),feeValue};})()`);
+  assert(r.borrowed > 0, "the operating loan could not be drawn, so this rule proves nothing about it");
+  close(r.afterOperating, r.w0, 1e-6, "drawing the operating loan changed net worth; the cash is offset by the debt");
+  assert(Math.abs(r.afterBoth - r.w0) < r.feeValue * 2 + 1, `borrowing against coins moved net worth by ${r.afterBoth - r.w0}`);
+});
+
 rule("a save from before loans against coins arrives with none", () => {
   const save = JSON.parse(fs.readFileSync(new URL("./fixtures/save-pre-custody-sprint.json", import.meta.url), "utf8"));
   const loaded = loadWithSave(save);

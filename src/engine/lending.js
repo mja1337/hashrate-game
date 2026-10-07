@@ -34,7 +34,9 @@ const SECURED_MODES={
   collaborative:{id:"collaborative",name:"Collaborative custody",ltv:.5,rate:.007,callLtv:.8,liqLtv:.9},
   pledge:{id:"pledge",name:"Full-custody pledge",ltv:.4,rate:.010,callLtv:.75,liqLtv:.85}
 };
-const SECURED_CALL_DAYS=14,SECURED_PENALTY=.05,SECURED_AUDIT_DISCOUNT=.001,SECURED_BUFFER=1.03;
+const SECURED_CALL_DAYS=14,SECURED_PENALTY=.05,SECURED_AUDIT_DISCOUNT=.001,SECURED_BUFFER=1.03,SECURED_WARN_GAP=.05;
+// A bill is a poor moment to borrow at the limit, so paying one pledges enough to start at 60% of it.
+const SECURED_SETTLEMENT_USE=.6;
 
 /* ---- reading the loan ---------------------------------------------------------------------- */
 
@@ -57,13 +59,16 @@ function securedRate(mode,s=state){
 
 /* ---- what is on offer ------------------------------------------------------------------------- */
 
-/* What borrowing would do if a fraction of the coins this lender can hold were pledged. */
-function securedQuote(mode,fraction,s=state){
+/* What borrowing would do if a fraction of the coins this lender can hold were pledged, and `use` of what
+   they allow were borrowed. Pledging more than the loan needs is how a loan is made safe: the same coins
+   at 60% of the limit were sold within a year in 2% of the weeks since 2018, against 17% at the limit. */
+const SECURED_USE_LEVELS=[1,.8,.6,.4];
+function securedQuote(mode,fraction,s=state,use=1){
   const m=SECURED_MODES[mode],bucket=mode==="collaborative"?"cold":"hot",gross=(s.wallets[bucket]||0)*fraction;
   const fee=bucket==="cold"?transferNetworkFee("cold",fraction,{},s):flatNetworkFee(s);
   const pledged=Math.max(0,gross-fee),price=s.time>=MARKET?priceAt(s.time):0;
-  return{mode,bucket,fraction,gross,fee,pledged,principal:pledged*price*m.ltv,rate:securedRate(mode,s),
-    days:bucket==="cold"?coldSpendDays(s)+1:0,ltv:m.ltv};
+  return{mode,bucket,fraction,gross,fee,pledged,principal:pledged*price*m.ltv*use,rate:securedRate(mode,s),
+    days:bucket==="cold"?coldSpendDays(s)+1:0,ltv:m.ltv*use,use};
 }
 function securedBlockReason(mode,s=state,opts={}){
   const m=SECURED_MODES[mode];if(!m)return "Unknown lender.";
@@ -88,7 +93,7 @@ function borrowSecured(mode,fraction,opts={}){
   const reason=securedBlockReason(mode,state,opts);
   if(reason)return showToast("Cannot borrow",reason,"bad","custody");
   fraction=Math.min(1,Math.max(.01,Number(fraction)||0));
-  const q=securedQuote(mode,fraction);
+  const use=SECURED_USE_LEVELS.includes(opts.use)?opts.use:1,q=securedQuote(mode,fraction,state,use);
   if(q.pledged<=0||q.principal<=0)return showToast("Too small",`The ${fmtBtc(q.fee)} network fee is more than the coins being pledged.`,"bad","custody");
   utxoConsume(q.bucket,fraction);
   state.wallets[q.bucket]-=q.gross;
@@ -166,6 +171,11 @@ function advanceSecuredLoan(next,silent=false){
   if(next<MARKET||l.pledged<=0)return;
   const m=SECURED_MODES[l.mode],ltv=l.principal/(l.pledged*priceAt(next));
   if(ltv>=m.liqLtv){liquidateSecured("crash",next);return}
+  if(ltv>m.callLtv-SECURED_WARN_GAP&&ltv<=m.callLtv&&!l.warned){
+    l.warned=true;
+    log("Loan close to a margin call",`${Math.round(ltv*100)}% of the collateral's value · called at ${Math.round(m.callLtv*100)}%`,"custody");
+    if(!silent)showToast("Your loan is close to a margin call",`It is at ${Math.round(ltv*100)}% of the coins' value and is called at ${Math.round(m.callLtv*100)}%. Repay some, or add coins, while there is time: a fast fall can take the price from here to a sale in days.`,"warning","custody");
+  } else if(l.warned&&ltv<m.callLtv-2*SECURED_WARN_GAP)l.warned=false;
   if(ltv>m.callLtv){
     if(!l.call){
       l.call={since:next,until:next+SECURED_CALL_DAYS*DAY};
@@ -207,7 +217,7 @@ function settlementBorrowPlan(mode,s=state){
   const p=s.pendingSettlement;if(!p||s.time<MARKET)return null;
   const m=SECURED_MODES[mode],need=Math.max(0,p.due-s.cash),bucket=mode==="collaborative"?"cold":"hot",held=s.wallets[bucket]||0;
   if(held<=0)return null;
-  const wantBtc=need/(priceAt(s.time)*m.ltv)*SECURED_BUFFER,fraction=Math.min(1,Math.max(.01,wantBtc/held)),q=securedQuote(mode,fraction,s);
+  const use=SECURED_SETTLEMENT_USE,wantBtc=need/(priceAt(s.time)*m.ltv*use)*SECURED_BUFFER,fraction=Math.min(1,Math.max(.01,wantBtc/held)),q=securedQuote(mode,fraction,s,use);
   return{...q,need,covers:q.principal>=need-1e-6};
 }
 function borrowForSettlement(mode){
@@ -219,9 +229,9 @@ function borrowForSettlement(mode){
     if(state.debt>0)return showToast("Cannot borrow",
       "You are already carrying arrears. Missing a second bill cuts the grid, so raise this one another way.","bad","custody");
     deferSettlement();
-    borrowSecured(mode,plan.fraction);
+    borrowSecured(mode,plan.fraction,{use:plan.use});
     return;
   }
-  if(!borrowSecured(mode,plan.fraction,{settling:true}))return;
+  if(!borrowSecured(mode,plan.fraction,{settling:true,use:plan.use}))return;
   if(state.pendingSettlement&&state.cash>=state.pendingSettlement.due)finishMonthlySettlement("secured");
 }

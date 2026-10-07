@@ -453,7 +453,11 @@ assert(inline.includes("+securedPledgedBtc():0)}") && inline.includes('-(typeof 
   "Pledged coins are no longer counted as the borrower's, or the loan is no longer a liability in net worth");
 assert(inline.includes('(typeof securedInterestMonthly==="function"?securedInterestMonthly():0)'),
   "Interest on a loan against coins is no longer part of what borrowing adds to the bill");
-assert(inline.includes('else if(a==="secured-borrow")borrowSecured(b.dataset.mode,Number(v));') && inline.includes('else if(a==="secured-repay")repaySecuredLoan();') && inline.includes('else if(a==="secured-topup")addSecuredCollateral(Number(v));') && inline.includes('else if(a==="settle-borrow")borrowForSettlement(v);'),
+assert(inline.includes('else if(a==="secured-borrow")borrowSecured(b.dataset.mode,Number(v),{use:securedUseChoice});') && inline.includes('else if(a==="secured-use")setSecuredUse(Number(v));') && inline.includes("${securedUseChooser()}<div class=\"venue-grid\">${securedOffers()}</div>"),
+  "A loan can no longer be sized below what the coins allow, which is the only way to make one safe");
+assert(inline.includes('${l.warned&&!l.call?`<div class="risk medium">Close to a margin call'),
+  "A loan close to its margin call no longer says so on screen");
+assert(inline.includes('else if(a==="secured-borrow")') && inline.includes('else if(a==="secured-repay")repaySecuredLoan();') && inline.includes('else if(a==="secured-topup")addSecuredCollateral(Number(v));') && inline.includes('else if(a==="settle-borrow")borrowForSettlement(v);'),
   "The borrow, repay, add-collateral or settlement-borrow buttons are not wired to anything");
 assert(inline.includes("${custodyCoverSection()}${custodyLoanSection()}") && inline.includes("return settlementReserveOnly()+settlementBorrowCards();"),
   "Borrowing against coins is no longer offered on the custody tab or in the settlement decision");

@@ -109,7 +109,7 @@ function advanceAudit(silent=false){
    Premium is a share of the self-held coins at today's price, so it moves with the market. */
 
 const COVER_START=Date.parse("2016-01-01T00:00:00Z");
-const COVER_ANNUAL_RATE=.015;                              // of insured value, for a STRONG posture
+const COVER_ANNUAL_RATE=.0035;                             // of insured value a year, for a STRONG posture. It was 1.5%, which was 17 to 280 times what it could be expected to pay
 const COVER_PREMIUM_FACTOR={basic:1.5,strong:1,audited:.6};
 const COVER_PAYS={basic:.5,strong:.7,audited:.85};
 const COVER_WAIT_DAYS=30;
