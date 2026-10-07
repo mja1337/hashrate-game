@@ -53,6 +53,7 @@ const FILES = [
   "src/engine/losses.js",
   "src/engine/places.js",
   "src/engine/keyholders.js",
+  "src/engine/credit.js",
   "src/engine/facilities.js",
   "src/engine/maintenance.js",
   "src/engine/pools.js",

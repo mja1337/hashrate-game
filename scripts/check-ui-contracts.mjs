@@ -428,6 +428,11 @@ assert(inline.includes("if(set.placed&&set.fragile)risk*=1.8;"),
   assert(!/nextRand\(/.test(code),
     "A people risk draws from the shared random stream, which shifts every seeded run after it. Roll it with hashRoll(state.seed, ...)");
 }
+// COUNTERPARTIES. The operating loan's rate is one number, so that whatever is about to make it depend on something changes it once.
+assert(!/hasStaff\("treasurer"\)\?\.009:\.012|hasStaff\("treasurer"\)\?"0\.9":"1\.2"/.test(inline.replace(/function projectLoanRate\(\)\{[^}]*\}/, "")),
+  "The operating loan's rate is written out again somewhere other than projectLoanRate()");
+assert(inline.includes("function financeInterestMonthly()") && inline.includes("const loanInterest=financeInterestMonthly()") && inline.includes("breakdown.finance=financeInterestMonthly();"),
+  "The month-end bill and the settlement forecast no longer price borrowing from the same function");
 assert(inline.includes("custodyOnDismiss(id,countBefore);") && inline.includes("const countBefore=state.staff.filter(x=>x===id).length;"),
   "Dismissing somebody no longer exposes the keys they knew");
 assert(inline.includes("advanceInsiderRisk(next);") && inline.includes("advanceRotation(silent);"),

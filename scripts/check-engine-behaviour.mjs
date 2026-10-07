@@ -2249,6 +2249,41 @@ rule("a save from before holders still opens, and every key is the owner's", () 
   assert(r.days === 2, `an old 2-of-3 takes ${r.days} days to sign`);
 });
 
+/* ---- COUNTERPARTIES: what borrowing costs, and what a lender or insurer asks to see ---- */
+
+rule("every part of the game that prices the operating loan agrees on its rate", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    const read=()=>{
+      state.projectLoan=100000;
+      const rate=projectLoanRate(),bill=financeInterestMonthly(),forecast=settlementForecast().breakdown.finance,
+        reserve=reserveMilestoneStatus().monthlyBurn-monthlyCost().total;
+      return{rate,bill,forecast,reserve};
+    };
+    state.staff=[];const without=read();
+    state.staff=["treasurer"];const withTreasurer=read();
+    return{without,withTreasurer};})()`);
+  for (const [name, x] of [["without a treasury manager", r.without], ["with one", r.withTreasurer]]) {
+    close(x.bill, 100000 * x.rate, 1e-6, `the month-end interest disagrees with the rate ${name}`);
+    close(x.forecast, x.bill, 1e-6, `the settlement forecast disagrees with the bill ${name}`);
+    close(x.reserve, x.bill, 1e-6, `the reserve milestone disagrees with the bill ${name}`);
+  }
+  // And the settlement that is actually queued at the month boundary, which is the one that costs money.
+  const queued = staff => json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-10");state.facility="warehouse";state.hardware={};state.cash=0;state.projectLoan=100000;state.staff=${JSON.stringify(staff)};`)}
+    for(let n=0;n<60&&!state.pendingSettlement;n++)tick(true);
+    const p=state.pendingSettlement;
+    return{interest:p?p.loanInterest:null,rate:projectLoanRate()};})()`);
+  for (const staff of [[], ["treasurer"]]) {
+    const q = queued(staff);
+    assert(q.interest !== null, "no settlement was queued, so this rule proves nothing about the bill");
+    close(q.interest, 100000 * q.rate, 1e-6, `the settlement queued at month end charged ${q.interest} of interest at a rate of ${q.rate}`);
+  }
+  assert(r.withTreasurer.rate < r.without.rate, "a treasury manager did not lower the rate");
+  close(r.without.rate, .012, 1e-12, "the operating loan no longer costs 1.2% a month");
+  close(r.withTreasurer.rate, .009, 1e-12, "a treasury manager no longer brings the rate to 0.9% a month");
+});
+
 rule("creditors can sell only the cold coins a wallet could actually sign for", () => {
   const taken = wallet => json(`(()=>{
     ${CUSTODY_SITE(`state.time=at("2021-02-01");`)}

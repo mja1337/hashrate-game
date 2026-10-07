@@ -618,7 +618,7 @@ function tick(silent=false){
   const d=new Date(next),month=d.toISOString().slice(0,7);
   if(month!==state.lastMonth){
     if(state.debt>0&&state.time>=(state.arrearsDue||Infinity)&&!state.gridCutAnnounced){state.gridCutAnnounced=true;log("Grid disconnected",`${fmtUsd(state.debt)} still unpaid`,"finance");if(!silent)showToast("Power and internet cut off",`${fmtUsd(state.debt)} of arrears went unpaid past its second bill date. Mining and node service stop while rent, payroll and finance keep accruing. Clear the arrears from Finance to be reconnected.`,"bad","finance")}
-    const loanInterest=state.projectLoan*(hasStaff("treasurer")?.009:.012),due=state.bill+loanInterest;queueMonthlySettlement(due,month,loanInterest,silent);
+    const loanInterest=financeInterestMonthly(),due=state.bill+loanInterest;queueMonthlySettlement(due,month,loanInterest,silent);
     if(strategyYield>0)log("Strategy preferred income",`+${fmtUsd(strategyYield*30.4375)}`);
     state.history.push({t:next,p:priceAt(next),btc:controlled(),worth:netWorth(),hash:fs.hash});state.history=state.history.slice(-240);
   }
