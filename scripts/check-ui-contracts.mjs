@@ -435,6 +435,12 @@ assert(inline.includes("function financeInterestMonthly()") && inline.includes("
   "The month-end bill and the settlement forecast no longer price borrowing from the same function");
 assert(inline.includes('else if(a==="custody-audit")commissionCustodyAudit();') && inline.includes('data-action="custody-audit"'),
   "The audit button is not wired to anything, or has gone from the custody tab");
+assert(inline.includes('else if(a==="custody-cover")toggleCoinCover();') && inline.includes("${custodyPostureSection()}${custodyAuditSection()}${custodyCoverSection()}"),
+  "The cover button is not wired to anything, or has gone from the custody tab");
+assert(inline.includes('const claim=typeof coinCoverClaim==="function"?coinCoverClaim(entry,btc):null;') && inline.includes("what:(entry.what||\"\")+(claim?claim.note:\"\")"),
+  "A theft is no longer offered to the policy, or the loss notice no longer says what it paid or why not");
+assert(inline.includes("advanceCoinCover(next,silent);") && inline.includes("function migrationInsuranceCost()"),
+  "An insurer can no longer withdraw cover, or the premium is no longer kept apart from the migration cover");
 assert(inline.includes("advanceAudit(silent);") && inline.includes("function advanceAudit(silent=false)"),
   "An audit under way is no longer advanced by the tick, so it would never finish");
 assert(inline.includes("const POSTURE_TIERS=[\"none\",\"basic\",\"strong\",\"audited\"];") && inline.includes("${custodyPostureSection()}${custodyAuditSection()}"),

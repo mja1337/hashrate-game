@@ -34,7 +34,22 @@ function custodyAuditSection(){
     ${reason?`<p class="modal-note">${reason}</p>`:`<p class="modal-note">Your security officer reviews the setup and reports every finding, whether or not it passes. A pass is a certificate for a year.</p>`}${result}`;
 }
 
+/* Cover against theft: what it costs at today's posture, what it pays, and, because it matters more
+   than either, what it will not. */
+function custodyCoverSection(){
+  if(state.time<COVER_START)return "";
+  const p=custodyPosture(),cover=coinCover(),reason=coinCoverBlockReason(),quote=coinCoverQuote(p.tier);
+  const excluded=Object.values(COVER_EXCLUDED).map(t=>`<li>${t}</li>`).join("");
+  const status=cover
+    ?`<div class="risk ${state.time<cover.since+COVER_WAIT_DAYS*DAY?"medium":"low"}">Cover bound ${dateFmt(cover.since)} · ${fmtUsd(coinCoverPremium())} a month${state.time<cover.since+COVER_WAIT_DAYS*DAY?` · pays from ${dateFmt(cover.since+COVER_WAIT_DAYS*DAY)}`:""}</div>`
+    :quote?`<p class="modal-note">At a <b>${p.tier}</b> posture, cover would cost about <b>${fmtUsd(quote.premium)}</b> a month and pay <b>${Math.round(quote.pays*100)}%</b> of a covered theft, from thirty days after it is bound. A better posture is cheaper and pays more.</p>`:"";
+  return `<h4>Cover against theft</h4>${status}
+    <div class="actions"><button class="action small ${cover?"":reason?"":"primary"}" data-action="custody-cover" ${!cover&&reason?`disabled title="${escapeHtml(reason)}"`:""}>${cover?"Cancel cover":"Bind cover"}</button></div>
+    ${!cover&&reason?`<p class="modal-note">${reason}</p>`:""}
+    <p class="modal-note">It pays for the online wallet being emptied and for a break-in. It does not pay for a venue failing, for coins nobody can spend any more, or for neglect:</p><ul class="posture-findings">${excluded}</ul>`;
+}
+
 function custodyCounterpartiesCard(){
   return `<section class="card span-12 custody-counterparties"><div class="card-head"><h2>What lenders and insurers see</h2><div class="meta">${custodyPosture().tier.toUpperCase()} POSTURE</div></div>
-    <div class="card-pad">${custodyPostureSection()}${custodyAuditSection()}</div></section>`;
+    <div class="card-pad">${custodyPostureSection()}${custodyAuditSection()}${custodyCoverSection()}</div></section>`;
 }

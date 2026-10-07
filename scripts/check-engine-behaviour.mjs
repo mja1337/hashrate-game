@@ -44,6 +44,8 @@ const SITE = (overrides = "") => `
   state.node=0;state.cash=1e9;state.debt=0;state.power=true;state.policyLock=null;
   // A rule that ends on an unpaid bill must not stop the clock for every rule after it.
   state.pendingSettlement=null;state.settlementSaleMode=false;
+  // And a policy bought in one rule must not be cancelled, or paid out, by the next.
+  state.coinCover=null;
   /* And the engine's own random stream, which initialState() seeds from Math.random(). Without
      this every rule ran against a different world each time the suite was invoked, and any rule
      that ticks long enough became a coin flip: the racking rule failed once with three machines
@@ -2361,6 +2363,94 @@ rule("a save from before audits arrives with none, and a posture it can be read 
   const r = JSON.parse(read(`JSON.stringify({tier:custodyPosture().tier,until:custodyAuditUntil(),job:custodyAuditJob(),reason:auditBlockReason()})`));
   assert(r.tier === "basic" && r.until === 0 && r.job === null, `an old 2-of-3 with steel backups and no places was ${r.tier}`);
   assert(/security officer/i.test(r.reason), "an old save could be audited without a security officer");
+});
+
+rule("coin cover is priced by how well the keys are kept and by how much there is to lose", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    const refusedNone=coinCoverBlockReason();
+    ${PLACED_WALLET("single", [{device:"site",backup:"bank",steel:true}])}
+    const quotes={basic:coinCoverQuote("basic"),strong:coinCoverQuote("strong"),audited:coinCoverQuote("audited"),none:coinCoverQuote("none")};
+    const before=insuranceMonthlyCost();
+    toggleCoinCover();
+    const bound={active:coinCoverActive(),premium:coinCoverPremium(),inBill:insuranceMonthlyCost()-before,inLedger:monthlyCost().insurance};
+    state.wallets.hot*=2;state.wallets.cold*=2;
+    const doubled=coinCoverPremium();
+    return{refusedNone,quotes,bound,doubled};})()`);
+  assert(/cannot sign|rebuilt/i.test(r.refusedNone), `a wallet that cannot sign was offered cover: "${r.refusedNone}"`);
+  assert(r.quotes.none === null, "a posture of none was quoted");
+  close(r.quotes.basic.premium / r.quotes.strong.premium, 1.5, 1e-9, "a basic posture does not cost half as much again as a strong one");
+  close(r.quotes.audited.premium / r.quotes.strong.premium, .6, 1e-9, "an audited posture does not cost 40% less than a strong one");
+  assert(r.quotes.basic.pays < r.quotes.strong.pays && r.quotes.strong.pays < r.quotes.audited.pays, "a better posture does not pay a larger share of a loss");
+  assert(r.bound.active && r.bound.premium > 0, "cover could not be bound on a strong wallet");
+  close(r.bound.inBill, r.bound.premium, 1e-6, "the premium is not part of the monthly insurance bill");
+  assert(r.bound.inLedger >= r.bound.premium, "the premium is missing from the settlement forecast's insurance line");
+  close(r.doubled / r.bound.premium, 2, 1e-9, "doubling the coins did not double the premium");
+});
+
+rule("cover pays a share of a covered theft by posture, and nothing inside its waiting period", () => {
+  const claim = (setup, waitDays, cause = "hotwallet") => json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${setup}
+    if(${waitDays}!==null){toggleCoinCover();state.time+=DAY*${waitDays}}
+    const cash0=state.cash,price=priceAt(state.time);
+    reportCoinLoss({title:"t",kind:"stolen",btc:2,cause:"${cause}",what:"x",why:"y",remedy:"z"});
+    const loss=pendingLoss();
+    return{paid:state.cash-cash0,usd:2*price,share:(state.cash-cash0)/(2*price),text:loss.what,lossPaid:loss.paid};})()`);
+  const strong = `${PLACED_WALLET("single", [{device:"site",backup:"bank",steel:true}])}`;
+  const strongPaid = claim(strong, 31);
+  close(strongPaid.share, .7, 1e-9, "a strong posture did not get 70% of a covered theft back");
+  assert(/Your cover paid/.test(strongPaid.text) && strongPaid.lossPaid > 0, "the loss notice did not say that cover paid");
+  close(claim(`${strong}state.custody.auditUntil=state.time+DAY*400;`, 31).share, .85, 1e-9, "an audited posture did not get 85% back");
+  close(claim(`${CONFIGURED_WALLET("single")}`, 31).share, .5, 1e-9, "a basic posture did not get 50% back");
+  const early = claim(strong, 10);
+  assert(early.paid === 0 && /does not pay for the first 30/.test(early.text), `cover paid inside its waiting period, or did not say why: "${early.text}"`);
+  const none = claim(strong, null);
+  assert(none.paid === 0 && !/cover/i.test(none.text), "a loss with no policy mentioned cover or was paid");
+  close(claim(strong, 31, "burglary").share, .7, 1e-9, "a break-in was not covered");
+});
+
+rule("cover does not pay for what the policy treats as neglect, or for what is not a theft", () => {
+  const claim = (kind, cause) => json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${PLACED_WALLET("single", [{device:"site",backup:"bank",steel:true}])}
+    toggleCoinCover();state.time+=DAY*40;
+    const cash0=state.cash;
+    reportCoinLoss({title:"t",kind:"${kind}",btc:2,cause:"${cause}",what:"x",why:"y",remedy:"z"});
+    return{paid:state.cash-cash0,text:pendingLoss().what};})()`);
+  for (const cause of ["entropy", "phishing", "insider"]) {
+    const c = claim("stolen", cause);
+    assert(c.paid === 0 && /does not pay for this/.test(c.text), `${cause}: cover paid, or did not explain: "${c.text}"`);
+  }
+  // The last two carry the label of a covered theft on purpose: only a theft is paid, whatever the cause says.
+  for (const [kind, cause] of [["unrecoverable", "nobackup"], ["counterparty", "mtgox"], ["seized", "receivership"], ["counterparty", "hotwallet"], ["unrecoverable", "burglary"]]) {
+    const c = claim(kind, cause);
+    assert(c.paid === 0 && !/cover/i.test(c.text), `${kind}: a loss that is not a theft was paid or mentioned cover: "${c.text}"`);
+  }
+});
+
+rule("an insurer withdraws cover it can no longer price, and a new policy waits again", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${PLACED_WALLET("single", [{device:"site",backup:"bank",steel:true}])}
+    toggleCoinCover();const bound=state.coinCover.since;
+    toggleCoinCover();const cancelled=coinCoverActive();
+    state.time+=DAY*50;toggleCoinCover();const rebound=state.coinCover.since;
+    state.custody.devices[0].destroyed={cause:"fire"};state.custody.keys[0].backup={...state.custody.keys[0].backup,destroyed:true};
+    const tier=custodyPosture().tier;advanceCoinCover(state.time,true);
+    return{bound,cancelled,rebound,now:state.time,tier,after:coinCoverActive()};})()`);
+  assert(!r.cancelled, "cancelling did not end the policy");
+  assert(r.rebound === r.now - 0 + 0 || r.rebound > r.bound, "binding again did not restart the waiting period");
+  assert(r.tier === "none" && !r.after, `an insurer kept cover on keys that could not be rebuilt: posture ${r.tier}, active ${r.after}`);
+});
+
+rule("a save from before coin cover arrives with none, and nothing in its bill", () => {
+  const save = JSON.parse(fs.readFileSync(new URL("./fixtures/save-pre-custody-sprint.json", import.meta.url), "utf8"));
+  const loaded = loadWithSave(save);
+  assert(loaded.ok, `the pre-sprint save could not be opened: ${loaded.message}`);
+  const read = makeEval(loaded.sandbox);
+  const r = JSON.parse(read(`JSON.stringify({active:coinCoverActive(),premium:coinCoverPremium(),insurance:insuranceMonthlyCost(),migration:migrationInsuranceCost()})`));
+  assert(!r.active && r.premium === 0 && r.insurance === r.migration, "an old save arrived with cover it never bought");
 });
 
 rule("creditors can sell only the cold coins a wallet could actually sign for", () => {

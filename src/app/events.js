@@ -63,6 +63,7 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(a==="custody-policy")setCustodyPolicy(id);
   else if(a==="custody-config")backupCustodyConfig();
   else if(a==="custody-audit")commissionCustodyAudit();
+  else if(a==="custody-cover")toggleCoinCover();
   else if(a==="custody-holder")setKeyHolder(id,v);
   else if(a==="custody-rotate")rotateCustodyKey(id,v);
   else if(a==="custody-move")moveCustodyItem(b.dataset.kind,id,v);

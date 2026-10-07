@@ -9,6 +9,9 @@
 
    Loaded after keyholders.js; nothing here runs before the page has finished parsing. */
 
+/* What the optional migration cover costs: a share of the fleet's value. */
+function migrationInsuranceCost(){return state.insured?fleet().value*.0015:0}
+
 /* The monthly rate on the operating loan. */
 function projectLoanRate(){return hasStaff("treasurer")?.009:.012}
 /* What all outstanding borrowing adds to the next bill. */
@@ -87,4 +90,91 @@ function advanceAudit(silent=false){
   if(!silent)showToast(passed?"Audit passed":"Audit found problems",
     passed?`Your custody is audited until ${dateFmt(c.auditUntil)}. Anybody who prices a risk on your keys can see it.`:`${blocking.map(f=>f.text).join(" ")} Fix them and ask again.`,passed?"success":"bad","custody");
   renderFullQueued=true;
+}
+
+/* ---- cover against theft ------------------------------------------------------------------------ */
+
+/* COIN COVER pays when coins are STOLEN, and what it will pay for is the whole point of it.
+
+   It prices the keys, so it asks the same question the loan does: how well are they kept? The better
+   the posture, the cheaper the premium and the more of a loss it pays. It pays for what you could not
+   reasonably have prevented, the online wallet taken or a break-in, and not for what you left lying
+   about: a seed you knew had a flaw, a key you knew somebody else held, or a seed you typed into a
+   fake. An insurer that paid for those would be paying you to be careless.
+
+   It does not cover a venue failing (those are claims, not thefts), or coins nobody can spend any
+   more (that is loss, not theft). A new policy does not pay for 30 days, so it cannot be bought
+   after the fact.
+
+   Premium is a share of the self-held coins at today's price, so it moves with the market. */
+
+const COVER_START=Date.parse("2016-01-01T00:00:00Z");
+const COVER_ANNUAL_RATE=.015;                              // of insured value, for a STRONG posture
+const COVER_PREMIUM_FACTOR={basic:1.5,strong:1,audited:.6};
+const COVER_PAYS={basic:.5,strong:.7,audited:.85};
+const COVER_WAIT_DAYS=30;
+const COVER_COVERED=["hotwallet","burglary"];
+const COVER_EXCLUDED={
+  entropy:"a key generated from a seed with a known flaw, which the policy treats as a known weakness left in place",
+  phishing:"a seed you typed into a fake, which the policy treats as handing it over",
+  insider:"a key you knew somebody else held and had not replaced"
+};
+
+function coinCover(s=state){return s.coinCover&&typeof s.coinCover==="object"?s.coinCover:null}
+function coinCoverActive(s=state){return !!coinCover(s)}
+function coinCoverInsuredBtc(s=state){return (s.wallets?.hot||0)+(s.wallets?.cold||0)}
+/* The monthly premium, in dollars, at today's holdings and price. */
+function coinCoverPremium(s=state){
+  const cover=coinCover(s);if(!cover||s.time<MARKET)return 0;
+  const factor=COVER_PREMIUM_FACTOR[custodyPosture(s).tier];if(!factor)return 0;
+  return coinCoverInsuredBtc(s)*priceAt(s.time)*COVER_ANNUAL_RATE*factor/12;
+}
+/* The same premium for a given posture, for the screen to show before anything is bought. */
+function coinCoverQuote(tier,s=state){
+  const factor=COVER_PREMIUM_FACTOR[tier];if(!factor||s.time<MARKET)return null;
+  return{premium:coinCoverInsuredBtc(s)*priceAt(s.time)*COVER_ANNUAL_RATE*factor/12,pays:COVER_PAYS[tier]};
+}
+function coinCoverBlockReason(s=state){
+  if(s.time<COVER_START)return "Nobody insures self-held bitcoin this early.";
+  if(coinCoverActive(s))return "";
+  const p=custodyPosture(s);
+  if(p.rank<1)return "An insurer will not quote on keys that cannot sign, or could not be rebuilt if a signer were lost.";
+  if(coinCoverInsuredBtc(s)<=0)return "There is nothing self-held to insure.";
+  return "";
+}
+function toggleCoinCover(){
+  if(coinCoverActive()){
+    state.coinCover=null;log("Coin cover cancelled","","custody");
+    showToast("Cover cancelled","The policy ends now. A new one will not pay for thirty days after it is bound.","info","custody");
+    save();render();return;
+  }
+  const reason=coinCoverBlockReason();
+  if(reason)return showToast("No cover available",reason,"bad","custody");
+  state.coinCover={since:state.time,tier:custodyPosture().tier};
+  log("Coin cover bound",`${fmtUsd(coinCoverPremium())}/month · pays ${Math.round(COVER_PAYS[custodyPosture().tier]*100)}% of a covered theft after ${COVER_WAIT_DAYS} days`,"custody");
+  showToast("Cover bound",`${fmtUsd(coinCoverPremium())} a month. It pays ${Math.round(COVER_PAYS[custodyPosture().tier]*100)}% of a covered theft, from ${dateFmt(state.time+COVER_WAIT_DAYS*DAY)}.`,"success","custody");
+  save();render();
+}
+/* An insurer withdraws from a risk it can no longer price. Rolled monthly with the other operational risks. */
+function advanceCoinCover(next,silent=false){
+  if(!coinCoverActive())return;
+  if(custodyPosture().rank<1){
+    state.coinCover=null;
+    log("Coin cover withdrawn","The insurer can no longer price your keys","custody");
+    if(!silent)showToast("Your insurer withdrew cover","Your keys can no longer sign or be rebuilt, so the policy has been cancelled. Rebuild the wallet and ask again.","bad","custody");
+  }
+}
+
+/* What a covered claim pays, and the sentence that goes in the loss notice either way. Called by
+   reportCoinLoss for every loss, and says nothing unless there is cover and the loss is a theft. */
+function coinCoverClaim(entry,btc,s=state){
+  const cover=coinCover(s);
+  if(!cover||entry.kind!=="stolen"||btc<=0)return null;
+  const cause=entry.cause,price=s.time>=MARKET?priceAt(s.time):0,usd=btc*price;
+  if(COVER_EXCLUDED[cause])return{paid:0,note:` Your cover does not pay for this: it is ${COVER_EXCLUDED[cause]}.`};
+  if(!COVER_COVERED.includes(cause))return{paid:0,note:""};
+  if(s.time<cover.since+COVER_WAIT_DAYS*DAY)return{paid:0,note:` Your cover was bound ${Math.floor((s.time-cover.since)/DAY)} days ago and does not pay for the first ${COVER_WAIT_DAYS}.`};
+  const tier=custodyPosture(s).tier,share=COVER_PAYS[tier]||0,paid=usd*share;
+  if(paid<=0)return{paid:0,note:""};
+  return{paid,note:` Your cover paid ${fmtUsd(paid)}, ${Math.round(share*100)}% of the ${fmtUsd(usd)} lost, at your ${tier} posture. It is cash, not coins.`};
 }

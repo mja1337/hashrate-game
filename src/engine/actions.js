@@ -436,7 +436,7 @@ function dismissStaff(id){
   custodyOnDismiss(id,countBefore);
   save();render();
 }
-function toggleInsurance(){state.insured=!state.insured;log(state.insured?"Migration insurance bound":"Migration insurance cancelled",state.insured?`${fmtUsd(insuranceMonthlyCost())}/month`:"");save();render()}
+function toggleInsurance(){state.insured=!state.insured;log(state.insured?"Migration insurance bound":"Migration insurance cancelled",state.insured?`${fmtUsd(migrationInsuranceCost())}/month`:"");save();render()}
 function fiatCollateral(){return Math.max(0,state.cash-state.projectLoan)}
 function reserveMilestoneStatus(){const monthlyBurn=monthlyCost().total+financeInterestMonthly(),required=monthlyBurn*6,collateral=fiatCollateral(),days=Math.max(0,state.uptimeDays||0),tier=facilityTier();return{monthlyBurn,required,collateral,days,tier,ok:tier>=2&&days>=180&&state.debt<=0&&collateral>=required}}
 function reserveMilestoneProgress(){const r=reserveMilestoneStatus();if(state.milestones.includes("reserve"))return"Six-month reserve achieved";if(r.tier<2)return"Reserve goal: move into a tier 2 facility";if(r.days<180)return`Reserve goal: ${180-r.days} operating day${180-r.days===1?"":"s"} remaining`;if(state.debt>0)return"Reserve goal: clear grid arrears";return`Reserve goal: ${fmtUsd(r.collateral)} / ${fmtUsd(r.required)} unborrowed fiat`}

@@ -352,7 +352,7 @@ function incomingConditionFor(h,t=state.time){
 }
 function hardwareUnitCost(h){return h.cost*hardwareMarketFactor(h)*(hasSkill("procurement")?.94:1)*(hasStaff("procurementlead")?.95:1)}
 function staffMonthlyCost(){return state.staff.reduce((sum,id)=>sum+(STAFF.find(x=>x.id===id)?.salary||0),0)}
-function insuranceMonthlyCost(){return state.insured?fleet().value*.0015:0}
+function insuranceMonthlyCost(){return migrationInsuranceCost()+(typeof coinCoverPremium==="function"?coinCoverPremium():0)}
 
 function learningItem(){return state.learning?LEARNING.find(x=>x.id===state.learning.id):null}
 function awardLearning(item,multiplier=1){
@@ -386,6 +386,7 @@ function advanceOperationalRisks(next,silent=false){
   const month=new Date(next).toISOString().slice(0,7);if(state.ops.riskMonth===month)return;state.ops.riskMonth=month;
   advanceCustodyRisks(next,silent);
   advancePlaceRisks(next,silent);
+  advanceCoinCover(next,silent);
   advanceHotWalletRisk();
   if(firmwarePatchDue()&&!firmwareHijacked()&&nextRand()<firmwareHijackRisk()){state.ops.hijackUntil=next+DAY*(10+Math.floor(nextRand()*21));log("ASIC fleet hijacked","35% of hash diverted");showToast("Firmware compromise","Unpatched ASIC firmware is pointing part of your hash rate to an attacker. Patch it now.","bad");}
   const r=region(),outageRisk=connectivityIncidentRisk(),gridRisk=Math.min(.28,Math.max(.004,(1-r.rely)*1.15));

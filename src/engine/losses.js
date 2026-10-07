@@ -40,12 +40,15 @@ function reportCoinLoss(entry){
   const btc=Math.max(0,Number(entry.btc)||0);
   if(btc<=0&&!entry.always)return;
   const price=state.time>=MARKET?priceAt(state.time):0;
+  // Cover, if there is any, pays here, so no incident has to know that it exists.
+  const claim=typeof coinCoverClaim==="function"?coinCoverClaim(entry,btc):null;
+  if(claim&&claim.paid>0){state.cash+=claim.paid;log("Coin cover claim paid",`+${fmtUsd(claim.paid)}`,"custody")}
   lossQueue().push({
     id:`${entry.cause||"loss"}-${state.time}-${lossQueue().length}`,cause:entry.cause||"loss",
     title:entry.title,kind:entry.kind||"stolen",btc,
     usd:price>0?btc*price:0,quoted:price>0,
     from:entry.from||"self-held keys",
-    what:entry.what||"",why:entry.why||"",remedy:entry.remedy||"",
+    what:(entry.what||"")+(claim?claim.note:""),why:entry.why||"",remedy:entry.remedy||"",paid:claim?claim.paid:0,
     tab:entry.tab||"custody",time:state.time,
     recovered:Math.max(0,Number(entry.recovered)||0)
   });
