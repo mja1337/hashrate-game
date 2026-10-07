@@ -36,6 +36,9 @@
 - `src/data/custody.js` — the equipment catalogue and the places things are kept, plus `hashRoll` and `normalizeCustodyPlaces`. Everything the load-time migration needs is here because it loads before `simulation.js`.
 - `src/engine/places.js` — where devices, seed backups and the wallet descriptor are kept: which places survive a fire, a flood or a break-in, how long a signing takes given where the keys are, journeys, and what the border does. Every roll is `hashRoll(state.seed, ...)`, never `nextRand()`.
 - `src/engine/keyholders.js` — who holds each key, what dismissing a holder exposes, the insider risk, and rotation: replacing a key as a job that sweeps every coin at the real fee. Rolls are `hashRoll`, never `nextRand()`.
+- `src/engine/credit.js` — what borrowing costs and what a lender or insurer sees: the operating loan's rate (one function, not seven), the custody posture, the audit, and coin cover. Claims are paid inside `reportCoinLoss`, so no incident has to know that cover exists.
+- `src/engine/lending.js` — borrowing against the coins themselves: collaborative custody and a full-custody pledge, margin calls and liquidation, and what a lender failing does to each. No dice: a call and a sale are functions of the price.
+- `src/ui/enhance/counterparties.js` — the posture, the audit, cover and the loan on the custody tab.
 - `src/ui/enhance/people.js` — the holder controls on each key, rotation progress, and the warning on a staff card before somebody who knows a key is dismissed.
 - `src/ui/enhance/places.js` — the "Where things are kept" card.
 - `src/ui/enhance/treasury.js` — the settlement reserve card, the cold-spend review and the cost line, as sentences over the engine's numbers.

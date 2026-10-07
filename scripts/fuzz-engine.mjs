@@ -90,6 +90,13 @@ for (const seed of SEEDS) {
       ()=>{const d=((state.custody&&state.custody.devices)||[]).filter(x=>!x.destroyed&&!x.keyId);if(d.length)generateCustodyKey(pick(d).uid)},
       ()=>{const k=((state.custody&&state.custody.keys)||[]).filter(x=>!x.backup||x.backup.destroyed);if(k.length)backupCustodyKey(pick(k).id,"paperbackup")},
       ()=>backupCustodyConfig(),
+      // Borrowing against the coins, repaying, adding collateral, and paying a bill with it.
+      ()=>borrowSecured(pick(["collaborative","pledge"]),.1+rnd()*.9),
+      ()=>repaySecuredLoan(),
+      ()=>addSecuredCollateral(.1+rnd()*.5),
+      ()=>{if(state.pendingSettlement)borrowForSettlement(pick(["collaborative","pledge"]))},
+      ()=>toggleCoinCover(),
+      ()=>commissionCustodyAudit(),
       // People: who holds a key, who leaves, and replacing a key onto a spare signer.
       ()=>{const k=((state.custody&&state.custody.keys)||[]).filter(x=>!x.retired);if(k.length)setKeyHolder(pick(k).id,pick(CUSTODY_HOLDERS))},
       ()=>{const c=state.custody||{},spare=(c.devices||[]).filter(d=>!d.destroyed&&!d.keyId&&d.place!=="transit");if(spare.length&&c.assigned.length)rotateCustodyKey(pick(c.assigned),pick(spare).uid)},
@@ -138,6 +145,8 @@ for (const seed of SEEDS) {
             if(!(state.hardware[k]>=0)&&!negHw)negHw=k+"="+state.hardware[k];
           for(const k of Object.keys(state.wallets||{}))
             if(!(state.wallets[k]>=-1e-9)&&!negWallet)negWallet=k+"="+state.wallets[k];
+          // A loan against coins is a sum owed against coins held, and neither can be negative or unreal.
+          {const l=state.securedLoan;if(l&&!negWallet&&!(Number.isFinite(l.principal)&&l.principal>=0&&Number.isFinite(l.pledged)&&l.pledged>=-1e-9))negWallet="loan="+JSON.stringify([l.principal,l.pledged])}
           // A count of coins is a whole number that cannot go below zero, whatever was spent or received.
           for(const k of ["hot","cold"]){const u=state.utxo&&state.utxo[k];
             if(u!==undefined&&!(Number.isInteger(u)&&u>=0)&&!negWallet)negWallet="coins."+k+"="+u}

@@ -259,10 +259,10 @@ function activeSiteIncident(){if(powerOutage())return{kind:"Grid outage",until:s
 
 function fleetGrounded(){return relocating()||upgradingFacility()}
 function claims(){return state.wallets.mtgox+state.wallets.bitfinex+state.wallets.quadriga+state.wallets.frontier+state.wallets.exchange+state.wallets.frozen}
-function totalBtc(){return controlled()+claims()+(typeof coldInFlightBtc==="function"?coldInFlightBtc():0)}
+function totalBtc(){return controlled()+claims()+(typeof coldInFlightBtc==="function"?coldInFlightBtc()+securedPledgedBtc():0)}
 function marketLiquidBtc(){return state.wallets.hot+["mtgox","bitfinex","quadriga","frontier","exchange"].reduce((sum,id)=>sum+(venueAvailable(id)&&!venueFrozen(id)?state.wallets[id]:0),0)}
 function equityValue(){return STRATEGY_SECURITIES.reduce((sum,s)=>sum+strategyValue(s.id),0)}
-function netWorth(){return state.cash-state.debt+(state.time>=MARKET?totalBtc()+state.wallets.etf+lightningLocked():0)*priceAt(state.time)+equityValue()+fleet().value*.3}
+function netWorth(){return state.cash-state.debt-(typeof securedPrincipal==="function"?securedPrincipal():0)+(state.time>=MARKET?totalBtc()+state.wallets.etf+lightningLocked():0)*priceAt(state.time)+equityValue()+fleet().value*.3}
 function nextRand(){state.rng=(state.rng*1664525+1013904223)>>>0;return state.rng/4294967296}
 function poisson(lambda){
   if(lambda<=0)return 0;if(lambda>30)return Math.max(0,Math.round(lambda+Math.sqrt(lambda)*(nextRand()+nextRand()+nextRand()+nextRand()+nextRand()+nextRand()-3)*1.4));
@@ -503,6 +503,7 @@ function expectedDay(){return expectedDailyBtcForHash(fleet().hash,state.time)}
    keeps reaching them: a leaked record cannot be un-leaked by buying a different device.
    What it never does is move coins by itself, or prove the device was compromised. */
 function applyEvent(e){
+  if(e.fx==="lenders")applyLenderFailure();
   if(e.fx==="coldcardentropy"){
     state.custody.entropyAlert={since:state.time};
     const weak=custodyWeakKeys();
@@ -583,6 +584,7 @@ function tick(silent=false){
   advanceInsiderRisk(next);
   advanceRotation(silent);
   advanceAudit(silent);
+  advanceSecuredLoan(next,silent);
   advanceFleetLifecycle();
   const crossed=EVENTS.filter(e=>at(e.date)>prev&&at(e.date)<=next&&!state.seen.includes(e.id)).sort((a,b)=>at(a.date)-at(b.date));
   crossed.forEach(e=>{state.seen.push(e.id);applyEvent(e)});

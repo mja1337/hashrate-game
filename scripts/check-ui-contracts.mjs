@@ -441,6 +441,24 @@ assert(inline.includes('const claim=typeof coinCoverClaim==="function"?coinCover
   "A theft is no longer offered to the policy, or the loss notice no longer says what it paid or why not");
 assert(inline.includes("advanceCoinCover(next,silent);") && inline.includes("function migrationInsuranceCost()"),
   "An insurer can no longer withdraw cover, or the premium is no longer kept apart from the migration cover");
+// BORROWING AGAINST COINS. Interest, totals, the tick and the one historical lender failure all have to know about it.
+{
+  const lendingSource = await readFile(new URL("src/engine/lending.js", root), "utf8");
+  const code = lendingSource.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  assert(!/nextRand\(/.test(code), "A lending event draws from the shared random stream; a price call and a liquidation are functions of the price, not of dice");
+}
+assert(inline.includes("advanceSecuredLoan(next,silent);") && inline.includes('if(e.fx==="lenders")applyLenderFailure();'),
+  "A loan against coins is no longer advanced by the tick, or the 2022 lender failure no longer reaches it");
+assert(inline.includes("+securedPledgedBtc():0)}") && inline.includes('-(typeof securedPrincipal==="function"?securedPrincipal():0)+'),
+  "Pledged coins are no longer counted as the borrower's, or the loan is no longer a liability in net worth");
+assert(inline.includes('(typeof securedInterestMonthly==="function"?securedInterestMonthly():0)'),
+  "Interest on a loan against coins is no longer part of what borrowing adds to the bill");
+assert(inline.includes('else if(a==="secured-borrow")borrowSecured(b.dataset.mode,Number(v));') && inline.includes('else if(a==="secured-repay")repaySecuredLoan();') && inline.includes('else if(a==="secured-topup")addSecuredCollateral(Number(v));') && inline.includes('else if(a==="settle-borrow")borrowForSettlement(v);'),
+  "The borrow, repay, add-collateral or settlement-borrow buttons are not wired to anything");
+assert(inline.includes("${custodyCoverSection()}${custodyLoanSection()}") && inline.includes("return settlementReserveOnly()+settlementBorrowCards();"),
+  "Borrowing against coins is no longer offered on the custody tab or in the settlement decision");
+assert(inline.includes('${typeof marketReserveNote==="function"?marketReserveNote(id,transferId):""}'),
+  "The Market no longer says what depositing from the reserve costs");
 assert(inline.includes("advanceAudit(silent);") && inline.includes("function advanceAudit(silent=false)"),
   "An audit under way is no longer advanced by the tick, so it would never finish");
 assert(inline.includes("const POSTURE_TIERS=[\"none\",\"basic\",\"strong\",\"audited\"];") && inline.includes("${custodyPostureSection()}${custodyAuditSection()}"),

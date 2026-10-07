@@ -10,7 +10,7 @@ Plan: five workstreams, built and reviewed one at a time. Nothing is pushed unti
 | 1 | The bill is a custody event (reach, fetch the reserve, rush, fee by weight) | pushed |
 | 2 | Places (devices and backups live somewhere; incidents hit places) | pushed |
 | 3 | People (key holders are staff; Security officer; rotation) | committed locally, awaiting review |
-| 4 | Counterparties (posture pricing, coin-theft cover, audit, BTC-secured loan) | not started |
+| 4 | Counterparties (posture pricing, coin-theft cover, audit, BTC-secured loan) | committed locally, awaiting review |
 | 5 | One Treasury tab | not started |
 
 ## When to take stock
@@ -34,8 +34,7 @@ the feature, a number that cannot be made to behave in simulation, or a decision
 | # | Point | From | When |
 |---|---|---|---|
 | 2 | Confirm on the Pixel 8a that the 3D floor no longer reverts (cause was throwaway WebGL probes; fixed and pushed) | 3D fix | the user, after trying it |
-| 3 | Market card "deposit from reserve" line (days and fee shown where you deposit) | WS1 | WS4, with the Market card changes |
-| 6 | Pool payouts still use a flat fee that ignores the date, while spending from cold is priced by the real rate. Making payouts date-aware changes early-game economics, so it needs tuning | WS1 | WS4, once loans and fees are being looked at together |
+| 6 | Pool payouts still use a flat fee that ignores the date, while spending from cold is priced by the real rate. Making payouts date-aware changes early-game economics, so it needs tuning | WS1 | still open: decided not to change early-game economics inside a custody workstream |
 | 9 | `settlementModal` is a base string patched by a chain of `.replace()` calls pinned by exact-text contracts; fragile. Consider one builder | WS1 | after the sprint |
 | 10 | Module budget: `simulation.js` 67.0K, `render.js` 66.6K, `actions.js` 66.3K, `mine-market.js` 66.8K of 70K | cross-cutting | every workstream |
 | 12 | Hot wallet stays single-key and instant; a hot-wallet policy is out of scope | plan | decide after WS4 |
@@ -45,6 +44,13 @@ the feature, a number that cannot be made to behave in simulation, or a decision
 | 22 | Insider numbers are first-pass: hostile half climbs 0.4% a day per day (cap 35%), patient half silent for 90 days then 0.02% a day per day (cap 10%), a security officer halves it, a sweep takes 60-100%. The user set the shape; the figures are mine | WS3 | stock-take 2 |
 | 23 | The security officer's other job (running an audit) arrives with WS4. Today the role only holds a key and halves insider risk | WS3 | WS4 |
 | 24 | A rotation cannot be rushed, and does not offer to start itself when somebody is dismissed | WS3 | only if play shows it is missed |
+
+| 25 | `netWorth()` subtracts the loan against coins but not the operating loan (`projectLoan`), which it has never subtracted. Borrowing the operating loan still inflates net worth by its principal | WS4 | its own small change; it moves scores and some tests |
+| 26 | A margin call can arrive and be liquidated the next day when the price falls fast (21-22 Jan 2022 and 8-9 May 2022 in the real series). Accurate, but harsh; the UI shows the loan to value but nothing warns before the call line | WS4 | stock-take 2: consider an early warning at 70% |
+| 27 | Loan terms (LTV 50%/40%, rates 0.7%/1.0%, call 80%/75%, sale 90%/85%, 5% penalty, 14 days) and cover terms (1.5% a year, pays 50/70/85%, 30-day wait) and audit terms ($4,000, 14 days) are first-pass | WS4 | stock-take 2 |
+| 28 | Only one loan against coins at a time, and no partial repayment. Both are simplifications | WS4 | only if play shows it is missed |
+| 29 | The lender-failure event applies to one real episode (Celsius, 12 June 2022). Voyager and BlockFi are not modelled separately | WS4 | probably leave |
+| 30 | Cover and the loan are only on the custody tab; the Finance tab still shows only migration cover and the operating loan | WS4 | WS5 puts them together |
 
 ## Closed in the fix-up pass (before pushing WS1 and WS2)
 
@@ -72,6 +78,10 @@ the feature, a number that cannot be made to behave in simulation, or a decision
   clock-stopped guard (`2146564`).
 - Fix-up pass: a latent bug found by the fuzzer, where miners lost in a facility move or seized by a receiver left a stale
   "manually stopped" count behind, so buying that machine later would bring them back stopped. Clamped in both places.
+- WS4: the operating loan's rate is one function; custody posture (none, basic, strong, audited) with named findings;
+  audits run by the security officer; coin cover priced and paid by posture, refusing neglect, paid inside
+  `reportCoinLoss`; two ways to borrow against coins (collaborative custody and a full-custody pledge) with margin calls,
+  liquidation, interest in the bill, both usable to pay a settlement; the 2022 lender failure; the Market's reserve note.
 - WS3: holders (owner, treasury manager, security officer, field technician), dismissal exposes every key a person ever
   knew, insider risk (a daily hazard that rises every day: half hostile and likely to act within a month, half patient and silent for a quarter; halved by a security officer; only if the exposed keys alone satisfy the wallet),
   rotation as a job (new key, real sweep fee, days, consolidates to one coin, descriptor re-recorded), busy technicians a
@@ -117,3 +127,9 @@ risk the right price for putting everything in one place?
   rolled every day and rises every day. Half of exposures are hostile (more likely than not inside a month), half patient
   (nothing for 90 days, then climbing). The player is shown the blended chance and never which kind it is. Having been
   paid once, the clock starts again from nothing.
+- Cover and loans price the same ladder. A better posture is cheaper and pays more in cover, and unlocks the lender that
+  charges least; a wallet a lender will not co-sign can still pledge from the hot wallet, at a price.
+- A pledge that is liquidated is reported as a seizure and a lender that fails as a counterparty loss, because that is what
+  each is: the first is a debt being collected, the second is coins held by a company.
+- The loan against coins is subtracted in net worth and the operating loan is not (open point 25). The first was needed to
+  stop borrowing making a player richer; the second is a pre-existing gap I did not widen into this workstream.

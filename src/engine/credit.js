@@ -15,7 +15,7 @@ function migrationInsuranceCost(){return state.insured?fleet().value*.0015:0}
 /* The monthly rate on the operating loan. */
 function projectLoanRate(){return hasStaff("treasurer")?.009:.012}
 /* What all outstanding borrowing adds to the next bill. */
-function financeInterestMonthly(){return (state.projectLoan||0)*projectLoanRate()}
+function financeInterestMonthly(){return (state.projectLoan||0)*projectLoanRate()+(typeof securedInterestMonthly==="function"?securedInterestMonthly():0)}
 
 /* ---- what a lender or an insurer sees ----------------------------------------------------- */
 

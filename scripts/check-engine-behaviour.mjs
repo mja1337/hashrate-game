@@ -45,7 +45,7 @@ const SITE = (overrides = "") => `
   // A rule that ends on an unpaid bill must not stop the clock for every rule after it.
   state.pendingSettlement=null;state.settlementSaleMode=false;
   // And a policy bought in one rule must not be cancelled, or paid out, by the next.
-  state.coinCover=null;
+  state.coinCover=null;state.securedLoan=null;state.projectLoan=0;
   /* And the engine's own random stream, which initialState() seeds from Math.random(). Without
      this every rule ran against a different world each time the suite was invoked, and any rule
      that ticks long enough became a coin flip: the racking rule failed once with three machines
@@ -2451,6 +2451,207 @@ rule("a save from before coin cover arrives with none, and nothing in its bill",
   const read = makeEval(loaded.sandbox);
   const r = JSON.parse(read(`JSON.stringify({active:coinCoverActive(),premium:coinCoverPremium(),insurance:insuranceMonthlyCost(),migration:migrationInsuranceCost()})`));
   assert(!r.active && r.premium === 0 && r.insurance === r.migration, "an old save arrived with cover it never bought");
+});
+
+/* A quorum wallet a lender will co-sign for: strong posture, descriptor copied, every backup on steel and apart. */
+const LENDABLE_WALLET = `${PLACED_WALLET("2of3", [{device:"site",backup:"bank",steel:true},{device:"home",backup:"bank",steel:true},{device:"home",backup:"trusted",steel:true}], "bank")}state.custody.configCopies=["trusted"];`;
+
+rule("a lender will only co-sign a wallet it can rely on, and a pledge needs only coins", () => {
+  const reason = (mode, setup, date = "2021-02-01") => json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("${date}");state.facility="warehouse";`)}
+    ${setup}
+    return securedBlockReason("${mode}");})()`);
+  assert(/quorum/i.test(reason("collaborative", PLACED_WALLET("single", [{device:"site",backup:"bank",steel:true}]))), "a single-signature wallet was offered a collaborative loan");
+  assert(/strong/i.test(reason("collaborative", `${CONFIGURED_WALLET("2of3")}`)), "a quorum wallet that records no places was offered a collaborative loan");
+  assert(reason("collaborative", LENDABLE_WALLET) === "", `a strong quorum was refused: "${reason("collaborative", LENDABLE_WALLET)}"`);
+  assert(/until/i.test(reason("pledge", ``, "2017-06-01")), "somebody lent against bitcoin in 2017");
+  assert(reason("pledge", ``) === "", "a pledge needed anything but coins in the hot wallet");
+  assert(/no coins in the hot/i.test(reason("pledge", `state.wallets.hot=0;`)), "a pledge was offered with nothing in the hot wallet");
+});
+
+rule("a collaborative loan lends more and charges less than a pledge, and pays out when the coins are in place", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${LENDABLE_WALLET}
+    const price=priceAt(state.time),cold0=state.wallets.cold,cash0=state.cash,total0=totalBtc(),worth0=netWorth();
+    const quote=securedQuote("collaborative",.5),pledgeQuote=securedQuote("pledge",.5);
+    borrowSecured("collaborative",.5);
+    const l=securedLoan(),during={cold:state.wallets.cold,cash:state.cash-cash0,pending:!!l.pending,principal:l.principal,pledgedBtc:securedPledgedBtc(),
+      total:totalBtc(),days:quote.days,controlled:controlled()};
+    let t=0;while(securedLoan().pending&&t<20){tick(true);t++}
+    const done=securedLoan();
+    return{price,cold0,quote,pledgeQuote,during,t,done:{principal:done.principal,pledged:done.pledged,cashGain:state.cash-cash0},rate:done.rate,
+      interest:securedInterestMonthly(),bill:financeInterestMonthly()};})()`);
+  assert(r.quote.principal > r.pledgeQuote.principal * 0, "no loan was quoted");
+  assert(r.quote.ltv > r.pledgeQuote.ltv && r.quote.rate < r.pledgeQuote.rate, `collaborative (${r.quote.ltv} at ${r.quote.rate}) is not better than a pledge (${r.pledgeQuote.ltv} at ${r.pledgeQuote.rate})`);
+  assert(r.during.pending && r.during.cash === 0 && r.during.days >= 2, `the money arrived before the coins did: ${JSON.stringify(r.during)}`);
+  assert(r.during.cold < r.cold0 - 19, "the coins did not leave cold storage when the loan was agreed");
+  assert(r.during.pledgedBtc > 19 && r.during.total > r.cold0 + 10 - 1, "coins on their way to the lender vanished from the totals");
+  assert(r.t >= 2 && r.done.principal > 0, "the loan never paid out");
+  // Less than a bank box's monthly fee may have gone out on the way, because the days crossed a month.
+  close(r.done.cashGain, r.done.principal, 20, "the payout is not the principal");
+  close(r.done.principal, r.quote.principal, 1e-6, "the loan paid a different sum than it quoted");
+  close(r.interest, r.done.principal * r.rate, 1e-9, "the monthly interest is not the principal at its rate");
+  assert(r.bill >= r.interest, "the interest on a loan against coins is missing from the month-end bill");
+});
+
+rule("a pledge is instant, costs more, and the coins stop being spendable though they still count", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    const price=priceAt(state.time),cash0=state.cash,hot0=state.wallets.hot,total0=totalBtc(),worth0=netWorth(),ctl0=controlled(),liquid0=marketLiquidBtc();
+    const quote=securedQuote("pledge",.5);
+    borrowSecured("pledge",.5);
+    const l=securedLoan();
+    return{price,quote,principal:l.principal,pending:!!l.pending,cash:state.cash-cash0,hotLeft:state.wallets.hot,hot0,
+      total:[total0,totalBtc()],worth:[worth0,netWorth()],controlled:[ctl0,controlled()],liquid:[liquid0,marketLiquidBtc()],pledged:securedPledgedBtc()};})()`);
+  assert(!r.pending && r.cash > 0, "a pledge was not paid out at once");
+  close(r.cash, r.quote.principal, 1e-6, "the pledge paid a different sum than it quoted");
+  close(r.principal / (r.quote.pledged * r.price), .4, 1e-9, "a pledge did not lend 40% of the coins' value");
+  assert(r.hotLeft < r.hot0 - 4, "the coins did not leave the hot wallet");
+  assert(r.controlled[1] < r.controlled[0] && r.liquid[1] < r.liquid[0], "pledged coins were still spendable");
+  close(r.total[1], r.total[0] - r.quote.fee, 1e-9, "pledged coins fell out of the total, or were counted twice");
+  assert(Math.abs(r.worth[1] - r.worth[0]) < r.quote.fee * r.price * 2 + 1, `borrowing changed net worth by ${r.worth[1] - r.worth[0]}; cash in and a debt of the same size should cancel`);
+});
+
+rule("interest on a loan against coins is in the forecast and in the bill that is actually queued", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-10");state.facility="warehouse";state.hardware={};`)}
+    borrowSecured("pledge",.5);
+    const l=securedLoan(),expected=l.principal*l.rate;
+    const forecast=settlementForecast().breakdown.finance;
+    state.cash=0;
+    for(let n=0;n<60&&!state.pendingSettlement;n++)tick(true);
+    return{expected,forecast,queued:state.pendingSettlement?state.pendingSettlement.loanInterest:null};})()`);
+  close(r.forecast, r.expected, 1e-6, "the settlement forecast does not include interest on the loan against coins");
+  assert(r.queued !== null, "no settlement was queued");
+  close(r.queued, r.expected, 1e-6, "the settlement queued at month end does not charge interest on the loan against coins");
+});
+
+rule("a falling price calls a loan, adding coins cures it, and ignoring it sells the collateral", () => {
+  const base = `${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}borrowSecured("pledge",.5);`;
+  const stress = (extra, days) => json(`(()=>{
+    ${base}
+    const l=securedLoan(),t0=state.time,price=priceAt(t0);
+    l.principal=l.pledged*price*.78;                       // the price fell, which is to say the debt is now 78% of the coins
+    advanceSecuredLoan(state.time,true);
+    const called={call:!!securedLoan().call,ltv:securedLtv()};
+    ${extra}
+    // The price stays where it was for the fortnight, so only the loan is being tested: scale the debt by how far the real series moved.
+    l.principal=l.principal*priceAt(t0+DAY*${days})/price;
+    const expectedSold=Math.min(l.pledged,l.principal*1.05/priceAt(t0+DAY*${days})),hot0=state.wallets.hot;
+    advanceSecuredLoan(t0+DAY*${days},true);
+    return{expectedSold,returned:state.wallets.hot-hot0,pledged:l.pledged,called,after:securedLoan()?{call:!!securedLoan().call,principal:securedLoan().principal,pledged:securedLoan().pledged}:null,
+      loss:pendingLoss()?{kind:pendingLoss().kind,cause:pendingLoss().cause,btc:pendingLoss().btc}:null,hot:state.wallets.hot};})()`);
+  const ignored = stress("", 13), expired = stress("", 15);
+  assert(ignored.called.call && ignored.called.ltv > .75, "a loan at 78% was not called");
+  assert(ignored.after && ignored.after.call && !ignored.loss, "a loan was sold before its fourteen days were up");
+  assert(expired.after === null && expired.loss && expired.loss.kind === "seized" && expired.loss.cause === "margin", "an unanswered call did not sell the collateral");
+  close(expired.loss.btc, expired.expectedSold, 1e-9, "the lender sold a different amount than the debt and its penalty come to");
+  close(expired.returned, expired.pledged - expired.expectedSold, 1e-9, "what the lender did not need to sell was not returned");
+  const cured = stress("addSecuredCollateral(.5);", 13);
+  assert(cured.after && !cured.after.call && !cured.loss, `adding coins did not cure the call: ${JSON.stringify(cured.after)}`);
+  const crash = json(`(()=>{
+    ${base}
+    const l=securedLoan();l.principal=l.pledged*priceAt(state.time)*.9;
+    advanceSecuredLoan(state.time,true);
+    return{loan:securedLoan(),loss:pendingLoss()&&pendingLoss().cause};})()`);
+  assert(crash.loan === null && crash.loss === "margin", "a fall through the second line did not sell at once");
+});
+
+rule("repaying a loan returns the coins, to the hot wallet at once or to cold storage once the lender has co-signed", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    borrowSecured("pledge",.5);
+    const hot1=state.wallets.hot,l=securedLoan(),pledged=l.pledged,principal=l.principal;state.cash=principal+1000;
+    repaySecuredLoan();
+    const pledge={loan:securedLoan(),hotBack:state.wallets.hot-hot1,pledged,cash:state.cash};
+    ${LENDABLE_WALLET}
+    borrowSecured("collaborative",.5);
+    let t=0;while(securedLoan().pending&&t<20){tick(true);t++}
+    const cold1=state.wallets.cold,c=securedLoan(),cp=c.pledged;state.cash=c.principal+1000;
+    repaySecuredLoan();
+    const during={loan:securedLoan(),jobs:state.coldSpends.length,inFlight:coldInFlightBtc()};
+    t=0;while(state.coldSpends.length&&t<30){tick(true);t++}
+    return{pledge,collab:{during,coldBack:state.wallets.cold-cold1,cp,t}};})()`);
+  assert(r.pledge.loan === null && Math.abs(r.pledge.hotBack - r.pledge.pledged) < 1e-9, "repaying a pledge did not return every coin to the hot wallet");
+  assert(r.pledge.cash === 1000, `repaying cost ${r.pledge.cash} instead of the principal`);
+  assert(r.collab.during.loan === null && r.collab.during.jobs === 1 && r.collab.during.inFlight > 0, "repaying a collaborative loan did not start the coins coming back");
+  assert(r.collab.t >= 2 && r.collab.coldBack > r.collab.cp - 0.01 && r.collab.coldBack <= r.collab.cp, "the coins did not arrive back in cold storage, less the network fee");
+});
+
+rule("a lender failing takes a pledge and leaves the debt, and spares a quorum it held one key of", () => {
+  const pledge = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2022-06-12");state.facility="warehouse";`)}
+    borrowSecured("pledge",.5);
+    const l=securedLoan(),pledged=l.pledged,principal=l.principal,loan0=state.projectLoan,frozen0=state.wallets.frozen;
+    applyLenderFailure();
+    return{loan:securedLoan(),frozen:state.wallets.frozen-frozen0,debt:state.projectLoan-loan0,pledged,principal,loss:pendingLoss()&&pendingLoss().kind,
+      lostBtc:pendingLoss()&&pendingLoss().btc};})()`);
+  const collab = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2022-06-12");state.facility="warehouse";`)}
+    ${LENDABLE_WALLET}
+    borrowSecured("collaborative",.5);let t=0;while(securedLoan().pending&&t<20){tick(true);t++}
+    const before={pledged:securedLoan().pledged,loan:state.projectLoan};
+    applyLenderFailure();
+    return{loan:!!securedLoan(),pledged:securedLoan()?securedLoan().pledged:0,before,loss:!!pendingLoss(),projectLoan:state.projectLoan};})()`);
+  assert(pledge.loan === null && pledge.loss === "counterparty", "a pledge to a failed lender was not lost to a claim");
+  close(pledge.frozen, pledge.pledged * .7, 1e-9, "70% of a failed lender's pledge should be a frozen claim");
+  close(pledge.lostBtc, pledge.pledged * .3, 1e-9, "30% of a failed lender's pledge should be written off");
+  close(pledge.debt, pledge.principal, 1e-6, "the debt did not survive the collateral as ordinary borrowing");
+  assert(collab.loan && collab.pledged === collab.before.pledged && !collab.loss && collab.projectLoan === collab.before.loan, "a lender that held one key of three cost the borrower coins");
+  const hit = json(`(()=>EVENTS.filter(e=>e.fx==="lenders").map(e=>e.date))()`);
+  assert(hit.length === 1 && hit[0] === "2022-06-12", `the lender failure is not in the record on the right date: ${JSON.stringify(hit)}`);
+});
+
+rule("a bill can be paid by borrowing against coins: a pledge at once, a quorum through the grace month", () => {
+  const WAITING = `state.time=at("2021-02-10");state.facility="warehouse";state.hardware={s9:100};state.cash=0;state.speed=1;`;
+  const pledge = json(`(()=>{
+    ${CUSTODY_SITE(WAITING)}
+    for(let n=0;n<60&&!state.pendingSettlement;n++)tick(true);
+    const due=state.pendingSettlement.due,plan=settlementBorrowPlan("pledge");
+    borrowForSettlement("pledge");
+    return{pending:!!state.pendingSettlement,cash:state.cash,due,covers:plan.covers,loan:!!securedLoan()};})()`);
+  const collab = json(`(()=>{
+    ${CUSTODY_SITE(WAITING)}
+    ${LENDABLE_WALLET}
+    for(let n=0;n<60&&!state.pendingSettlement;n++)tick(true);
+    const plan=settlementBorrowPlan("collaborative");
+    borrowForSettlement("collaborative");
+    const after={pending:!!state.pendingSettlement,debt:state.debt,speed:state.speed,loan:!!securedLoan(),pend:!!(securedLoan()&&securedLoan().pending)};
+    let t=0;while(securedLoan()&&securedLoan().pending&&t<20){tick(true);t++}
+    return{covers:plan.covers,after,paidOut:securedLoan().principal,cash:state.cash,debt:state.debt};})()`);
+  assert(pledge.covers && !pledge.pending && pledge.cash >= 0 && pledge.loan, "borrowing against hot coins did not clear the bill that was waiting");
+  assert(collab.covers && !collab.after.pending && collab.after.debt > 0 && collab.after.speed > 0 && collab.after.pend, "a collaborative loan did not carry the bill and restart the clock while the coins went into place");
+  assert(collab.paidOut > 0 && collab.cash >= collab.debt, "the loan did not pay out enough to clear the arrears it carried");
+});
+
+rule("borrowing at the November 2021 peak and doing nothing ends in a margin call and a sale", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-11-10");state.facility="warehouse";state.hardware={};state.cash=1e7;`)}
+    borrowSecured("pledge",.5);
+    const l=securedLoan(),peak=priceAt(state.time),ltv0=securedLtv();
+    let called=null,sold=null,t=0;
+    while(t<400&&!sold){
+      tick(true);t++;
+      const now=securedLoan();
+      if(now&&now.call&&called===null)called=t;
+      if(!now)sold=t;
+    }
+    const loss=pendingLoss();
+    return{peak,ltv0,called,sold,loss:loss?{kind:loss.kind,cause:loss.cause}:null,date:new Date(state.time).toISOString().slice(0,10)};})()`);
+  close(r.ltv0, .4, 1e-9, "the pledge did not start at 40% of the coins' value");
+  assert(r.called !== null && r.sold !== null, `a loan taken at the top of the market was never called or sold by ${r.date}`);
+  assert(r.called < r.sold, "the lender sold before it called");
+  assert(r.loss && r.loss.kind === "seized" && r.loss.cause === "margin", `the collateral was not reported as sold on a margin call: ${JSON.stringify(r.loss)}`);
+});
+
+rule("a save from before loans against coins arrives with none", () => {
+  const save = JSON.parse(fs.readFileSync(new URL("./fixtures/save-pre-custody-sprint.json", import.meta.url), "utf8"));
+  const loaded = loadWithSave(save);
+  assert(loaded.ok, `the pre-sprint save could not be opened: ${loaded.message}`);
+  const read = makeEval(loaded.sandbox);
+  const r = JSON.parse(read(`JSON.stringify({loan:securedLoan(),principal:securedPrincipal(),pledged:securedPledgedBtc(),interest:securedInterestMonthly(),bill:financeInterestMonthly()==state.projectLoan*projectLoanRate()})`));
+  assert(r.loan === null && r.principal === 0 && r.pledged === 0 && r.interest === 0 && r.bill, "an old save arrived with a loan it never took");
 });
 
 rule("creditors can sell only the cold coins a wallet could actually sign for", () => {
