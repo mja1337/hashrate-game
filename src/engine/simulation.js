@@ -581,6 +581,7 @@ function tick(silent=false){
   advanceCustodyMoves(silent);
   advanceInsiderRisk(next);
   advanceRotation(silent);
+  advanceAudit(silent);
   advanceFleetLifecycle();
   const crossed=EVENTS.filter(e=>at(e.date)>prev&&at(e.date)<=next&&!state.seen.includes(e.id)).sort((a,b)=>at(a.date)-at(b.date));
   crossed.forEach(e=>{state.seen.push(e.id);applyEvent(e)});

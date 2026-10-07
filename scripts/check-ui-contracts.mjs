@@ -404,7 +404,7 @@ assert(inline.includes("${coldSpendCostLine()}") && inline.includes("network fee
   assert(/hashRoll\(state\.seed,"place",month,place\.id,kind\)/.test(code),
     "The monthly place incident is no longer a hash of the seed, the month, the place and the kind");
 }
-assert(inline.includes("${custodyDevicesCard()}${custodyPlacesCard()}${custodyShopCard()}"),
+assert(inline.includes("${custodyDevicesCard()}${custodyPlacesCard()}${custodyCounterpartiesCard()}${custodyShopCard()}"),
   "The custody tab no longer shows where things are kept");
 assert(inline.includes('else if(a==="custody-move")moveCustodyItem(b.dataset.kind,id,v);') && inline.includes('else if(a==="custody-restore-key")restoreCustodyKey(id,v);'),
   "The move and restore buttons on the places card are not wired to anything");
@@ -433,6 +433,12 @@ assert(!/hasStaff\("treasurer"\)\?\.009:\.012|hasStaff\("treasurer"\)\?"0\.9":"1
   "The operating loan's rate is written out again somewhere other than projectLoanRate()");
 assert(inline.includes("function financeInterestMonthly()") && inline.includes("const loanInterest=financeInterestMonthly()") && inline.includes("breakdown.finance=financeInterestMonthly();"),
   "The month-end bill and the settlement forecast no longer price borrowing from the same function");
+assert(inline.includes('else if(a==="custody-audit")commissionCustodyAudit();') && inline.includes('data-action="custody-audit"'),
+  "The audit button is not wired to anything, or has gone from the custody tab");
+assert(inline.includes("advanceAudit(silent);") && inline.includes("function advanceAudit(silent=false)"),
+  "An audit under way is no longer advanced by the tick, so it would never finish");
+assert(inline.includes("const POSTURE_TIERS=[\"none\",\"basic\",\"strong\",\"audited\"];") && inline.includes("${custodyPostureSection()}${custodyAuditSection()}"),
+  "The custody tab no longer shows the posture a lender or an insurer would see");
 assert(inline.includes("custodyOnDismiss(id,countBefore);") && inline.includes("const countBefore=state.staff.filter(x=>x===id).length;"),
   "Dismissing somebody no longer exposes the keys they knew");
 assert(inline.includes("advanceInsiderRisk(next);") && inline.includes("advanceRotation(silent);"),

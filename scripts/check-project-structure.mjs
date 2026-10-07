@@ -66,6 +66,7 @@ const expectedScripts = [
   "src/ui/enhance/treasury.js",
   "src/ui/enhance/places.js",
   "src/ui/enhance/people.js",
+  "src/ui/enhance/counterparties.js",
   "src/ui/enhance/operations.js",
   "src/ui/live.js",
   "src/ui/render.js",

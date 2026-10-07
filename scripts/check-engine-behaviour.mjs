@@ -2284,6 +2284,85 @@ rule("every part of the game that prices the operating loan agrees on its rate",
   close(r.withTreasurer.rate, .009, 1e-12, "a treasury manager no longer brings the rate to 0.9% a month");
 });
 
+rule("custody posture is a ladder, and every rung is blocked by a named finding", () => {
+  const tier = setup => json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${setup}
+    const p=custodyPosture();return{tier:p.tier,rank:p.rank,ids:p.findings.map(f=>f.id)};})()`);
+  const strongWallet = `${PLACED_WALLET("single", [{device:"site",backup:"bank",steel:true}])}`;
+  const none = tier(``);
+  const basic = tier(`${CONFIGURED_WALLET("single")}`);
+  const strong = tier(strongWallet);
+  const audited = tier(`${strongWallet}state.custody.auditUntil=state.time+DAY*100;`);
+  assert(none.tier === "none" && none.ids.includes("unsigned"), `no wallet was ${none.tier}, findings ${none.ids}`);
+  assert(basic.tier === "basic" && basic.ids.includes("unplaced"), `a wallet that records no places was ${basic.tier}, findings ${basic.ids}`);
+  assert(strong.tier === "strong" && strong.ids.length === 0, `a well-kept wallet was ${strong.tier}, findings ${strong.ids}`);
+  assert(audited.tier === "audited", `an audited wallet was ${audited.tier}`);
+  assert(none.rank < basic.rank && basic.rank < strong.rank && strong.rank < audited.rank, "the rungs are not in order");
+  // Each of these takes a strong wallet down a rung, and says why.
+  const drops = {
+    paper: `${PLACED_WALLET("single", [{device:"site",backup:"bank",steel:false}])}`,
+    fragile: `${PLACED_WALLET("single", [{device:"site",backup:"site",steel:true}])}`,
+    exposed: `${strongWallet}state.custody.keys[0].exposed={cause:"former-employee",role:"treasurer",at:state.time};`,
+    weak: `${strongWallet}state.custody.keys[0].weakEntropy=true;`,
+    signers: `${strongWallet}state.custody.devices[0].destroyed={cause:"fire"};`,
+  };
+  for (const [id, setup] of Object.entries(drops)) {
+    const t = tier(setup);
+    assert(t.tier === "basic" && t.ids.includes(id), `${id}: a wallet with this problem was ${t.tier}, findings ${t.ids}`);
+  }
+  // An audit certifies a moment. It does not survive the wallet getting worse.
+  const spoiled = tier(`${strongWallet}state.custody.auditUntil=state.time+DAY*100;state.custody.keys[0].weakEntropy=true;`);
+  assert(spoiled.tier === "basic", `a valid audit kept a wallet with a weak seed at ${spoiled.tier}`);
+});
+
+rule("an audit needs a security officer, cash and fourteen days, and reports truthfully", () => {
+  const run = (setup, staff = ["security"]) => json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${setup}
+    state.staff=${JSON.stringify(staff)};
+    const reason=auditBlockReason(),cash0=state.cash;
+    commissionCustodyAudit();
+    const during={job:!!custodyAuditJob(),cash:cash0-state.cash};
+    let t=0;while(custodyAuditJob()&&t<40){tick(true);t++}
+    const c=state.custody;
+    return{reason,during,t,until:c.auditUntil||0,now:state.time,last:c.lastAudit||null,tier:custodyPosture().tier};})()`);
+  const strong = `${PLACED_WALLET("single", [{device:"site",backup:"bank",steel:true}])}`;
+  assert(/security officer/i.test(run(strong, []).reason), "an audit started without a security officer");
+  assert(/costs/i.test(run(`${strong}state.cash=100;`).reason), "an audit started without the cash");
+  const ok = run(strong);
+  assert(ok.reason === "" && ok.during.job && ok.during.cash === 4000, `a valid audit was refused or did not cost $4,000: "${ok.reason}", ${JSON.stringify(ok.during)}`);
+  assert(ok.t >= 13 && ok.t <= 15, `an audit took ${ok.t} days; it should take fourteen`);
+  assert(ok.last && ok.last.passed && ok.until > ok.now + 300 * 86400000, "a well-kept wallet did not pass and earn a year's certificate");
+  assert(ok.tier === "audited", `a passed audit left the posture at ${ok.tier}`);
+  // The same audit of a wallet that is not well kept finds the problem and still costs the money.
+  const bad = run(`${CONFIGURED_WALLET("single")}`);
+  assert(bad.last && !bad.last.passed && bad.until === 0, "an audit of a wallet that records no places passed");
+  assert(bad.last.findings.some(f => /where the keys are kept/i.test(f)), `the audit did not say what was wrong: ${JSON.stringify(bad.last.findings)}`);
+  assert(bad.during.cash === 4000 && bad.tier === "basic", "a failed audit was free, or changed the posture");
+});
+
+rule("an audit certificate lapses after a year", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${PLACED_WALLET("single", [{device:"site",backup:"bank",steel:true}])}
+    state.custody.auditUntil=state.time+DAY*10;
+    const before=custodyPosture().tier;
+    state.time+=DAY*11;
+    return{before,after:custodyPosture().tier,valid:custodyAuditValid()};})()`);
+  assert(r.before === "audited" && r.after === "strong" && !r.valid, `a lapsed audit left the posture at ${r.before} then ${r.after}`);
+});
+
+rule("a save from before audits arrives with none, and a posture it can be read from", () => {
+  const save = JSON.parse(fs.readFileSync(new URL("./fixtures/save-pre-custody-sprint.json", import.meta.url), "utf8"));
+  const loaded = loadWithSave(save);
+  assert(loaded.ok, `the pre-sprint save could not be opened: ${loaded.message}`);
+  const read = makeEval(loaded.sandbox);
+  const r = JSON.parse(read(`JSON.stringify({tier:custodyPosture().tier,until:custodyAuditUntil(),job:custodyAuditJob(),reason:auditBlockReason()})`));
+  assert(r.tier === "basic" && r.until === 0 && r.job === null, `an old 2-of-3 with steel backups and no places was ${r.tier}`);
+  assert(/security officer/i.test(r.reason), "an old save could be audited without a security officer");
+});
+
 rule("creditors can sell only the cold coins a wallet could actually sign for", () => {
   const taken = wallet => json(`(()=>{
     ${CUSTODY_SITE(`state.time=at("2021-02-01");`)}

@@ -83,5 +83,5 @@ function custodyShopCard(){
 function enhanceKeys(){
   const grid=document.querySelector(".content .grid");if(!grid)return;
   if(grid.querySelector(".key-workbench"))return;
-  grid.insertAdjacentHTML("beforeend",`${custodyReadinessCard()}${custodyDevicesCard()}${custodyPlacesCard()}${custodyShopCard()}`);
+  grid.insertAdjacentHTML("beforeend",`${custodyReadinessCard()}${custodyDevicesCard()}${custodyPlacesCard()}${custodyCounterpartiesCard()}${custodyShopCard()}`);
 }
