@@ -25,6 +25,17 @@ for (const seed of SEEDS) {
        realism the fuzzer does not need: it is asking whether the engine stays consistent, not
        whether the run was winnable. */
     state.skills=SKILLS.map(k=>k.id);
+    /* A configured wallet from the start, with devices and backups in different places. Hardware
+       wallets do not exist before 2014, so a run starting in 2013 would otherwise reach the custody
+       and places machinery only if it happened to order a device late enough. */
+    setCustodyPolicy("2of3");state.custody.keys=[];state.custody.assigned=[];state.custody.devices=[];
+    for(let i=0;i<3;i++){const id="k"+(i+1);
+      state.custody.keys.push({id,label:"K"+(i+1),seed:"s"+(i+1),bornOn:state.time,deviceUid:"d"+(i+1),stateless:false,weakEntropy:false,
+        backup:{product:"steelplate",durability:i===1?"steel":"paper",at:state.time,place:["site","bank","home"][i]}});
+      state.custody.devices.push({uid:"d"+(i+1),product:"trezorone",supplier:"trezor",boughtAt:state.time,keyId:id,place:["site","site","home"][i]});
+      state.custody.assigned.push(id)}
+    state.custody.configBackedUp=true;state.custody.configPlace="site";state.custody.seq=6;
+    state.wallets.hot=20;state.wallets.cold=80;
     /* The engine keeps its OWN random stream — faults, events, weather, market noise — and
        initialState() seeds it from Math.random(). Seeding only the action chooser made a run
        half-reproducible: the same actions every time, a different world each time. A failing

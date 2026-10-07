@@ -384,7 +384,7 @@ function advanceOperationalRisks(next,silent=false){
   if(state.ops.outageUntil&&next>=state.ops.outageUntil){state.ops.outageUntil=0;log("Connectivity restored",`${region().name} upstream service resumed`,`operations`);showToast("Internet restored",`${connectivityPlan().name} service is back. Mining and primary-node connectivity can resume.`,"info","facilities")}
   if(state.ops.powerOutageUntil&&next>=state.ops.powerOutageUntil){state.ops.powerOutageUntil=0;log("Grid power restored",`${region().name} site energized`,`operations`);showToast("Grid restored",`Power is back at ${facility().name}. The fleet can resume hashing.`,"info","facilities")}
   const month=new Date(next).toISOString().slice(0,7);if(state.ops.riskMonth===month)return;state.ops.riskMonth=month;
-  advanceCustodyRisks(next);
+  advanceCustodyRisks(next,silent);
   advancePlaceRisks(next,silent);
   advanceHotWalletRisk();
   if(firmwarePatchDue()&&!firmwareHijacked()&&nextRand()<firmwareHijackRisk()){state.ops.hijackUntil=next+DAY*(10+Math.floor(nextRand()*21));log("ASIC fleet hijacked","35% of hash diverted");showToast("Firmware compromise","Unpatched ASIC firmware is pointing part of your hash rate to an attacker. Patch it now.","bad");}
@@ -453,7 +453,9 @@ function recordOperatorMonth(snapshot,solvent){
   state.operator.totalMonths++;if(solvent)state.operator.solventMonths++;if(snapshot.profitable)state.operator.profitableMonths++;if(snapshot.competitive)state.operator.competitiveMonths++;state.operator.lastRevenueUsd=snapshot.revenueUsd;state.operator.periodMined=0;state.operator.periodUptime=0;state.operator.periodDays=0;
 }
 function sellControlledBtc(amount){
-  let remaining=Math.max(0,amount),sold=0;for(const bucket of ["hot","cold"]){const take=Math.min(state.wallets[bucket],remaining);state.wallets[bucket]-=take;remaining-=take;sold+=take}return sold;
+  /* Creditors can take what they can move. Coins in a wallet that cannot sign are not theirs to sell any more than yours. */
+  const reachable=typeof coldSpendBlockReason==="function"&&coldSpendBlockReason(state,{settling:true})?["hot"]:["hot","cold"];
+  let remaining=Math.max(0,amount),sold=0;for(const bucket of reachable){const take=Math.min(state.wallets[bucket],remaining);state.wallets[bucket]-=take;remaining-=take;sold+=take}return sold;
 }
 function queueMonthlySettlement(due,month,loanInterest,silent=false){
   const snapshot=settlementSnapshot(due,month),resumeSpeed=state.speed||state.returnSpeed||0;

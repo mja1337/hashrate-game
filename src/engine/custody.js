@@ -379,7 +379,7 @@ function advanceEntropyDrain(next){
     remedy:"Generate a fresh key on a different signer and move everything that is left to it. Patching the device does nothing; only rotating the seed stops this.",
     tab:"custody"});
 }
-function advanceCustodyRisks(next){
+function advanceCustodyRisks(next,silent=false){
 const lossRisk=custodyLossRisk();
 if(lossRisk>0&&nextRand()<lossRisk){
   const held=(state.wallets.hot||0)+(state.wallets.cold||0);
@@ -390,7 +390,7 @@ if(lossRisk>0&&nextRand()<lossRisk){
     state.cash=Math.max(0,state.cash-effort);
     state.custody.lastScare=state.time;
     log("Signer lost, wallet recovered",`Restored from backups · -${fmtUsd(effort)} in recovery effort`,"custody");
-    showToast("A signer was lost — and it did not matter",
+    if(!silent)showToast("A signer was lost — and it did not matter",
       `The device is gone. ${set.policy.threshold>1?"Two of three keys and the wallet configuration":"The seed backup"} rebuilt the wallet for ${fmtUsd(effort)}.`,"notice","custody");
   } else {
     const lost=held*(.35+nextRand()*.4);
@@ -412,7 +412,7 @@ if(custodyPrivacyExposed()&&((state.wallets.hot||0)+(state.wallets.cold||0))>0&&
   if(set.ready&&set.policy.threshold>1){
     // A convincing fake extracts one secret. In a quorum wallet one secret spends nothing.
     log("Targeted phishing attempt",`Impersonated ${CUSTODY_SUPPLIERS[custodyExposedPurchases()[0]?.leak.supplier]?.name||"the vendor"} · one key is not enough to spend`,"custody");
-    showToast("Someone tried the leaked list on you",
+    if(!silent)showToast("Someone tried the leaked list on you",
       "A convincing fake asked you to re-enter a seed. Even if it had worked, one key of three spends nothing.","notice","custody");
   } else if(nextRand()<.34){
     const held=(state.wallets.hot||0)+(state.wallets.cold||0);

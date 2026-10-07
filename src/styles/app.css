@@ -382,18 +382,22 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--orange);outline-off
 /* Opening chapter: optional configuration stays out of the first action. */
 .intro-customise{margin:22px 0;border-top:1px solid var(--line);padding-top:16px}.intro-customise summary{cursor:pointer;font-weight:600;padding:8px 0}.intro-customise .starting-capital{margin-top:16px}
 
-/* THE PHONE'S HEADER STAYS WHERE IT IS.
+/* THE HEADER STAYS WHERE IT IS.
 
    Below 900px the topbar was made position:relative so the XP bar could anchor to it, which also
-   stopped it sticking. It scrolled away, and the open menu — sticky at a hard-coded 58px —
-   stayed hung 58px down the screen with page content showing above it, then drifted as the
-   topbar's real height changed. Under 800px the tab row is hidden, so the topbar is the only
-   thing above the content: it sticks again (sticky is positioned, so the XP bar still anchors
-   to it), and everything that sticks beneath it takes its offset from the topbar's MEASURED
-   height rather than a number written down once. */
+   stopped it sticking. It scrolled away, and whatever was sticky beneath it kept an offset written
+   down once: the open phone menu hung 58px down the screen with page content showing above it, and
+   between 801 and 900px the tab row and the Mine tab's section bar did the same. The topbar sticks
+   again (sticky is positioned, so the XP bar still anchors to it), and everything beneath it takes
+   its offset from the topbar's MEASURED height. Under 800px the tab row is hidden, so the Mine
+   section bar sits directly beneath the topbar. */
 :root{--topbar-live-h:58px}
-@media(max-width:800px){
+@media(max-width:900px){
   .topbar{position:sticky;top:0}
+  .tabs{top:var(--topbar-live-h)}
+  .mine-sections{top:calc(var(--topbar-live-h) + var(--tabs-h,41px))}
+}
+@media(max-width:800px){
   .mobile-nav.open{top:var(--topbar-live-h)}
   .mine-sections{top:var(--topbar-live-h)}
 }

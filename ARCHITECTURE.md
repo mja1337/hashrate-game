@@ -21,6 +21,13 @@
 - `src/engine/thermal.js` — cooling capacity, active heat load, room temperature and thermal stress.
 - `src/engine/nodes.js` — node power, synchronization, independent verification and Lightning capability.
 - `src/engine/simulation.js` — state, migrations, economics, ticking and live refresh.
+- `src/engine/losses.js` — coins that leave and do not come back: the loss queue and its modal, venue failures, the hot-wallet incident roll.
+- `src/engine/facilities.js` — changing site in either direction: the shared risk model, the timed job and the commissioning that ends it.
+- `src/engine/fleet-ops.js` — the fleet's physical life: deliveries, racking, retirement, staged machines and what is true of the fleet while that work is half done.
+- `src/engine/connectivity.js` — how the site reaches the network, what that costs and how often it stops; satellite is priced differently from fixed lines.
+- `src/engine/immersion.js` — dielectric tanks, converting air-cooled miners and what submerging a machine changes.
+- `src/engine/recap.js` — cross-run career persistence and the end-of-run narrative.
+- `src/engine/render-queue.js` — when the clock's effects reach the screen. Loaded before `simulation.js` on purpose, since its flags are top-level `let` bindings.
 - `src/engine/settlement.js` — the month boundary: the bill, the forecast, and the rescues when cash falls short. Nothing is sold on the player's behalf.
 - `src/engine/custody.js` — devices, keys, wallet policy, backups and the monthly custody risk rolls. Loads after `simulation.js`, so anything its migration needs lives in `src/data/custody.js`.
 - `src/engine/payouts.js` — pool payout destinations and thresholds; `creditPayout` is the single point where coins arrive.

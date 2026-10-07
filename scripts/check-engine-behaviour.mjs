@@ -2013,6 +2013,38 @@ rule("a save from before places still opens, and its keys price as they did", ()
   }
 });
 
+rule("machines lost in a move or seized by a receiver cannot leave a stale stopped count behind", () => {
+  const r = json(`(()=>{
+    ${SITE(`state.time=at("2021-06-01");state.facility="warehouse";state.region="texas";state.hardware={s19:50,s9:40};
+      state.poweredDownHardware={s19:50,s9:40};state.insured=false;`)}
+    state.facilityUpgradeJob={id:"campus",due:state.time,risk:2,down:false};
+    // Force the "miners damaged" branch of the arrival incident.
+    const draws=[0,.5,.5,.5,.5,.9];let i=0;const real=nextRand;nextRand=()=>draws[Math.min(i++,draws.length-1)];
+    advanceFacilityMove();nextRand=real;
+    // Every machine was stopped, so losing any of them would leave the stopped count above the owned count.
+    const afterMove={damaged:state.hardware.s19<50||state.hardware.s9<40,
+      worst:Math.max(state.poweredDownHardware.s19-state.hardware.s19,state.poweredDownHardware.s9-state.hardware.s9)};
+    state.hardware={s19:50,s9:40};state.poweredDownHardware={s19:48,s9:0};
+    state.pendingSettlement={due:1e6,month:"2021-06",loanInterest:0,snapshot:{},resumeSpeed:1};
+    state.operator.restructures=0;enterReceivership();
+    return{afterMove,afterReceiver:{owned:state.hardware.s19,stopped:state.poweredDownHardware.s19}};})()`);
+  assert(r.afterMove.damaged, "the move did not damage any miners, so this rule proves nothing about it");
+  assert(r.afterMove.worst <= 0, `after the move ${r.afterMove.worst} more machines were stopped than were owned`);
+  assert(r.afterReceiver.stopped <= r.afterReceiver.owned, `after receivership ${r.afterReceiver.stopped} were stopped of ${r.afterReceiver.owned} owned: buying more would bring them back stopped`);
+});
+
+rule("creditors can sell only the cold coins a wallet could actually sign for", () => {
+  const taken = wallet => json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");`)}
+    ${wallet}
+    state.wallets.hot=10;state.wallets.cold=40;
+    const sold=sellControlledBtc(1000);
+    return{sold,hot:state.wallets.hot,cold:state.wallets.cold};})()`);
+  const unsigned = taken(``), signing = taken(CONFIGURED_WALLET("single"));
+  assert(unsigned.cold === 40 && unsigned.sold === 10, `a receiver sold ${unsigned.sold} BTC including cold coins no wallet could sign for`);
+  assert(signing.cold === 0 && signing.sold === 50, `a receiver could not sell cold coins the operator could sign for: sold ${signing.sold}`);
+});
+
 rule("a quorum you cannot assemble is permanent, not slow", () => {
   const r = json(`(()=>{
     ${CUSTODY_SITE(`state.time=at("2021-02-01");`)}

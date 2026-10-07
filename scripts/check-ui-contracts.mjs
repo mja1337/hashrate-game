@@ -388,6 +388,8 @@ assert(!/baseFee=nodeOnline\(\)&&state\.nodeMode/.test(inline),
   "transfer() has its own copy of the flat network fee again; it has to ask flatNetworkFee()");
 assert(inline.includes('utxoAdd("cold",s)') && inline.includes('utxoConsume("cold",fraction)'),
   "Payouts and cold spends no longer count the coins that have to be gathered");
+assert(inline.includes("function advanceCustodyRisks(next,silent=false)") && inline.includes("advanceCustodyRisks(next,silent);") && inline.includes('if(!silent)showToast("A signer was lost') && inline.includes('if(!silent)showToast("Someone tried the leaked list on you"'),
+  "The monthly custody scares replay as a burst of toasts after a catch-up");
 assert(inline.includes("function advanceColdSpends(silent=false)") && inline.includes("advanceColdSpends(silent);") && inline.includes("if(!silent)showToast(\"Coins out of cold storage\""),
   "A cold spend landing during a catch-up replays as a burst of toasts");
 assert(inline.includes("${coldSpendCostLine()}") && inline.includes("network fee${j.rush?"),
@@ -615,8 +617,8 @@ assert(/\.mp-mosaic\{height:200px;/.test(css), "The mempool mosaic has no fixed 
 // On a phone the topbar has to stay put and the menu has to sit exactly beneath it. It was made
 // position:relative below 900px for the XP bar's sake, scrolled away, and left the open menu hung
 // 58px down the screen.
-assert(/@media\(max-width:800px\)\{\s*\.topbar\{position:sticky;top:0\}/.test(css),
-  "The phone topbar is not sticky, so it scrolls away and the menu is left floating below nothing");
+assert(/@media\(max-width:900px\)\{\s*\.topbar\{position:sticky;top:0\}\s*\.tabs\{top:var\(--topbar-live-h\)\}/.test(css),
+  "The topbar is not sticky up to 900px, so it scrolls away and what sticks beneath it is left floating, or the tab row ignores its measured height");
 assert(/\.mobile-nav\.open\{top:var\(--topbar-live-h\)\}/.test(css) && /\.mine-sections\{top:var\(--topbar-live-h\)\}/.test(css),
   "What sticks beneath the phone topbar is not offset by its measured height");
 assert(inline.includes('setProperty("--topbar-live-h",bar+"px")') && inline.includes('window.addEventListener("resize",()=>measureTabRow())'),

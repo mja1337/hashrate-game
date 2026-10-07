@@ -7,9 +7,9 @@ Plan: five workstreams, built and reviewed one at a time. Nothing is pushed unti
 
 | # | Workstream | State |
 |---|---|---|
-| 1 | The bill is a custody event (reach, fetch the reserve, rush, fee by weight) | committed locally `2146564` |
-| 2 | Places (devices and backups live somewhere; incidents hit places) | committed locally, awaiting stock-take 1 |
-| 3 | People (key holders are staff; Security Officer; rotation) | not started |
+| 1 | The bill is a custody event (reach, fetch the reserve, rush, fee by weight) | pushed |
+| 2 | Places (devices and backups live somewhere; incidents hit places) | pushed |
+| 3 | People (key holders are staff; Security Officer; rotation) | in progress |
 | 4 | Counterparties (posture pricing, coin-theft cover, audit, BTC-secured loan) | not started |
 | 5 | One Treasury tab | not started |
 
@@ -33,26 +33,31 @@ the feature, a number that cannot be made to behave in simulation, or a decision
 
 | # | Point | From | When |
 |---|---|---|---|
-| 1 | Push the unpushed commits (`baefc78` mempool + phone header, `2146564` WS1) so the phone gets them | WS1 | when the user says |
-| 2 | Confirm on the Pixel 8a that the 3D floor no longer reverts (cause was throwaway WebGL probes; fixed and pushed in `b6a45c6`) | 3D fix | after the user tries it |
+| 2 | Confirm on the Pixel 8a that the 3D floor no longer reverts (cause was throwaway WebGL probes; fixed and pushed) | 3D fix | the user, after trying it |
 | 3 | Market card "deposit from reserve" line (days and fee shown where you deposit) | WS1 | WS4, with the Market card changes |
-| 4 | Tune Rush (3x fee) and the 5% buffer on how much BTC the settlement card asks for | WS1 | stock-take 1 |
-| 5 | `sellControlledBtc` (receivership) drains cold storage with no signing; decide if a forced seizure should respect distance | WS1 | WS2 or WS3 |
-| 6 | Pool payouts still use a flat fee that ignores the date; the payout-threshold comment claims fees move with the year | WS1 | WS4, or its own small change |
-| 7 | Two old custody toasts are still not silent-tick aware (`advanceCustodyRisks`, the entropy drain). Place incidents and journeys are | WS1 | housekeeping |
-| 8 | `ARCHITECTURE.md` still omits `losses`, `facilities`, `fleet-ops`, `connectivity`, `recap`, `render-queue`, `immersion` | WS1 | housekeeping, end of sprint |
+| 6 | Pool payouts still use a flat fee that ignores the date, while spending from cold is priced by the real rate. Making payouts date-aware changes early-game economics, so it needs tuning | WS1 | WS4, once loans and fees are being looked at together |
 | 9 | `settlementModal` is a base string patched by a chain of `.replace()` calls pinned by exact-text contracts; fragile. Consider one builder | WS1 | after the sprint |
-| 10 | Module budget: `simulation.js` 66.8K, `render.js` 66.6K, `actions.js` 66.2K, `mine-market.js` 66.8K of 70K | cross-cutting | every workstream |
-| 11 | Between 801 and 900px the topbar still scrolls away (the tab row sticks on its own there) | phone header | low priority |
+| 10 | Module budget: `simulation.js` 67.0K, `render.js` 66.6K, `actions.js` 66.3K, `mine-market.js` 66.8K of 70K | cross-cutting | every workstream |
 | 12 | Hot wallet stays single-key and instant; a hot-wallet policy is out of scope | plan | decide after WS4 |
 | 13 | Bank-box seizure after regional bans (uses the existing `fx` event hook) | plan | follow-up |
-| 14 | **Tune the place numbers** (see below): incident rates, access days, the 1.8x correlation penalty, the 35-75% strand share | WS2 | stock-take 1 |
-| 15 | Nothing can happen to something on a journey except at a border; no theft in transit | WS2 | only if it is missing in play |
-| 16 | A stolen signer on its own does nothing (PIN-protected). A thief who also knew the PIN would be a different incident | WS2 | probably leave |
-| 17 | New devices and backups always start at the mine; there is no "ship it to" choice at purchase | WS2 | stock-take 1: does the extra trip annoy? |
-| 18 | `key.exposed` (a stolen seed backup) is only cleared by unassigning that key; WS3 adds a real rotation that charges the sweep fee | WS2 | WS3 |
-| 19 | The fuzzer only reaches the place machinery once custody hardware exists (2014+), and only if a run happens to order it | WS2 | consider seeding the fuzzer with a configured wallet |
-| 20 | `custodyOnRelocation` toasts are not silent-aware (arrival is not passed `silent`) | WS2 | low |
+| 18 | `key.exposed` (a stolen seed backup) is only cleared by unassigning that key; WS3 adds a real rotation that charges the sweep fee | WS2 | **WS3, next** |
+
+## Closed in the fix-up pass (before pushing WS1 and WS2)
+
+| # | Point | Resolution |
+|---|---|---|
+| 1 | Push the unpushed commits | pushed |
+| 4 | Rush (3x fee) and the 5% buffer on the reserve | kept. The buffer covers the exchange fee and book impact; 3x is a premium, not a calibration. Revisit only if play shows it is never worth taking |
+| 5 | A receiver sold cold coins no wallet could sign for | **fixed**: a forced sale takes cold only if the wallet could sign. New rule, mutation-tested |
+| 7 | Old custody toasts not silent-tick aware | **fixed**: the signer-lost and phishing notices respect a catch-up. New contract |
+| 8 | `ARCHITECTURE.md` omitted seven modules | **fixed**: losses, facilities, fleet-ops, connectivity, immersion, recap, render-queue |
+| 11 | Topbar scrolled away between 801 and 900px | **fixed**: sticky up to 900px, with the tab row and the Mine section bar offset by the measured height. Checked at 850px |
+| 14 | Place numbers (incident rates, access days, 1.8x, 35-75%) | kept as first-pass. No evidence yet that they are wrong; revisit with play evidence at stock-take 2 |
+| 15 | No theft in transit | decision: not modelled; a journey is a delay, not a risk. Add only if it is missed in play |
+| 16 | A stolen signer alone does nothing | decision: correct, devices are PIN-protected |
+| 17 | New things always start at the mine | decision: kept. The extra trip is the lesson |
+| 19 | Fuzzer reached the place machinery only by luck | **fixed**: every run starts with a configured 2-of-3 across three places and a wallet with coins |
+| 20 | Relocation toast not silent-aware | won't fix: one rare toast, and the case that matters raises a loss modal |
 
 ## Done
 
@@ -61,6 +66,8 @@ the feature, a number that cannot be made to behave in simulation, or a decision
 - Mempool card fixed height; phone header sticky (`baefc78`).
 - WS1: reach, fetch the reserve, rush, fee by weight and coin count, cold-spend review, in-flight coins counted,
   clock-stopped guard (`2146564`).
+- Fix-up pass: a latent bug found by the fuzzer, where miners lost in a facility move or seized by a receiver left a stale
+  "manually stopped" count behind, so buying that machine later would bring them back stopped. Clamped in both places.
 - WS2: places (the mine, home, bank box, trusted person), fire/flood/break-in incidents by hash roll, signing days from
   where the keys are, journeys, descriptor copies, restore-from-backup, borders on fleet relocation, the places card.
 
