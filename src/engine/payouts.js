@@ -66,10 +66,11 @@ function poolAccount(s=state){
    because it is the same transaction — a pool sending to your address is an on-chain payment,
    and a payout to a multisig address costs more to spend from later for the same reason a
    multisig transfer costs more: there is more of it. */
-function payoutNetworkFee(s=state){
+function flatNetworkFee(s=state){
   const base=nodeOnline()&&s.nodeMode==="relay"?0.000035:nodeOnline()&&s.nodeMode!=="pruned"?0.00005:0.0002;
   return base*(custodySetup(s).policy.threshold>1?1.35:1);
 }
+function payoutNetworkFee(s=state){return flatNetworkFee(s)}
 
 /* WHERE INCOME MAY LAND. Each of these is a real answer a real miner gives, and each is wrong
    in a different way. */
@@ -129,8 +130,8 @@ function creditPayout(id,btc,s=state){
   const dest=payoutDestination(id,s);
   if(!dest)return 0;
   if(dest.kind==="venue")s.wallets[dest.id]=(s.wallets[dest.id]||0)+btc;
-  else if(dest.id==="cold")s.wallets.cold+=btc;
-  else s.wallets.hot+=btc;
+  else if(dest.id==="cold"){s.wallets.cold+=btc;utxoAdd("cold",s)}
+  else{s.wallets.hot+=btc;utxoAdd("hot",s)}
   return btc;
 }
 

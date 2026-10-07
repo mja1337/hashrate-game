@@ -517,13 +517,14 @@ function giftCardHindsight(t=state.time){
   if(spent<=0)return null;
   return {btc:spent,thenUsd:state.giftCards.spentUsd,nowUsd:spent*priceAt(t),cards:state.giftCards.cards};
 }
-function transfer(from,to,fraction){
+function transfer(from,to,fraction,opts={}){
   if(venueFrozen(from))return showToast("Withdrawals frozen",`${walletName(from)} has paused withdrawals until ${dateFmt(state.ops.venueFreezes[from])}.`);
   fraction=clamp(Number(fraction)||0,0.01,1);const gross=state.wallets[from]*fraction;if(gross<=0)return;
-  const baseFee=nodeOnline()&&state.nodeMode==="relay"?0.000035:nodeOnline()&&state.nodeMode!=="pruned"?0.00005:0.0002,fee=baseFee*(custodySetup().policy.threshold>1?1.35:1);if(gross<=fee)return showToast("Transfer too small",`The selected ${formatPercent(fraction*100)}% is not enough to cover the ${fmtBtc(fee)} network fee.`);const btc=gross-fee;
+  const fee=transferNetworkFee(from,fraction,opts);if(gross<=fee)return showToast("Transfer too small",`The selected ${formatPercent(fraction*100)}% is not enough to cover the ${fmtBtc(fee)} network fee.`);const btc=gross-fee;
   /* Everything except cold storage moves the moment it is asked to. Cold does not, because
      that is what cold storage IS — see signing.js. */
-  if(from==="cold")return beginColdSpend(to,gross,fee);
+  if(from==="cold")return beginColdSpend(to,gross,fee,{fraction,rush:opts.rush});
+  utxoMoved(from,to,fraction);
   state.wallets[from]-=gross;state.wallets[to]+=btc;log(`Moved BTC: ${walletName(from)} → ${walletName(to)}`,`${fmtBtc(gross)} sent · -${fmtBtc(fee)} fee`);showToast("BTC transfer complete",`${fmtBtc(btc)} reached ${walletName(to)} after a ${fmtBtc(fee)} network fee.`,"info","custody");save();render();
 }
 /* A bulk parts order is its own action rather than a quantity on the ordinary one, so that
@@ -533,6 +534,7 @@ function transfer(from,to,fraction){
 const CONFIRMABLE_ACTIONS=new Set(["buy-btc","sell-btc","buy-hw","buy-hw-btc","sell-hw","sell-hw-btc","buy-strategy","sell-strategy","buy-node","buy-backup-node","order-parts-bulk"]);
 function transactionPreview(button){
   const action=button.dataset.action,id=button.dataset.id||null,base={action,id,from:button.dataset.from||null,to:button.dataset.to||null,resumeSpeed:state.speed,quoteTime:state.time};
+  if(action==="transfer")return coldTransferPreview(button,base);
   if(action==="order-parts-bulk"){
     const part=sparePart(id);if(!part)return null;
     const qty=Math.max(1,Math.floor(Number(button.dataset.value)||1));
@@ -586,6 +588,7 @@ function restoreTransactionSpeed(transaction){state.speed=transaction?.resumeSpe
 function cancelTransactionConfirmation(){const transaction=pendingTransaction;pendingTransaction=null;restoreTransactionSpeed(transaction);render()}
 function confirmTransaction(){
   const transaction=pendingTransaction;if(!transaction)return;pendingTransaction=null;restoreTransactionSpeed(transaction);
+  if(transaction.action==="transfer"){transfer(transaction.from,transaction.to,transaction.fraction,{rush:transaction.rush});return}
   if(transaction.action==="order-parts-bulk")orderParts(transaction.id,transaction.qty);else if(transaction.action==="buy-btc")buyBtc(transaction.id,transaction.fraction);else if(transaction.action==="sell-btc")sellBtc(transaction.id,transaction.fraction);else if(transaction.action==="buy-hw")buyHardware(transaction.id,transaction.requested);else if(transaction.action==="buy-hw-btc")buyHardwareBtc(transaction.id,transaction.requested);else if(transaction.action==="sell-hw")sellHardware(transaction.id,transaction.requested);else if(transaction.action==="sell-hw-btc")sellHardwareBtc(transaction.id,transaction.requested);else if(transaction.action==="buy-strategy")buyStrategy(transaction.id,transaction.fraction);else if(transaction.action==="sell-strategy")sellStrategy(transaction.id,transaction.fraction);else if(transaction.action==="buy-node")buyNode(transaction.requested);else if(transaction.action==="buy-backup-node")buyBackupNode();
   if(document.querySelector('[data-action="confirm-transaction"]'))render();
 }

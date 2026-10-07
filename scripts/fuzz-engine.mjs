@@ -71,6 +71,9 @@ for (const seed of SEEDS) {
       ()=>toggleInsurance(),
       ()=>orderCustodyProduct(pick(CUSTODY_PRODUCTS.map(c=>c.id)),1+Math.floor(rnd()*2)),
       ()=>{const k=(state.custody&&state.custody.keys)||[];if(k.length)assignCustodyKey(pick(k).id)},
+      /* Spending from the reserve: the coin count, the fee and the in-flight accounting all move here. */
+      ()=>transfer(pick(["hot","cold"]),pick(["hot","cold","exchange"]),.05+rnd()*.95),
+      ()=>{if(state.pendingSettlement)fetchReserve(rnd()<.5)},
     ];
     /* Over capacity is not automatically wrong, and the first version of this check did not
        know that. Overdrive deliberately pushes draw past the cap — the operator's decision to
@@ -110,6 +113,9 @@ for (const seed of SEEDS) {
             if(!(state.hardware[k]>=0)&&!negHw)negHw=k+"="+state.hardware[k];
           for(const k of Object.keys(state.wallets||{}))
             if(!(state.wallets[k]>=-1e-9)&&!negWallet)negWallet=k+"="+state.wallets[k];
+          // A count of coins is a whole number that cannot go below zero, whatever was spent or received.
+          for(const k of ["hot","cold"]){const u=state.utxo&&state.utxo[k];
+            if(u!==undefined&&!(Number.isInteger(u)&&u>=0)&&!negWallet)negWallet="coins."+k+"="+u}
           /* Machines deliberately stopped are a subset of machines owned, always. Breaking the
              clamp in setHardwarePower drives this negative, and a negative paused count does
              not read as an error anywhere — it inflates the active count instead, so the site

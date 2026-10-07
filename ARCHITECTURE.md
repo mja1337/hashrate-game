@@ -5,7 +5,7 @@
 ## Ownership
 
 - `historical-data.js` — generated, immutable runtime history. Rebuild it with `scripts/build-historical-data.mjs`; do not hand-edit it. Price, hash, fees, transactions and height come from Coin Metrics; difficulty comes from mempool.space as one exact value per 2016-block retarget. Pass `--difficulty-only` to rewrite that series alone, or `--recompress` to re-encode what is already on disk without touching the network. Regular series are stored as a start date plus a cadence rather than a date per point; the file decodes itself, so `window.HISTORICAL_DATA` exposes the same pair arrays it always has.
-- `src/config/timeline.js` — protocol dates, opening constants, treasury policies and scoring eras.
+- `src/config/timeline.js` — protocol dates, opening constants and scoring eras.
 - `src/data/network.js` — fallback price/hash/transaction series, pools and the recorded-data bindings.
 - `src/data/hardware.js` — miner specifications, spare parts, and which part each machine takes (`fanTierFor`, `hashboardTierFor`). Those two live here rather than in `maintenance.js` because `simulation.js` calls them in a top-level save migration, and `maintenance.js` is parsed after it.
 - `src/data/operations.js` — facilities, regions, connectivity, energy contracts and staff.
@@ -20,7 +20,13 @@
 - `src/engine/history.js` — interpolation and historical/protocol lookup functions.
 - `src/engine/thermal.js` — cooling capacity, active heat load, room temperature and thermal stress.
 - `src/engine/nodes.js` — node power, synchronization, independent verification and Lightning capability.
-- `src/engine/simulation.js` — state, migrations, economics, settlement, ticking and live refresh.
+- `src/engine/simulation.js` — state, migrations, economics, ticking and live refresh.
+- `src/engine/settlement.js` — the month boundary: the bill, the forecast, and the rescues when cash falls short. Nothing is sold on the player's behalf.
+- `src/engine/custody.js` — devices, keys, wallet policy, backups and the monthly custody risk rolls. Loads after `simulation.js`, so anything its migration needs lives in `src/data/custody.js`.
+- `src/engine/payouts.js` — pool payout destinations and thresholds; `creditPayout` is the single point where coins arrive.
+- `src/engine/signing.js` — spending from cold storage as a ceremony that takes days.
+- `src/engine/treasury.js` — how far away the money is and what it costs to bring it: the count of coins to gather, the fee by weight at that day's rate, reach, and fetching the reserve for a bill. Extends `signing.js`.
+- `src/ui/enhance/treasury.js` — the settlement reserve card, the cold-spend review and the cost line, as sentences over the engine's numbers.
 - `src/engine/actions.js` — player mutations, transactions, imports and exports.
 - `src/ui/presentation.js` — formatting, charts and reusable visual helpers.
 - `src/ui/tabs/` — base tab markup split into Dashboard, Mine, Ledger, Market, operations and Method ownership.
@@ -44,3 +50,5 @@ node scripts/check-historical-data.mjs
 ```
 
 The checks enforce dependency order, external assets, module size, unique Mine purchase quantities, historical-series integrity and JavaScript syntax.
+
+`scripts/fixtures/` holds saves written by earlier versions of the engine. A rule loads one to prove an old save still opens, so a fixture is never regenerated: it stays as the shape it was written in.

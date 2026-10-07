@@ -7,6 +7,7 @@
    only if the game's economics actually changed. Prefer adding rules here over adding another
    source match whenever a check is about what the simulation does rather than how it reads. */
 
+import fs from "node:fs";
 import { loadEngine, makeEval } from "./engine-harness.mjs";
 
 /* Loading a save runs the migration in simulation.js, which is parsed before maintenance.js.
@@ -1621,6 +1622,155 @@ rule("moving coins between wallets conserves them, and leaving cold takes signin
   assert(r.ticks > 0 && r.ticks <= r.inflight.days + 1, `the signing took ${r.ticks} ticks against an estimate of ${r.inflight.days}`);
   assert(r.settled > 0, "the completed transfer cost nothing");
   assert(r.settled < .001, `a transfer cost ${r.settled} BTC, which is not a network fee`);
+});
+
+/* ---- THE BILL IS A CUSTODY EVENT: how far away the money is, and what it costs to fetch ---- */
+
+rule("leaving cold storage is priced by the weight of the coins and the day's rate", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(``)}
+    ${CONFIGURED_WALLET("single")}
+    const fee=(date,coins)=>{state.time=at(date);state.utxo={cold:coins,hot:0};return transferNetworkFee("cold",1)};
+    return{busy:fee("2017-12-15",1),calm:fee("2019-01-15",1),few:fee("2017-12-15",2),many:fee("2017-12-15",200),
+      early:fee("2010-06-01",1),partial:(state.utxo={cold:10,hot:0},transferNetworkFee("cold",.5))
+        - (state.utxo={cold:10,hot:0},transferNetworkFee("cold",1))};})()`);
+  // The same transaction costs far more on the day blocks were full of fees than a year later.
+  assert(r.busy > r.calm * 5, `a sweep cost ${r.busy} in December 2017 and ${r.calm} in January 2019; the fee is not following the market`);
+  // Every extra coin is more weight to pay for.
+  assert(r.many > r.few * 20, `200 coins cost ${r.many} against ${r.few} for two, so the number of payouts does not matter`);
+  assert(r.early > 0 && r.early < r.busy, "a sweep in 2010 should cost something, and far less than at the 2017 peak");
+  // A partial spend gathers fewer coins, though it pays for a change output.
+  assert(r.partial < 0, "spending half the reserve cost as much as spending all of it");
+});
+
+rule("every payout is a coin to gather later, and a spend leaves one coin of change", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");`)}
+    ${CONFIGURED_WALLET("single")}
+    state.utxo={cold:0,hot:0};state.poolAccount.destination="cold";
+    for(let i=0;i<5;i++)creditPayout("cold",.1);
+    const received=utxoState().cold;
+    transfer("cold","hot",.5);
+    const afterHalf=utxoState().cold;
+    state.coldSpends=[];state.wallets.cold=1;
+    transfer("cold","hot",1);
+    return{received,afterHalf,afterAll:utxoState().cold};})()`);
+  assert(r.received === 5, `five payouts to cold storage made ${r.received} coins`);
+  // Half of five coins gathers three of them, and the rest goes back as one change coin.
+  assert(r.afterHalf === 3, `spending half of five coins left ${r.afterHalf}; it should gather three and return one change coin`);
+  assert(r.afterAll === 0, `spending everything left ${r.afterAll} coins in a wallet that is now empty`);
+});
+
+rule("how far away the reserve is, and whether that beats the bill", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-28");`)}
+    ${CONFIGURED_WALLET("single")}
+    const single=treasuryReach();
+    ${CONFIGURED_WALLET("2of3")}
+    const quorum=treasuryReach();
+    state.time=at("2021-02-10");
+    return{single,quorum,early:treasuryReach()};})()`);
+  assert(r.single.cold > 0 && r.single.reachDays >= 1, "a reserve in cold storage reported no distance");
+  assert(r.quorum.reachDays > r.single.reachDays, "a quorum is kept in more than one place, so it must be further away than one key");
+  // A day before the bill, one key is close enough and a quorum is not.
+  assert(r.single.daysToBill === 1 && !r.single.coldTooSlow, "one key, a day from the bill, was reported as too slow");
+  assert(r.quorum.coldTooSlow, "a quorum two days away was reported as in time for a bill due tomorrow");
+  assert(!r.early.coldTooSlow && r.early.daysToBill > 10, "mid-month, the reserve was reported as too slow for a bill weeks away");
+});
+
+rule("coins in flight are still the operator's, and still counted", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");`)}
+    ${CONFIGURED_WALLET("single")}
+    const before=totalBtc(),worth=netWorth();
+    transfer("cold","hot",.5);
+    return{before,during:totalBtc(),worth,worthDuring:netWorth(),inFlight:coldInFlightBtc(),
+      fee:state.coldSpends[0].fee,spendable:marketLiquidBtc()};})()`);
+  assert(r.inFlight > 0, "coins left cold storage and are counted nowhere");
+  close(r.during, r.before - r.fee, 1e-9, "the coins in flight were lost from the total, or counted twice");
+  assert(r.worthDuring > r.worth * 0.99 - 1, "net worth fell by more than the network fee while coins were in the air");
+  assert(r.spendable < 11, "coins in flight were offered as sellable");
+});
+
+rule("a rush is faster, costs more, and cannot make a quorum arrive together", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.skills.push("airgap");`)}
+    ${CONFIGURED_WALLET("single")}
+    const single={normal:coldSpendDays(),rush:coldSpendDays(state,{rush:true}),
+      fee:transferNetworkFee("cold",1),rushFee:transferNetworkFee("cold",1,{rush:true})};
+    ${CONFIGURED_WALLET("2of3")}
+    return{single,quorum:{normal:coldSpendDays(),rush:coldSpendDays(state,{rush:true})}};})()`);
+  assert(r.single.rush < r.single.normal && r.single.rush >= 1, `a rushed air-gapped single key took ${r.single.rush} against ${r.single.normal}`);
+  assert(r.quorum.rush < r.quorum.normal, "rushing did nothing for a quorum");
+  assert(r.quorum.rush >= 2, `a rushed quorum took ${r.quorum.rush} day; two keys kept apart cannot arrive together`);
+  close(r.single.rushFee, r.single.fee * 3, 1e-12, "a rush should pay a multiple of the ordinary fee");
+});
+
+rule("the clock is stopped during a settlement, so a signing started then is refused", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2017-01-01");state.hardware={s9:100};state.cash=0;state.speed=1;`)}
+    ${CONFIGURED_WALLET("single")}
+    state.wallets.hot=0;state.wallets.cold=40;
+    for(let n=0;n<120&&!state.pendingSettlement;n++)tick(true);
+    const pending=!!state.pendingSettlement,coldBefore=state.wallets.cold;
+    const reason=coldSpendBlockReason();
+    transfer("cold","hot",.5);
+    return{pending,reason,jobs:state.coldSpends.length,coldBefore,coldAfter:state.wallets.cold};})()`);
+  assert(r.pending, "no settlement was queued, so this rule proves nothing");
+  assert(/clock/i.test(r.reason), `the refusal does not say why: "${r.reason}"`);
+  assert(r.jobs === 0 && r.coldAfter === r.coldBefore, "coins left cold storage into a signing that could never finish");
+});
+
+rule("fetching the reserve restarts the clock and the coins land inside the grace month", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2017-01-01");state.hardware={s9:100};state.cash=0;state.speed=1;`)}
+    ${CONFIGURED_WALLET("single")}
+    state.wallets.hot=0;state.wallets.cold=40;
+    for(let n=0;n<120&&!state.pendingSettlement;n++)tick(true);
+    const paused={pending:!!state.pendingSettlement,reason:fetchReserveBlockReason(),plan:reservePlan(false)};
+    fetchReserve(false);
+    const started={pending:!!state.pendingSettlement,debt:state.debt,jobs:state.coldSpends.length,
+      purpose:(state.coldSpends[0]||{}).purpose,speed:state.speed,cold:state.wallets.cold};
+    let t=0;while(state.coldSpends.length&&t<40){tick(true);t++}
+    return{paused,started,t,hot:state.wallets.hot,inTime:state.time<state.arrearsDue,gridCut:gridCutOff()};})()`);
+  assert(r.paused.pending && r.paused.reason === "", `a player with a reserve was told they could not fetch it: "${r.paused.reason}"`);
+  assert(r.paused.plan.gross > 0 && r.paused.plan.gross < 40, "the plan fetched nothing, or the whole reserve for a small bill");
+  assert(!r.started.pending && r.started.debt > 0, "fetching the reserve did not carry the bill into the grace month");
+  assert(r.started.speed > 0, "the clock was left stopped, so the signing could never land");
+  assert(r.started.jobs === 1 && r.started.purpose === "settlement" && r.started.cold < 40, "no signing was started from the reserve");
+  assert(r.t > 0 && r.hot > 0, "the coins never arrived");
+  assert(r.inTime && !r.gridCut, "the coins landed after the grace month had already ended");
+});
+
+rule("fetching the reserve is refused when it cannot work, and says why", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2017-01-01");state.hardware={s9:100};state.cash=0;state.speed=1;`)}
+    ${CONFIGURED_WALLET("single")}
+    state.wallets.hot=0;state.wallets.cold=40;
+    for(let n=0;n<120&&!state.pendingSettlement;n++)tick(true);
+    state.debt=500;const arrears=fetchReserveBlockReason();state.debt=0;
+    state.wallets.cold=0;const empty=fetchReserveBlockReason();state.wallets.cold=40;
+    const keys=state.custody.assigned;state.custody.assigned=[];const unsigned=fetchReserveBlockReason();
+    state.custody.assigned=keys;
+    return{arrears,empty,unsigned,ok:fetchReserveBlockReason()};})()`);
+  assert(/arrears/i.test(r.arrears), `a second missed bill was allowed: "${r.arrears}"`);
+  assert(/cold storage/i.test(r.empty), `an empty reserve was offered: "${r.empty}"`);
+  assert(/cannot sign/i.test(r.unsigned), `a wallet that cannot sign was offered: "${r.unsigned}"`);
+  assert(r.ok === "", `a valid reserve was refused: "${r.ok}"`);
+});
+
+rule("a save from before the coin count still opens, and its reserve is not free to spend", () => {
+  const save = JSON.parse(fs.readFileSync(new URL("./fixtures/save-pre-custody-sprint.json", import.meta.url), "utf8"));
+  assert(save.utxo === undefined, "the fixture already carries a coin count, so it no longer tests an old save");
+  const loaded = loadWithSave(save);
+  assert(loaded.ok, `the pre-sprint save could not be opened: ${loaded.message}`);
+  const read = makeEval(loaded.sandbox);
+  const r = JSON.parse(read(`JSON.stringify({coins:utxoState().cold,fee:transferNetworkFee("cold",1),
+    cold:state.wallets.cold,reach:treasuryReach(),total:totalBtc()})`));
+  // 119 pool payouts went to cold storage; each is a coin that has to be gathered.
+  assert(r.coins > 50 && r.coins <= 150, `an established reserve was seeded with ${r.coins} coins`);
+  assert(Number.isFinite(r.fee) && r.fee > 0, "an old save could not price a cold spend");
+  assert(r.reach.cold === r.cold && r.total >= r.cold, "an old save's reserve is missing from its totals");
 });
 
 rule("a quorum you cannot assemble is permanent, not slow", () => {

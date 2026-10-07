@@ -370,8 +370,28 @@ assert(inline.includes("more like it just now"),
    anything else irrational. */
 assert(inline.includes("function coldSpendDays(") && inline.includes("function coldSpendBlockReason(") && inline.includes("function advanceColdSpends("),
   "The cold-spend ceremony, its refusal or its completion tick has gone");
-assert(inline.includes('if(from==="cold")return beginColdSpend(to,gross,fee);'),
+assert(inline.includes('if(from==="cold")return beginColdSpend(to,gross,fee,{fraction,rush:opts.rush});'),
   "Leaving cold storage completes instantly again");
+// THE BILL IS A CUSTODY EVENT. The settlement decision has to say how far away the reserve is and
+// offer to fetch it, because the clock is stopped and a signing is measured in days of clock.
+assert(inline.includes('grid=>grid+(typeof settlementReserveCard==="function"?settlementReserveCard():"")') && inline.includes('data-action="settle-fetch"') && inline.includes('data-action="settle-fetch-rush"'),
+  "The settlement decision no longer offers to fetch a reserve held in cold storage");
+assert(inline.includes('else if(a==="settle-fetch")fetchReserve(false);else if(a==="settle-fetch-rush")fetchReserve(true);'),
+  "The fetch-the-reserve buttons are not wired to anything");
+assert(/function fetchReserve\(rush=false\)\{[\s\S]*?deferSettlement\(\);\s*beginColdSpend\("hot"/.test(inline),
+  "Fetching the reserve starts a signing without restarting the clock first, so it can never land");
+assert(inline.includes('if(CONFIRMABLE_ACTIONS.has(a)||(a==="transfer"&&b.dataset.from==="cold")){requestTransactionConfirmation(b);return}') && inline.includes("function coldTransferPreview(button,base)"),
+  "A cold spend starts without a review of its days and its fee");
+assert(inline.includes("function transferNetworkFee(from,fraction,opts={},s=state)") && inline.includes("const fee=transferNetworkFee(from,fraction,opts);"),
+  "The network fee a player is shown and the fee transfer() charges are no longer one function");
+assert(!/baseFee=nodeOnline\(\)&&state\.nodeMode/.test(inline),
+  "transfer() has its own copy of the flat network fee again; it has to ask flatNetworkFee()");
+assert(inline.includes('utxoAdd("cold",s)') && inline.includes('utxoConsume("cold",fraction)'),
+  "Payouts and cold spends no longer count the coins that have to be gathered");
+assert(inline.includes("function advanceColdSpends(silent=false)") && inline.includes("advanceColdSpends(silent);") && inline.includes("if(!silent)showToast(\"Coins out of cold storage\""),
+  "A cold spend landing during a catch-up replays as a burst of toasts");
+assert(inline.includes("${coldSpendCostLine()}") && inline.includes("network fee${j.rush?"),
+  "The cold-spend card does not say what leaving costs");
 assert(inline.includes("function coldSpendCard()"),
   "Nothing shows coins that have left cold storage and not yet arrived, so a transfer looks like the game eating them");
 /* And a shortfall is a different problem depending on how far away the treasury is. */

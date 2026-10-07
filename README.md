@@ -60,7 +60,7 @@ something that creeps. The no-network check does apply, and applies to it first.
 | `historical-data.js` | Generated, immutable runtime history. Never hand-edited. |
 | `src/config/` | Protocol dates, opening constants, scoring eras. |
 | `src/data/` | Hardware, facilities, regions, pools, progression, events, glossary. |
-| `src/engine/` | History lookup, thermal, nodes, operator XP, simulation, maintenance, pools, actions, recap. |
+| `src/engine/` | History lookup, thermal, nodes, operator XP, simulation, settlement, custody and signing, treasury reach and fees, maintenance, pools, actions, recap. |
 | `src/ui/` | Formatting, art, per-tab markup, post-render enhancers, the live tick, modals and shell. |
 | `src/app/` | Delegated DOM events and startup. |
 | `scripts/` | The data build and the three checks. |
