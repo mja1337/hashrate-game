@@ -12,6 +12,15 @@ function custodyExposureWords(key){
     :"its backup was stolen";
 }
 
+/* How dangerous the exposure is today, in the words a player can act on. The chance shown is
+   averaged over the two kinds of person; the game does not say which one it is. */
+function custodyExposureRisk(){
+  if(!custodyExposedKeys().length)return "";
+  if(!custodyInsiderCanSpend())return "On its own this key spends nothing: the wallet needs more keys than are known.";
+  const days=insiderDaysExposed(),pct=insiderShownHazard()*100;
+  return `Known for ${days} day${days===1?"":"s"}. Chance it is used today: ${pct<.1?"under 0.1":pct<10?pct.toFixed(1):Math.round(pct)}%, and it rises every day. Replace it before it is.`;
+}
+
 /* A spare signer a replacement key could be generated on. */
 function custodySpareSigners(){
   return (state.custody.devices||[]).filter(d=>!d.destroyed&&!d.keyId&&d.place!=="transit");
@@ -29,7 +38,7 @@ function custodyHolderControls(key){
       ?spare.map(d=>`<button class="action small ${key.exposed||key.weakEntropy?"primary":""}" data-action="custody-rotate" data-id="${key.id}" data-value="${d.uid}" title="Generates a new key on this signer, sweeps every coin to it and retires ${key.label}. ${rotationDays()} days.">Rotate onto ${custodyProduct(d.product)?.name||"a spare signer"} · ${rotationDays()}d</button>`).join("")
       :`<small class="modal-note">Replacing this key needs a spare signer with no key on it.</small>`;
   }
-  return `<div class="holder-row"><small>Held by <b>${custodyHolderName(holder)}</b>${key.exposed?` · <b class="profit-negative">exposed: ${custodyExposureWords(key)}</b>`:""}${key.weakEntropy?` · <b class="profit-negative">weak seed</b>`:""}</small>
+  return `<div class="holder-row"><small>Held by <b>${custodyHolderName(holder)}</b>${key.exposed?` · <b class="profit-negative">exposed: ${custodyExposureWords(key)}</b>`:""}${key.weakEntropy?` · <b class="profit-negative">weak seed</b>`:""}</small>${key.exposed&&assigned?`<small class="modal-note">${custodyExposureRisk()}</small>`:""}
     <div class="actions">${give}${rotate}</div></div>`;
 }
 

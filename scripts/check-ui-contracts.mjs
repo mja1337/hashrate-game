@@ -432,6 +432,13 @@ assert(inline.includes("custodyOnDismiss(id,countBefore);") && inline.includes("
   "Dismissing somebody no longer exposes the keys they knew");
 assert(inline.includes("advanceInsiderRisk(next);") && inline.includes("advanceRotation(silent);"),
   "Insider risk or a rotation is no longer advanced by the tick");
+// The danger of an exposed key is a clock, not a monthly roll: it is rolled every day and rises every day.
+assert(!/function advanceOperationalRisks\(next,silent=false\)\{[\s\S]*?\n\}\n/.exec(inline)[0].includes("advanceInsiderRisk"),
+  "The insider risk is back inside the monthly gate, so it can only ever be rolled once a month");
+assert(inline.includes("function insiderDailyHazard(days,hostile)") && inline.includes("const INSIDER_HOSTILE_SHARE=.5;") && inline.includes("quiet:90"),
+  "The insider risk is no longer a daily hazard with a hostile half and a patient half that waits a quarter");
+assert(inline.includes("${key.exposed&&assigned?`<small class=\"modal-note\">${custodyExposureRisk()}</small>`:\"\"}") && inline.includes("and it rises every day. Replace it before it is."),
+  "An exposed key no longer says how long it has been known and what the chance is today");
 assert(inline.includes('else if(a==="custody-holder")setKeyHolder(id,v);') && inline.includes('else if(a==="custody-rotate")rotateCustodyKey(id,v);'),
   "The hand-over and rotate buttons are not wired to anything");
 assert(inline.includes("${key?custodyHolderControls(key):\"\"}") && inline.includes("${custodyRotationRows()}"),

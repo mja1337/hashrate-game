@@ -2073,29 +2073,87 @@ rule("dismissing a holder exposes the keys they ever knew, and no others", () =>
 });
 
 rule("one key known to a former employee is the whole wallet in single signature, and nothing in a quorum", () => {
-  const months = setup => json(`(()=>{
+  const days = setup => json(`(()=>{
     ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
     ${setup}
-    let hit=null;
-    for(let m=0;m<1500&&!hit;m++){advanceInsiderRisk(Date.UTC(2021,1+m,1));if(pendingLoss())hit=m}
+    let hit=null;const t0=state.time;
+    for(let d=1;d<=2500&&!hit;d++){advanceInsiderRisk(t0+d*DAY);if(pendingLoss())hit=d}
     const loss=pendingLoss();
-    return{hit,kind:loss&&loss.kind,cause:loss&&loss.cause,held:state.wallets.hot+state.wallets.cold,exposed:custodySetup().exposed,can:custodyInsiderCanSpend()};})()`);
-  const single = months(`${CONFIGURED_WALLET("single")}state.staff=["treasurer"];setKeyHolder("k0","treasurer");dismissStaff("treasurer");`);
-  const quorum = months(`${CONFIGURED_WALLET("2of3")}state.staff=["treasurer"];setKeyHolder("k0","treasurer");dismissStaff("treasurer");`);
+    return{hit,kind:loss&&loss.kind,cause:loss&&loss.cause,exposed:custodySetup().exposed,can:custodyInsiderCanSpend(),
+      ready:custodySetup().ready,blocked:coldSpendBlockReason()};})()`);
+  const single = days(`${CONFIGURED_WALLET("single")}state.staff=["treasurer"];setKeyHolder("k0","treasurer");dismissStaff("treasurer");`);
+  const quorum = days(`${CONFIGURED_WALLET("2of3")}state.staff=["treasurer"];setKeyHolder("k0","treasurer");dismissStaff("treasurer");`);
   assert(single.exposed === 1 && single.can, "a dismissed holder of the only key was not an insider risk");
-  assert(single.hit !== null && single.kind === "stolen" && single.cause === "insider", "a former employee holding the only key never used it in 125 years");
+  assert(single.hit !== null && single.kind === "stolen" && single.cause === "insider", "a former employee holding the only key never used it in seven years");
+  assert(single.ready && single.blocked === "", `an exposed key stopped its owner signing: "${single.blocked}"`);
   assert(quorum.exposed === 1 && !quorum.can, "one exposed key of a 2-of-3 was treated as enough to spend");
   assert(quorum.hit === null, "a former employee spent from a quorum with one key");
 });
 
-rule("a security officer halves the chance an ex-employee uses a key", () => {
+rule("the chance an exposed key is used rises every day and never falls", () => {
+  const r = json(`(()=>{
+    const out={};
+    for(const [name,hostile] of [["hostile",true],["patient",false]]){
+      let rising=true,prev=0;for(let d=0;d<=900;d++){const h=insiderDailyHazard(d,hostile);if(h<prev)rising=false;prev=h}
+      out[name]={rising,day1:insiderDailyHazard(1,hostile),day30:insiderDailyHazard(30,hostile),day91:insiderDailyHazard(91,hostile),day200:insiderDailyHazard(200,hostile)};
+    }
+    return out;})()`);
+  assert(r.hostile.rising && r.patient.rising, "the chance of an exposed key being used fell on some day");
+  assert(r.hostile.day1 > 0 && r.hostile.day30 > r.hostile.day1 * 10, "a hostile person's chance did not climb steeply in the first month");
+  assert(r.patient.day1 === 0 && r.patient.day91 > 0 && r.patient.day200 > r.patient.day91, "a patient person acted before the quiet quarter, or their chance did not rise afterwards");
+});
+
+rule("half of those who learn a key mean to use it within weeks, and the rest wait at least a quarter", () => {
+  const r = json(`(()=>{
+    const survive=(hostile,days)=>{let s=1;for(let d=1;d<=days;d++)s*=1-insiderDailyHazard(d,hostile);return s};
+    let hostile=0;const n=4000;
+    for(let i=0;i<n;i++){state.seed=20260909;if(hashRoll(20260909,"insider-type","k"+i,1612137600000+i*86400000)<INSIDER_HOSTILE_SHARE)hostile++}
+    return{hostileShare:hostile/n,hostileMonth:1-survive(true,30),patientQuarter:1-survive(false,90),patientYear:1-survive(false,365)};})()`);
+  close(r.hostileShare, .5, .03, "the split between hostile and patient is not half and half");
+  assert(r.hostileMonth > .75, `a hostile person used the key within a month only ${(r.hostileMonth * 100).toFixed(0)}% of the time`);
+  assert(r.patientQuarter === 0, `a patient person acted inside the first quarter ${(r.patientQuarter * 100).toFixed(1)}% of the time`);
+  assert(r.patientYear > .9, `a patient person had used the key by the end of a year only ${(r.patientYear * 100).toFixed(0)}% of the time`);
+});
+
+rule("across many runs, an exposed key is swept within a month about as often as half of them are hostile", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${CONFIGURED_WALLET("single")}
+    const t0=state.time;let hostile=0,hostileSwept30=0,patientBefore91=0,total=0;
+    for(let seed=1;seed<=400;seed++){
+      state.seed=seed*7919;state.pendingLosses=[];state.wallets.hot=10;state.wallets.cold=40;
+      const key=state.custody.keys[0];key.exposed={cause:"former-employee",role:"treasurer",at:t0};
+      const isHostile=insiderIsHostile(key);let hit=null;
+      for(let d=1;d<=120&&hit===null;d++){advanceInsiderRisk(t0+d*DAY);if(pendingLoss())hit=d}
+      total++;if(isHostile){hostile++;if(hit!==null&&hit<=30)hostileSwept30++}
+      else if(hit!==null&&hit<=90)patientBefore91++;
+    }
+    return{total,hostile,hostileSwept30,patientBefore91};})()`);
+  assert(r.hostile > 160 && r.hostile < 240, `${r.hostile} of ${r.total} runs met a hostile person; it should be about half`);
+  assert(r.hostileSwept30 / r.hostile > .7, `only ${r.hostileSwept30} of ${r.hostile} hostile exposures were swept inside a month`);
+  assert(r.patientBefore91 === 0, `${r.patientBefore91} patient exposures were swept inside the first quarter`);
+});
+
+rule("a security officer halves the chance an exposed key is used", () => {
   const r = json(`(()=>{
     ${CUSTODY_SITE(`state.time=at("2021-02-01");`)}
-    state.staff=[];const without=insiderMonthlyRisk();
-    state.staff=["security"];const withOfficer=insiderMonthlyRisk();
+    state.staff=[];const without=insiderSecurityFactor();
+    state.staff=["security"];const withOfficer=insiderSecurityFactor();
     return{without,withOfficer,salary:STAFF.find(r=>r.id==="security").salary};})()`);
   close(r.withOfficer, r.without / 2, 1e-12, "a security officer did not halve the insider risk");
   assert(r.salary > 0, "a security officer is free");
+});
+
+rule("having been paid once, a former employee's clock starts again", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${CONFIGURED_WALLET("single")}
+    const t0=state.time,key=state.custody.keys[0];key.exposed={cause:"former-employee",role:"treasurer",at:t0};
+    let hit=null;for(let d=1;d<=2500&&hit===null;d++){advanceInsiderRisk(t0+d*DAY);if(pendingLoss())hit=d}
+    const days=insiderDaysExposed(t0+hit*DAY);
+    return{hit,days,swept:key.exposed.sweptAt===t0+hit*DAY};})()`);
+  assert(r.hit !== null && r.swept, "the sweep was not recorded against the exposure");
+  assert(r.days === 0, `the clock showed ${r.days} days straight after a sweep; it should start again from nothing`);
 });
 
 rule("a dismissed field technician exposes a key in proportion to how many there were", () => {

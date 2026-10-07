@@ -42,7 +42,7 @@ the feature, a number that cannot be made to behave in simulation, or a decision
 | 13 | Bank-box seizure after regional bans (uses the existing `fx` event hook) | plan | follow-up |
 
 | 21 | After a rotation the old signer still holds the retired key, so it cannot serve as a spare. A real operator wipes it. Needs a "wipe this signer" action | WS3 | small follow-up; low priority |
-| 22 | Insider numbers are first-pass: 2% a month, halved by a security officer, taking 40-80% of the coins. No evidence yet either way | WS3 | stock-take 2 |
+| 22 | Insider numbers are first-pass: hostile half climbs 0.4% a day per day (cap 35%), patient half silent for 90 days then 0.02% a day per day (cap 10%), a security officer halves it, a sweep takes 60-100%. The user set the shape; the figures are mine | WS3 | stock-take 2 |
 | 23 | The security officer's other job (running an audit) arrives with WS4. Today the role only holds a key and halves insider risk | WS3 | WS4 |
 | 24 | A rotation cannot be rushed, and does not offer to start itself when somebody is dismissed | WS3 | only if play shows it is missed |
 
@@ -73,7 +73,7 @@ the feature, a number that cannot be made to behave in simulation, or a decision
 - Fix-up pass: a latent bug found by the fuzzer, where miners lost in a facility move or seized by a receiver left a stale
   "manually stopped" count behind, so buying that machine later would bring them back stopped. Clamped in both places.
 - WS3: holders (owner, treasury manager, security officer, field technician), dismissal exposes every key a person ever
-  knew, insider risk (2% a month, halved by a security officer, only if the exposed keys alone satisfy the wallet),
+  knew, insider risk (a daily hazard that rises every day: half hostile and likely to act within a month, half patient and silent for a quarter; halved by a security officer; only if the exposed keys alone satisfy the wallet),
   rotation as a job (new key, real sweep fee, days, consolidates to one coin, descriptor re-recorded), busy technicians a
   day later to sign, a warning on the staff card, retired keys cannot come back.
 - WS2: places (the mine, home, bank box, trusted person), fire/flood/break-in incidents by hash roll, signing days from
@@ -113,3 +113,7 @@ risk the right price for putting everything in one place?
 - Rotation keeps the old key exposed, and the old wallet in force, until the sweep completes. The coins are not safe the
   moment you click, only when the days have passed.
 - `knownBy` is permanent: handing a key back does not make the last holder forget it.
+- The insider risk is a clock, not a monthly roll (the user's direction): the key stays usable and the chance of a sweep is
+  rolled every day and rises every day. Half of exposures are hostile (more likely than not inside a month), half patient
+  (nothing for 90 days, then climbing). The player is shown the blended chance and never which kind it is. Having been
+  paid once, the clock starts again from nothing.

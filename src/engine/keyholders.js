@@ -13,10 +13,13 @@
      EXPOSURE  Dismissing a holder marks every key they ever knew as exposed. An exposed key
                raises the wallet's compromise risk (custody.js) until it is replaced.
 
-     INSIDER   If the exposed keys alone are enough to satisfy the wallet, a former employee can
-               spend. That is a monthly chance, halved by a security officer, and it ends only
-               when the key is replaced. One exposed key of a 2-of-3 is harmless; the same key in a
-               single-signature wallet is the whole wallet.
+     INSIDER   If the exposed keys alone are enough to satisfy the wallet, somebody can spend.
+               The key stays usable by its owner, and the danger is the clock: a chance each day
+               that rises every day, and sometimes steeply. Half of those who learn a key mean to
+               use it and will within weeks; the rest wait at least a quarter and then the chance
+               climbs too. A security officer halves it, and only replacing the key ends it. One
+               exposed key of a 2-of-3 is harmless; the same key in a single-signature wallet is
+               the whole wallet.
 
      ROTATION  Replacing a key is a job, not a click. A new key is generated on a spare signer, every
                coin is swept to the new wallet, which costs the real fee for the weight of the
@@ -29,7 +32,15 @@
 
    Rolls are hashes of the seed, never nextRand(). Loaded after places.js. */
 
-const INSIDER_MONTHLY_RISK=.02,INSIDER_SECURITY_FACTOR=.5,INSIDER_TAKE_FLOOR=.4,INSIDER_TAKE_SPREAD=.4;
+const INSIDER_SECURITY_FACTOR=.5,INSIDER_TAKE_FLOOR=.6,INSIDER_TAKE_SPREAD=.4;
+/* Two kinds of person, and the player is never told which. Half of those who learn a key and leave
+   are HOSTILE: the chance they use it is nothing on the first day and climbs every day after, so that
+   within a month it is more likely than not. The rest are PATIENT: nothing for at least three months,
+   because a game's day passes quickly and a quiet quarter is the point, and then a chance that climbs
+   every day until it is a certainty. Either way every day exposed is a worse day than the one before. */
+const INSIDER_HOSTILE_SHARE=.5;
+const INSIDER_HOSTILE={slope:.004,cap:.35};
+const INSIDER_PATIENT={quiet:90,slope:.0002,cap:.1};
 
 /* ---- who holds what -------------------------------------------------------------------- */
 
@@ -87,27 +98,55 @@ function custodyDismissNote(roleId){
 
 /* ---- the insider ---------------------------------------------------------------------------- */
 
-function insiderMonthlyRisk(){return INSIDER_MONTHLY_RISK*(hasStaff("security")?INSIDER_SECURITY_FACTOR:1)}
-/* Whether the keys a former employee knows are enough to spend on their own. */
+/* The chance, on one day, that somebody who knows a key uses it, `days` days after they came to
+   know it. Rising every day, never falling. */
+function insiderDailyHazard(days,hostile){
+  if(days<1)return 0;
+  if(hostile)return Math.min(INSIDER_HOSTILE.cap,INSIDER_HOSTILE.slope*days);
+  return days<=INSIDER_PATIENT.quiet?0:Math.min(INSIDER_PATIENT.cap,INSIDER_PATIENT.slope*(days-INSIDER_PATIENT.quiet));
+}
+function insiderSecurityFactor(){return hasStaff("security")?INSIDER_SECURITY_FACTOR:1}
+/* Every exposed key of the wallet, whoever learned it and however. Together they are what a person
+   with a grudge, or a thief, has to work with. */
+function custodyExposedKeys(s=state){return custodyAssignedKeys(s).filter(k=>k.exposed)}
+/* Whether the keys somebody else knows are enough to spend on their own. */
 function custodyInsiderCanSpend(s=state){
-  const policy=custodyPolicy(s.custody.policy);
-  const seeds=new Set(custodyAssignedKeys(s).filter(k=>k.exposed&&k.exposed.cause==="former-employee").map(k=>k.seed||k.id));
+  const policy=custodyPolicy(s.custody.policy),seeds=new Set(custodyExposedKeys(s).map(k=>k.seed||k.id));
   return seeds.size>0&&seeds.size>=policy.threshold;
+}
+/* The key that has been known longest sets the clock, and its seed decides what sort of person
+   knew it. Deterministic, so the same run always meets the same person. */
+function insiderLead(s=state){
+  return custodyExposedKeys(s).slice().sort((a,b)=>(a.exposed.sweptAt||a.exposed.at)-(b.exposed.sweptAt||b.exposed.at))[0]||null;
+}
+function insiderIsHostile(key,s=state){return hashRoll(s.seed,"insider-type",key.id,key.exposed.at)<INSIDER_HOSTILE_SHARE}
+function insiderDaysExposed(next=state.time,s=state){
+  const lead=insiderLead(s);return lead?Math.max(0,Math.floor((next-(lead.exposed.sweptAt||lead.exposed.at))/DAY)):0;
+}
+/* What the player is shown: the chance today, averaged over the two kinds of person, because the
+   game does not say which one it is. */
+function insiderShownHazard(s=state){
+  const days=insiderDaysExposed(state.time,s);
+  return insiderSecurityFactor()*(INSIDER_HOSTILE_SHARE*insiderDailyHazard(days,true)+(1-INSIDER_HOSTILE_SHARE)*insiderDailyHazard(days,false));
 }
 function advanceInsiderRisk(next){
   if(!state.custody||!custodyInsiderCanSpend())return;
   const hot=state.wallets.hot||0,cold=state.wallets.cold||0,held=hot+cold;if(held<=0)return;
-  const month=new Date(next).toISOString().slice(0,7);
-  if(hashRoll(state.seed,"insider",month)>=insiderMonthlyRisk())return;
-  const taken=held*(INSIDER_TAKE_FLOOR+INSIDER_TAKE_SPREAD*hashRoll(state.seed,"insider-take",month));
+  const lead=insiderLead();if(!lead)return;
+  const days=Math.floor((next-(lead.exposed.sweptAt||lead.exposed.at))/DAY);
+  const chance=insiderDailyHazard(days,insiderIsHostile(lead))*insiderSecurityFactor();
+  if(!(chance>0)||hashRoll(state.seed,"insider",lead.id,Math.floor(next/DAY))>=chance)return;
+  const taken=held*(INSIDER_TAKE_FLOOR+INSIDER_TAKE_SPREAD*hashRoll(state.seed,"insider-take",lead.id,Math.floor(next/DAY)));
   state.wallets.hot=Math.max(0,hot-taken*hot/held);state.wallets.cold=Math.max(0,cold-taken*cold/held);
-  const who=custodyAssignedKeys().find(k=>k.exposed&&k.exposed.cause==="former-employee");
-  const name=STAFF.find(r=>r.id===(who&&who.exposed.role))?.name||"A former employee";
-  log("Coins taken by a former employee",`-${fmtBtc(taken)} · ${name}`,"custody");
-  reportCoinLoss({title:"A former employee used a key they still had",kind:"stolen",btc:taken,cause:"insider",from:"self-held keys",
-    what:`${name} still knew ${custodyAssignedKeys().filter(k=>k.exposed).map(k=>k.label).join(", ")} and used ${custodyPolicy(state.custody.policy).threshold>1?"enough keys":"it"} to move ${fmtBtc(taken)}.`,
-    why:"Dismissing the person who held a key does not remove the key from the wallet. It makes it known to someone with a reason to resent you, and it stays that way until it is replaced.",
-    remedy:custodyPolicy(state.custody.policy).threshold>1?"A quorum is what protects you here: one key known to one person spends nothing. Replace the key anyway.":"Replace the key the day someone who held it leaves, and move the coins to the new wallet. In a quorum, one key known to one person is not enough to spend.",tab:"custody"});
+  // Having been paid once, they start again from nothing: the next chance builds from today.
+  lead.exposed.sweptAt=next;
+  const former=lead.exposed.cause==="former-employee",name=former?(STAFF.find(r=>r.id===lead.exposed.role)?.name||"A former employee"):"Whoever took the backup",
+    labels=custodyExposedKeys().map(k=>k.label).join(", "),quorum=custodyPolicy(state.custody.policy).threshold>1;
+  log(`Coins swept by ${former?"a former employee":"a thief"}`,`-${fmtBtc(taken)} · ${days} day${days===1?"":"s"} after ${former?"they left":"the break-in"}`,"custody");
+  reportCoinLoss({title:former?"A former employee used a key they still had":"A stolen key was used",kind:"stolen",btc:taken,cause:"insider",from:"self-held keys",
+    what:`${name} still knew ${labels} and used ${quorum?"enough keys":"it"} to sweep ${fmtBtc(taken)}, ${days} day${days===1?"":"s"} after ${former?"leaving":"the backup was taken"}.`,
+    why:"A known key is a loaded one. Dismissing the person who held it, or losing the card it was written on, does not remove it from the wallet, and every day it stays there makes the day it is used more likely.",
+    remedy:quorum?"A quorum is what protects you here: one key known to one person spends nothing. Replace the key anyway.":"Replace the key the day it becomes known to anybody else, and move the coins to the new wallet. In a quorum, one key known to one person is not enough to spend.",tab:"custody"});
 }
 
 /* ---- replacing a key ------------------------------------------------------------------------ */
