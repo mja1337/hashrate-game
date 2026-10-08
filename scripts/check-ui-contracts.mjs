@@ -374,6 +374,8 @@ assert(inline.includes('if(from==="cold")return beginColdSpend(to,gross,fee,{fra
   "Leaving cold storage completes instantly again");
 // THE BILL IS A CUSTODY EVENT. The settlement decision has to say how far away the reserve is and
 // offer to fetch it, because the clock is stopped and a signing is measured in days of clock.
+assert(inline.includes('activeTab==="dashboard"||activeTab==="treasury"?"":sectionPulse()') && inline.includes("${treasuryStrip()}${treasurySectionNav()}${sectionPulse()}${sections[treasurySection()]()}"),
+  "The Treasury's orientation card is back above the position strip, or is drawn twice: it belongs under the section bar, once");
 for (const act of ["settle-btc","settle-liquidate","settle-bridge","settle-defer","settle-receivership"]) {
   assert(inline.includes(`action:"${act}"`) && inline.includes(`a==="${act}"`),
     `The settlement modal offers "${act}" but the click handler does not know it, or the modal stopped offering it`);

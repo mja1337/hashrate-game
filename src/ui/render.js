@@ -103,7 +103,7 @@ function content(revision=renderRevision){
      painted, so it popped in a beat late — and in a background tab, where timers are
      throttled to about a second, very late indeed. It is part of the page, so it is part of
      the same string. The Dashboard is excluded deliberately: it is already an overview. */
-  const orientation=activeTab==="dashboard"?"":sectionPulse();
+  const orientation=activeTab==="dashboard"||activeTab==="treasury"?"":sectionPulse();
   return orientation+tabContent();
 }
 function tabContent(){

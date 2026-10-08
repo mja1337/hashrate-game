@@ -92,5 +92,7 @@ function treasury(){
   const sections={market,custody,finance};
   /* The strip and the section bar are children of the content itself, not wrapped together: a sticky bar sticks
      inside its parent, and a parent only as tall as the strip would release it a screen later. */
-  return `${treasuryStrip()}${treasurySectionNav()}${sections[treasurySection()]()}`;
+  /* The orientation card for the section sits under the bar, not above the strip: the position and the way
+     between sections are what you came for, and the card explains whichever section you chose. */
+  return `${treasuryStrip()}${treasurySectionNav()}${sectionPulse()}${sections[treasurySection()]()}`;
 }
