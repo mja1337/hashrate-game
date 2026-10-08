@@ -376,6 +376,21 @@ assert(inline.includes('if(from==="cold")return beginColdSpend(to,gross,fee,{fra
 // offer to fetch it, because the clock is stopped and a signing is measured in days of clock.
 assert(inline.includes('activeTab==="dashboard"||activeTab==="treasury"?"":sectionPulse()') && inline.includes("${treasuryStrip()}${treasurySectionNav()}${sectionPulse()}${sections[treasurySection()]()}"),
   "The Treasury's orientation card is back above the position strip, or is drawn twice: it belongs under the section bar, once");
+assert(/if\(a==="begin"\)\{[^\n]*required:true,resumeSpeed:/.test(inline) && !/if\(a==="begin"\)\{[^\n]*skipWalletSetup\(\)/.test(inline),
+  "Beginning a run skips the first-wallet ceremony again: the player never generates a key, and nothing says why there is somewhere to be paid");
+assert(inline.includes("state.walletSetup&&state.walletSetup.required&&!state.walletSetup.done)return;"),
+  "The clock no longer waits for the first wallet");
+{
+  const version = /const APP_VERSION="([^"]+)"/.exec(inline)?.[1];
+  assert(version, "There is no APP_VERSION: the version has to be written in one place");
+  assert(new RegExp(`const CHANGELOG=\\[\\s*\\{date:"[^"]+",title:"Alpha ${version.replace(".", "\\.")} `).test(inline),
+    `The newest changelog entry is not for Alpha ${version}: every round of changes bumps APP_VERSION and adds an entry`);
+  assert(inline.includes("Alpha ${APP_VERSION} · Operator campaign"), "The header does not read the version from APP_VERSION");
+  const html = await readFile(new URL("index.html", root), "utf8");
+  assert(html.includes(`Hashrate Alpha ${version} —`) && html.includes(`content="Hashrate Alpha ${version}:`), `index.html's title and description do not say Alpha ${version}`);
+  const versions = [...inline.matchAll(/title:"Alpha (\d+)\.(\d+) /g)].map(m => Number(m[1]) * 1000 + Number(m[2]));
+  assert(versions.every((v, i) => i === 0 || versions[i - 1] >= v), "The changelog is out of order: versions must not increase as you read down");
+}
 for (const act of ["settle-btc","settle-liquidate","settle-bridge","settle-defer","settle-receivership"]) {
   assert(inline.includes(`action:"${act}"`) && inline.includes(`a==="${act}"`),
     `The settlement modal offers "${act}" but the click handler does not know it, or the modal stopped offering it`);

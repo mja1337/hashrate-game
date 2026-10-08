@@ -4027,6 +4027,25 @@ rule("the only machine you own can still be stopped and retired", () => {
   assert(r.booked === 1, `the single machine could not be retired (${r.booked} booked)`);
 });
 
+rule("a run that begins with the first-wallet ceremony does not start until it has a wallet", () => {
+  /* Nothing can be paid to an address that does not exist. A run flagged as needing its first wallet holds the clock
+     until the ceremony is done, and an old save or a rule that never set the flag runs exactly as it always did. */
+  const r = json(`(()=>{${SITE(`state.time=at("2013-01-10");state.hardware={s9:5};`)}
+    const t0=state.time;state.walletSetup={done:false,step:0,rolls:[],keyHex:"",required:true,resumeSpeed:1};
+    const held0=state.wallets.hot;
+    for(let i=0;i<10;i++)tick(true);
+    const held={moved:state.time-t0,coins:state.wallets.hot-held0};
+    state.walletSetup.done=true;
+    for(let i=0;i<10;i++)tick(true);
+    const after={moved:state.time-t0};
+    state.walletSetup={done:false,step:0,rolls:[],keyHex:""};
+    const t1=state.time;for(let i=0;i<3;i++)tick(true);
+    return{held,after,legacy:state.time-t1};})()`);
+  assert(r.held.moved === 0 && r.held.coins === 0, `the clock ran ${r.held.moved} ms and ${r.held.coins} BTC arrived with no wallet`);
+  assert(r.after.moved > 0, "the clock did not start once the wallet was made");
+  assert(r.legacy > 0, "a run with no ceremony flag (an old save) was held by a ceremony it never had");
+});
+
 rule("a payment costs what the date charged, and the early economy is unchanged", () => {
   /* The payout fee used to be one number for every year, so a payout cost $0.02 in 2013 and $21 in 2025, and
      a low threshold was never more or less foolish in a fee spike than in a quiet year. The years before 2017

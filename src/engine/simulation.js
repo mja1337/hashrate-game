@@ -539,6 +539,8 @@ function closeHardwareAlert(inspect=false){
 }
 function tick(silent=false){
   if(!state.started||state.ended||state.pendingSettlement)return;
+  // A run that began with the first-wallet ceremony does not start until it has a wallet: nothing can be paid to an address that does not exist.
+  if(state.walletSetup&&state.walletSetup.required&&!state.walletSetup.done)return;
   state.lastReal=Date.now();
   const prev=state.time,next=state.sandbox?Math.min(SANDBOX_END,prev+DAY):Math.min(END,prev+DAY),unlockCrossed=timeGatedUnlockCrossed(prev,next),previousSubsidy=subsidyAt(prev),nextSubsidy=subsidyAt(next);state.time=next;
   if(state.sandbox&&nextSubsidy<previousSubsidy)announceProjectedHalving(previousSubsidy,nextSubsidy,silent);

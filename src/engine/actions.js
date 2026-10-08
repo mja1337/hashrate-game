@@ -370,7 +370,7 @@ function completeWalletSetup(){
   const tier=walletSoftwareTierAt(state.campaignStart);
   if(!state.walletSetup.demo)state.walletSoftware=tier;state.walletSetup.done=true;
   if(!state.walletSetup.demo)log("Game wallet ready",`Installed ${WALLET_SOFTWARE[tier].name} · illustrative keys only`,"custody");
-  state.speed=state.walletSetup.demo?(state.walletSetup.resumeSpeed||0):1;save();setTimer();render();
+  state.speed=state.walletSetup.demo?(state.walletSetup.resumeSpeed||0):(typeof state.walletSetup.resumeSpeed==="number"?state.walletSetup.resumeSpeed:1);save();setTimer();render();
 }
 function upgradeWalletSoftware(){
   const next=state.walletSoftware+1;if(next>=WALLET_SOFTWARE.length)return;
