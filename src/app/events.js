@@ -16,6 +16,7 @@ document.getElementById("app").addEventListener("click",e=>{
   if(a==="activity-filter"){activityFilter=ACTIVITY_CATEGORIES.includes(v)?v:"all";activityLimit=100;render();return}
   if(a==="activity-more"){activityLimit+=100;render();return}
   if(a==="starting-mode"){if(STARTING_MODES.some(mode=>mode.id===v)){introDifficulty=v;introStep=1;render()}return}
+  if(a.indexOf("tour-")===0){tourAction(a);return}
   if(a==="dismiss-guidance"){if(id&&!state.guidance.dismissed.includes(id)){state.guidance.dismissed.push(id);save()}render();return}
   if(a==="mobile-menu"){mobileMenuOpen=!mobileMenuOpen;render(false);return}
   if(a==="mobile-menu-section"){mobileMenuSection=v;mobileMenuOpen=true;render(false);return}

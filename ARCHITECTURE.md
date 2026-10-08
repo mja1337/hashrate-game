@@ -42,6 +42,7 @@
 - `src/ui/tabs/treasury.js` — the Treasury: Market, Custody and Finance as sections of one tab, with a position strip above them and a sticky section bar. `openTab()` turns every name those sections ever had into the Treasury plus the right section, so no toast, loss notice, banner or menu entry had to change; `activeTabKey()` is what help text, orientation copy, enhancers and live patching are keyed on. A contract scans the source for every tab name and requires each to resolve.
 - `src/engine/hotkey.js` — the first key: the software key behind the online wallet, which lives on the mining computer and meets what meets the mine. Not part of any wallet policy; a run without one behaves as before.
 - `src/ui/enhance/hotkey.js` — the online wallet's card on the Custody section.
+- `src/ui/tour.js` — the first-run tour: a list of steps (tab to open, what to ring, what to say), a card drawn at the end of every render, and the clock held while it runs. It starts after a new run's wallet ceremony and can be replayed from the footer; a save with no tour record counts as having done it.
 - `src/ui/enhance/counterparties.js` — the posture, the audit, cover and the loan on the custody tab.
 - `src/ui/enhance/settlement.js` — the monthly settlement modal, built from a list of options (the reserve and loan cards from the Treasury sit first), not from a template patched by string replacement.
 - `src/ui/enhance/servicing.js` — the fleet servicing panel on the Mine tab.

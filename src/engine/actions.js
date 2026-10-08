@@ -374,6 +374,8 @@ function completeWalletSetup(withBackup=false){
   if(!state.walletSetup.demo&&typeof createHotWallet==="function")createHotWallet({keyHex:state.walletSetup.keyHex,backup:!!withBackup});
   if(!state.walletSetup.demo)log("Game wallet ready",`Installed ${WALLET_SOFTWARE[tier].name} · illustrative keys only`,"custody");
   state.speed=state.walletSetup.demo?(state.walletSetup.resumeSpeed||0):(typeof state.walletSetup.resumeSpeed==="number"?state.walletSetup.resumeSpeed:1);save();setTimer();render();
+  // A new run is walked round the game before it starts, with the clock held; the speed it would have had comes back at the end.
+  if(!state.walletSetup.demo&&state.walletSetup.required&&typeof beginTour==="function")beginTour();
 }
 function upgradeWalletSoftware(){
   const next=state.walletSoftware+1;if(next>=WALLET_SOFTWARE.length)return;

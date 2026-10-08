@@ -397,6 +397,45 @@ assert(/function skipWalletSetup\(\)\{[\s\S]*?state\.walletSetup\.step=2;save\(\
   "Letting the game generate the key skips the page that shows it and offers the backup");
 assert(inline.includes('typeof hotWalletCard==="function"?hotWalletCard():""') && inline.includes("function hotWalletCard()") && inline.includes('if(key.hot)return showToast("That is your online wallet"'),
   "The online wallet's card is not on the Custody section, or its key can be assigned into a wallet policy");
+// THE TOUR. A new run is walked round every area once, with the clock held, and an old save is not.
+{
+  const tourSource = await readFile(new URL("src/ui/tour.js", root), "utf8");
+  const treasurySource = await readFile(new URL("src/ui/tabs/treasury.js", root), "utf8");
+  const ctx = { globalThis: {}, document: { addEventListener() {}, body: { classList: { toggle() {} } } }, window: { addEventListener() {} }, state: { started: true, walletSetup: { done: true } }, activeTab: "dashboard" };
+  ctx.globalThis = ctx;
+  vm.runInNewContext(treasurySource + "\n" + tourSource + "\nglobalThis.api={TOUR_STEPS,tourState,tourActive,resolveTab};", ctx);
+  const { TOUR_STEPS, tourState, tourActive, resolveTab } = ctx.api;
+  // The pages the tour points at, without the tour itself: its own selectors would otherwise vouch for themselves.
+  const pages = inline.replace(tourSource, "");
+  const navTabs = /\["dashboard","mine","pools","treasury"[^\]]*\]/.exec(inline)[0].match(/"([a-z]+)"/g).map(x => x.replace(/"/g, ""));
+  assert(new Set(TOUR_STEPS.map(x => x.id)).size === TOUR_STEPS.length, "Two tour steps share an id");
+  assert(TOUR_STEPS[0].center && TOUR_STEPS[TOUR_STEPS.length - 1].center && TOUR_STEPS[TOUR_STEPS.length - 1].finish, "The tour does not open and close with a centred welcome and a finish");
+  for (const step of TOUR_STEPS) {
+    assert(step.title && step.body && step.chapter, `Tour step "${step.id}" has no title, body or chapter`);
+    if (step.center && !step.tab) continue;
+    assert(step.tab && navTabs.includes(resolveTab(step.tab).tab), `Tour step "${step.id}" opens "${step.tab}", which is not a tab in the navigation`);
+    if (step.center) continue;
+    assert(Array.isArray(step.target) && step.target.length, `Tour step "${step.id}" points at nothing`);
+    for (const t of step.target) {
+      if (typeof t === "string") for (const cls of t.match(/\.[A-Za-z][\w-]*/g) || []) assert(pages.includes(cls.slice(1)), `Tour step "${step.id}" rings ${cls}, which no page draws`);
+      else assert(pages.includes(t.text), `Tour step "${step.id}" rings the card headed "${t.text}", which no page draws`);
+    }
+  }
+  const tabsCovered = new Set(TOUR_STEPS.map(x => x.tab && resolveTab(x.tab).tab).filter(Boolean));
+  for (const tab of navTabs) assert(tabsCovered.has(tab), `The tour never visits the "${tab}" tab`);
+  for (const section of ["market", "custody", "finance"]) assert(TOUR_STEPS.some(x => x.tab === section), `The tour never visits the Treasury's ${section} section`);
+  // A save from before the tour has done it; it must not be walked round a game it has been playing for months.
+  ctx.state = { started: true, walletSetup: { done: true } };
+  assert(tourState().done === true && tourActive() === false, "A save with no tour record is walked through the tour");
+  ctx.state = { started: true, walletSetup: { done: true }, tour: { active: true, done: false, step: 3 } };
+  assert(tourActive() === true, "A run that is part-way through the tour is not resumed");
+  ctx.state = { started: true, walletSetup: { done: false }, tour: { active: true, done: false, step: 0 } };
+  assert(tourActive() === false, "The tour opens before the wallet exists");
+  assert(inline.includes('if(a.indexOf("tour-")===0){tourAction(a);return}') && inline.includes('tourAfterRender();') && inline.includes('data-action="tour-start">Tour</button>'),
+    "The tour is not wired to the click handler, the render, or the footer");
+  assert(/state\.walletSetup\.required&&typeof beginTour==="function"\)beginTour\(\)/.test(inline), "A new run no longer starts the tour after its wallet ceremony");
+  assert(inline.includes("function endTour()") && /state\.speed=t\.resumeSpeed/.test(inline), "Ending the tour does not put the clock back");
+}
 for (const act of ["settle-btc","settle-liquidate","settle-bridge","settle-defer","settle-receivership"]) {
   assert(inline.includes(`action:"${act}"`) && inline.includes(`a==="${act}"`),
     `The settlement modal offers "${act}" but the click handler does not know it, or the modal stopped offering it`);
