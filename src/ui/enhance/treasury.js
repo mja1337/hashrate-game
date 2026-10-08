@@ -69,3 +69,12 @@ function marketReserveNote(venue,percentId){
   const reason=coldSpendBlockReason(),days=coldSpendDays(),fee=transferNetworkFee("cold",1);
   return `<button class="action small" data-action="transfer" data-from="cold" data-to="${venue}" data-percent-id="${percentId}" data-percent-label="Deposit from reserve" ${reason?`disabled title="${escapeHtml(reason)}"`:`title="Signed out of cold storage: ${days} day${days===1?"":"s"}, about ${fmtBtc(fee)} for all of it"`}>From reserve · ${days}d</button>`;
 }
+
+/* Where mining income lands decides how much of the treasury is close and how much is a journey away.
+   Said on the page where that choice is made, with the real cost of the other half. */
+function payoutReserveNote(){
+  const reach=treasuryReach();
+  if(reach.cold<=0&&reach.inFlight<=0)return `<p class="modal-note">Nothing is in cold storage yet, so everything you mine is within reach of a bill today.</p>`;
+  const all=transferNetworkFee("cold",1);
+  return `<p class="modal-note">Your reserve is <strong>${fmtBtc(reach.cold)}</strong> in <strong>${fmtNum(reach.coins)}</strong> coin${reach.coins===1?"":"s"}, <strong>${reach.reachDays} day${reach.reachDays===1?"":"s"}</strong> from being spendable. Every payout sent straight to cold is another coin to gather later: spending it all today would cost about ${fmtBtc(all)} in network fees, at the rate blocks are charging now.</p>`;
+}

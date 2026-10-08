@@ -41,7 +41,7 @@ function refreshDashboard(){
   // timeline ticks do not cause layout reflow while the player is reading.
 }
 function refreshMarket(){
-  if(activeTab!=="market"||state.time<MARKET)return;
+  if(activeTabKey()!=="market"||state.time<MARKET)return;
   const price=priceAt(state.time),set=(id,value)=>{const el=document.getElementById(id);if(el)el.textContent=value};
   set("market-price-headline",`${fmtUsd(price)} per bitcoin`);set("market-total-value",fmtUsd(totalBtc()*price));
   document.querySelectorAll("[data-live-bid]").forEach(el=>{el.textContent=fmtUsd(price*(1-venueTradeFee(el.dataset.liveBid)))});

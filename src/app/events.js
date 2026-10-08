@@ -85,7 +85,7 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(a==="sell-strategy")sellStrategy(id,Number(v));
   else if(a==="contract")setContract(id);
   else if(a==="connectivity")setConnectivityPlan(id);
-  else if(a==="settle-btc"){state.settlementSaleMode=true;activeTab="market";save();render()}
+  else if(a==="settle-btc"){state.settlementSaleMode=true;activeTab=openTab("market");save();render()}
   else if(a==="cancel-settlement-sale"){state.settlementSaleMode=false;render()}
   else if(a==="settle-liquidate")liquidateForSettlement();
   else if(a==="settle-bridge")takeBridgeFinance();
@@ -96,7 +96,8 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(a==="project-loan")takeProjectLoan();
   else if(a==="repay-loan")repayProjectLoan();
   else if(a==="speed"){state.speed=Number(v);state.returnSpeed=state.speed||state.returnSpeed;setTimer();save();refreshSpeedControls();refreshLive()}
-  else if(a==="tab"){activeTab=v;mobileMenuOpen=false;render(false);const anchor=b.dataset.anchor;if(anchor)setTimeout(()=>revealMethodAnchor(anchor),60);else window.scrollTo({top:0,behavior:"smooth"})}
+  else if(a==="treasury-section")setTreasurySection(v);
+  else if(a==="tab"){activeTab=openTab(v);mobileMenuOpen=false;render(false);const anchor=b.dataset.anchor;if(anchor)setTimeout(()=>revealMethodAnchor(anchor),60);else window.scrollTo({top:0,behavior:"smooth"})}
   else if(a==="method-chapter")revealMethodAnchor(id);
   else if(a==="glossary"){glossaryOpen=true;render(true);setTimeout(()=>document.querySelector("[data-glossary-search]")?.focus(),0)}
   else if(a==="close-glossary"){glossaryOpen=false;render(true)}
@@ -116,7 +117,7 @@ document.getElementById("app").addEventListener("click",e=>{
 document.getElementById("app").addEventListener("pointerup",e=>{
   if(e.pointerType!=="touch")return;
   const b=e.target.closest('[data-action="tab"]');if(!b||b.disabled)return;
-  recentTouchTab={value:b.dataset.value,at:Date.now()};activeTab=b.dataset.value;mobileMenuOpen=false;render(false);window.scrollTo({top:0,behavior:"smooth"});
+  recentTouchTab={value:b.dataset.value,at:Date.now()};activeTab=openTab(b.dataset.value);mobileMenuOpen=false;render(false);window.scrollTo({top:0,behavior:"smooth"});
 });
 document.getElementById("app").addEventListener("input",e=>{if(e.target.matches("[data-starting-cash]")){introStartingCash=clampStartingLiquidity(e.target.value);document.querySelectorAll("[data-starting-cash]").forEach(input=>{if(input!==e.target)input.value=introStartingCash});const output=document.querySelector("[data-starting-cash-output]");if(output)output.textContent=fmtUsd(introStartingCash)}else if(e.target.matches("[data-percent-input]"))updateTradePercentage(e.target.dataset.percentInput,e.target.value,e.target);else if(e.target.matches("[data-glossary-search]"))filterGlossary(e.target.value);else if(e.target.matches("[data-pool-history]"))updatePoolExplorer(Number(e.target.value))});
 document.getElementById("app").addEventListener("change",e=>{

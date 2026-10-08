@@ -11,7 +11,7 @@ Plan: five workstreams, built and reviewed one at a time. Nothing is pushed unti
 | 2 | Places (devices and backups live somewhere; incidents hit places) | pushed |
 | 3 | People (key holders are staff; Security officer; rotation) | committed locally, awaiting review |
 | 4 | Counterparties (posture pricing, coin-theft cover, audit, BTC-secured loan) | committed locally; stock-take 2 done |
-| 5 | One Treasury tab | not started |
+| 5 | One Treasury tab | built, committed locally, awaiting review |
 
 ## When to take stock
 
@@ -46,7 +46,6 @@ the feature, a number that cannot be made to behave in simulation, or a decision
 
 | 28 | Only one loan against coins at a time, and no partial repayment. Both are simplifications | WS4 | only if play shows it is missed |
 | 29 | The lender-failure event applies to one real episode (Celsius, 12 June 2022). Voyager and BlockFi are not modelled separately | WS4 | probably leave |
-| 30 | Cover and the loan are only on the custody tab; the Finance tab still shows only migration cover and the operating loan | WS4 | WS5 puts them together |
 
 ## Stock-take 2
 
@@ -103,6 +102,8 @@ bill now makes the distance matter, and an old save restores as instantly as it 
   audits run by the security officer; coin cover priced and paid by posture, refusing neglect, paid inside
   `reportCoinLoss`; two ways to borrow against coins (collaborative custody and a full-custody pledge) with margin calls,
   liquidation, interest in the bill, both usable to pay a settlement; the 2022 lender failure; the Market's reserve note.
+- WS5: one Treasury tab with Market, Custody and Finance as sections; every old tab name resolves through `openTab()`; a
+  position strip on all three; the dashboard's custody card and the payout card read the keys and the reserve.
 - Restoring a key takes the backup's access days (the user's call after stock-take 2).
 - Stock-take 2: cover repriced from 1.5% to 0.35% a year; loans can be sized below the limit and warn five points before a
   call; settlement loans start at 60% of the limit; net worth subtracts the operating loan.
@@ -157,3 +158,10 @@ risk the right price for putting everything in one place?
   each is: the first is a debt being collected, the second is coins held by a company.
 - The loan against coins is subtracted in net worth and the operating loan is not (open point 25). The first was needed to
   stop borrowing making a player richer; the second is a pre-existing gap I did not widen into this workstream.
+- The Treasury's strip and section bar are children of the content, not wrapped together: a sticky bar sticks inside its
+  parent, and a wrapper only as tall as the strip released it a screen later. Found in the browser; the contracts could not
+  have seen it.
+- The Mine tab turns its section bar static on phones. The Treasury's stays sticky there, with its hint line hidden, because
+  three compact buttons do not cost what four stacked ones do.
+- Old names resolve in the click handlers, not at each call site, so a future toast that says "custody" works without anyone
+  remembering. The contract that scans every tab name (more than seventy toasts link to the old names) is what keeps that true.

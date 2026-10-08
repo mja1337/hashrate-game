@@ -89,6 +89,6 @@ function payoutCustodyCard(){
         ? `Your income is currently paid to ${dest.name}, which means it is ready to sell and it is not yours. If that venue fails, it takes the balance and the income stream with it.`
         : dest.id==="cold"
         ? "Your income is currently paid into cold storage. It is as safe as your backups are, and it cannot pay a bill this afternoon without a transfer first."
-        : "Your income is currently paid into your hot wallet: spendable immediately, and held by a key that is online to sign."}</p>
+        : "Your income is currently paid into your hot wallet: spendable immediately, and held by a key that is online to sign."}</p>${typeof payoutReserveNote==="function"?payoutReserveNote():""}
     </div></section>`;
 }

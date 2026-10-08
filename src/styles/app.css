@@ -401,3 +401,17 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--orange);outline-off
   .mobile-nav.open{top:var(--topbar-live-h)}
   .mine-sections{top:var(--topbar-live-h)}
 }
+
+/* The Treasury: one strip of position above three sections, sharing the Mine tab's sticky section bar. */
+.treasury-strip{padding:0;margin-bottom:10px;width:100%}
+.treasury-sections{margin-bottom:10px}
+.treasury-strip .metric-row{margin:0}
+.treasury-sections .mine-section-tabs{grid-template-columns:repeat(3,minmax(0,1fr))}
+/* The Mine tab turns its section bar static on phones because four stacked sections would eat the screen. Three
+   compact buttons do not, so the Treasury's stays under the header wherever you are in it. */
+@media(max-width:800px){
+  .treasury-sections{position:sticky;top:var(--topbar-live-h);flex-direction:row}
+  .treasury-sections .mine-sections-label{display:none}
+  .treasury-sections .mine-section{padding:7px 9px 8px}
+  .treasury-sections .mine-section small{display:none}
+}

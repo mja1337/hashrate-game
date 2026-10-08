@@ -38,6 +38,7 @@
 - `src/engine/keyholders.js` — who holds each key, what dismissing a holder exposes, the insider risk, and rotation: replacing a key as a job that sweeps every coin at the real fee. Rolls are `hashRoll`, never `nextRand()`.
 - `src/engine/credit.js` — what borrowing costs and what a lender or insurer sees: the operating loan's rate (one function, not seven), the custody posture, the audit, and coin cover. Claims are paid inside `reportCoinLoss`, so no incident has to know that cover exists.
 - `src/engine/lending.js` — borrowing against the coins themselves: collaborative custody and a full-custody pledge, margin calls and liquidation, and what a lender failing does to each. No dice: a call and a sale are functions of the price.
+- `src/ui/tabs/treasury.js` — the Treasury: Market, Custody and Finance as sections of one tab, with a position strip above them and a sticky section bar. `openTab()` turns every name those sections ever had into the Treasury plus the right section, so no toast, loss notice, banner or menu entry had to change; `activeTabKey()` is what help text, orientation copy, enhancers and live patching are keyed on. A contract scans the source for every tab name and requires each to resolve.
 - `src/ui/enhance/counterparties.js` — the posture, the audit, cover and the loan on the custody tab.
 - `src/ui/enhance/people.js` — the holder controls on each key, rotation progress, and the warning on a staff card before somebody who knows a key is dismissed.
 - `src/ui/enhance/places.js` — the "Where things are kept" card.

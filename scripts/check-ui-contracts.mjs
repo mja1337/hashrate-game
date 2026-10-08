@@ -60,7 +60,7 @@ assert(inline.includes("Starting difficulty"), "Method is missing difficulty doc
 assert(inline.includes("Transaction sizing and procurement"), "Method is missing transaction documentation");
 assert(inline.includes('if(a==="starting-mode")'), "Difficulty action is not handled");
 assert(inline.includes("transactionPreviewValid(preview)"), "Invalid transaction quotes are not blocked");
-assert(inline.includes("function enhanceActiveTab()") && inline.includes("const enhancer=TAB_ENHANCERS[activeTab];"), "Tab enhancement must be dispatched from one place that always runs");
+assert(inline.includes("function enhanceActiveTab()") && inline.includes("const enhancer=TAB_ENHANCERS[activeTabKey()];"), "Tab enhancement must be dispatched from one place that always runs");
 assert(/document\.getElementById\("app"\)\.innerHTML=`[\s\S]*?\n  enhanceActiveTab\(\);/.test(renderSource), "The enhancer has to run in the same task as the markup it completes: deferring it to a timeout meant any repaint landing in the gap cancelled it, and nothing retried");
 assert(!inline.includes("function deferEnhancement("), "The deferred-enhancement helper is what left the Mine tab half-built; it should not come back");
 assert(!/deferEnhancement\(revision/.test(inline), "A tab enhancer is being deferred again");
@@ -68,7 +68,7 @@ assert(inline.includes('class="card span-12 exchange-balance-desk"'), "Market ex
 assert(inline.includes('class="span-12 facility-grid facility-options"'), "Facilities choices do not have a stable ordering target");
 assert(inline.includes('if(command&&facilityOptions)command.insertAdjacentElement("afterend",facilityOptions)'), "Facility choices are not placed directly below the current-facility command");
 assert(inline.includes("Math.min(900,Math.max(240,Math.ceil(days/7)+1))"), "Historical charts are not using capped weekly-or-better sampling");
-assert(inline.includes('"dashboard","mine","pools","market"'), "Pools is not a standalone navigation destination");
+assert(inline.includes('"dashboard","mine","pools","treasury","facilities"'), "Pools is not a standalone navigation destination, or the Treasury has gone from the navigation");
 assert(inline.includes('if(activeTab==="pools")return pools()'), "Pools page is not routed");
 assert(inline.includes('id:"bch"') && inline.includes('id:"bsv"'), "BCH and BSV fork-risk actions are missing");
 // The introduction's kickers used to be pinned as literal strings here. What that guarded is
@@ -432,6 +432,58 @@ assert(inline.includes("if(set.placed&&set.fragile)risk*=1.8;"),
   assert(!/nextRand\(/.test(code),
     "A people risk draws from the shared random stream, which shifts every seeded run after it. Roll it with hashRoll(state.seed, ...)");
 }
+// THE TREASURY. Market, Custody and Finance are sections of one tab, and every name they ever had still works.
+{
+  const treasurySource = await readFile(new URL("src/ui/tabs/treasury.js", root), "utf8");
+  const api = {};
+  vm.runInNewContext(treasurySource + "\nglobalThis.api={TREASURY_SECTION_IDS,treasurySection,activeTabKey,resolveTab,openTab,tabIsActive};",
+    { globalThis: api, state: { treasurySection: undefined }, activeTab: "dashboard" });
+  const t = api.api;
+  assert(["market", "custody", "finance"].every(id => t.TREASURY_SECTION_IDS.includes(id)) && t.TREASURY_SECTION_IDS.length === 3,
+    "The Treasury is not the three sections Market, Custody and Finance");
+  for (const id of ["market", "custody", "finance"]) {
+    const r = t.resolveTab(id);
+    assert(r.tab === "treasury" && r.section === id, `The old name "${id}" no longer opens the Treasury at that section: ${JSON.stringify(r)}`);
+  }
+  assert(t.resolveTab("mine").tab === "mine" && t.resolveTab("mine").section === null, "An ordinary tab was turned into something else");
+  // Opening an old name sets the section it meant, and does not disturb anything else.
+  const ctx = { state: { treasurySection: "market" }, activeTab: "dashboard" };
+  vm.runInNewContext(treasurySource + "\nglobalThis.out={tab:openTab('finance'),section:state.treasurySection,key:(activeTab='treasury',activeTabKey()),active:tabIsActive('finance'),other:tabIsActive('custody')};", { ...ctx, globalThis: ctx });
+  assert(ctx.out.tab === "treasury" && ctx.out.section === "finance" && ctx.out.key === "finance" && ctx.out.active && !ctx.out.other,
+    `openTab("finance") did not land on the Finance section of the Treasury: ${JSON.stringify(ctx.out)}`);
+  // A damaged or missing section is Market, never undefined.
+  const bad = { state: { treasurySection: "nonsense" } };
+  vm.runInNewContext(treasurySource + "\nglobalThis.out=treasurySection();", { ...bad, globalThis: bad, activeTab: "treasury" });
+  assert(bad.out === "market", `A damaged section was read as "${bad.out}"`);
+  // The acceptance test: every tab id the source can name must open something. A toast, a loss notice, a
+  // banner or a menu entry that names a tab that is not there silently does nothing.
+  const navTabs = inline.match(/const tabs=\[("[a-z]+",?)+\];/)[0].match(/"[a-z]+"/g).map(x => x.slice(1, -1));
+  const known = new Set([...navTabs, ...t.TREASURY_SECTION_IDS]);
+  const named = new Set();
+  // A toast names its tab as its fourth argument after a kind, a loss notice as a default, and a card as a field.
+  for (const re of [/\btab:"([a-z]+)"/g, /data-action="tab" data-value="([a-z]+)"/g, /\bopenTab\("([a-z]+)"\)/g,
+      /,"(?:info|bad|success|warning|notice|good|milestone|blocked)","([a-z]+)"[,)]/g, /\.tab\|\|"([a-z]+)"/g]) for (const m of inline.matchAll(re)) named.add(m[1]);
+  for (const m of inline.matchAll(/tabs:\[((?:"[a-z]+",?)+)\]/g)) for (const x of m[1].match(/"[a-z]+"/g)) named.add(x.slice(1, -1));
+  // A list of toast kinds looks like "a kind, then a name", and a kind is never a tab.
+  const toastKinds = new Set(["info", "bad", "success", "warning", "notice", "good", "milestone", "blocked"]);
+  const missing = [...named].filter(id => !known.has(id) && !toastKinds.has(id));
+  assert(missing.length === 0, `These tab names open nothing: ${missing.join(", ")}`);
+  assert(named.has("custody") && named.has("market") && named.has("finance") && named.size > 6, "The scan found too few tab names to mean anything");
+  const toastLinks = [...inline.matchAll(/,"(?:info|bad|success|warning|notice|good|milestone|blocked)","(custody|market|finance)"[,)]/g)].length;
+  assert(toastLinks > 50, `The scan found only ${toastLinks} toasts that link to the old section names; there are more than seventy`);
+  assert(!navTabs.includes("market") && !navTabs.includes("custody") && !navTabs.includes("finance") && navTabs.includes("treasury"),
+    "Market, Custody or Finance are in the navigation as tabs of their own again");
+}
+assert(inline.includes('else if(a==="treasury-section")setTreasurySection(v);') && inline.includes("activeTab=openTab(b.dataset.value);") && inline.includes('activeTab=openTab("market");'),
+  "A tab can be opened without going through the alias layer, so an old name can land nowhere");
+assert(inline.includes('if(activeTab==="treasury")return treasury();') && inline.includes("const page=pages[activeTabKey()]") && inline.includes('if(activeTabKey()!=="market"||state.time<MARKET)return;'),
+  "The Treasury is not drawn, or its orientation, help and live market patching are not keyed on the section showing");
+assert(inline.includes('class="${tabIsActive(t)?"active":""}" data-action="tab"'),
+  "The mobile menu's section shortcuts no longer show which section is open");
+assert(/@media\(max-width:800px\)\{\s*\.treasury-sections\{position:sticky;top:var\(--topbar-live-h\);flex-direction:row\}/.test(css),
+  "The Treasury's section bar is not sticky on a phone, where the Mine tab's rule would have made it static");
+assert(css.includes(".treasury-sections .mine-section-tabs{grid-template-columns:repeat(3"),
+  "The Treasury's section bar is laid out for four sections");
 // COUNTERPARTIES. The operating loan's rate is one number, so that whatever is about to make it depend on something changes it once.
 assert(!/hasStaff\("treasurer"\)\?\.009:\.012|hasStaff\("treasurer"\)\?"0\.9":"1\.2"/.test(inline.replace(/function projectLoanRate\(\)\{[^}]*\}/, "")),
   "The operating loan's rate is written out again somewhere other than projectLoanRate()");
@@ -988,7 +1040,7 @@ assert(inline.includes('control.setAttribute("aria-describedby",id)') && inline.
 // Method is eight named chapters behind a table of contents. Chapter ids and section
 // ids are written into the markup rather than matched by heading text at runtime, and a
 // deep link has to open the collapsed chapter it points inside before it can scroll to it.
-assert(inline.includes('data-value="method" data-anchor="${help.anchor}"') && inline.includes('else if(a==="tab"){activeTab=v') && inline.includes("setTimeout(()=>revealMethodAnchor(anchor),60)"), "Contextual help cannot deep-link to the relevant Method chapter");
+assert(inline.includes('data-value="method" data-anchor="${help.anchor}"') && inline.includes('else if(a==="tab"){activeTab=openTab(v)') && inline.includes("setTimeout(()=>revealMethodAnchor(anchor),60)"), "Contextual help cannot deep-link to the relevant Method chapter");
 assert(inline.includes("function revealMethodAnchor(id)") && inline.includes('if(node.tagName==="DETAILS")node.open=true'), "A deep link into a collapsed Method chapter cannot scroll to a target the browser is still hiding");
 assert(!inline.includes("ensureMethodAnchors"), "Method anchors are written into the markup now; the runtime heading-text matcher must not come back");
 // The chapter prose moved to its own module when method.js reached the size ceiling; the
