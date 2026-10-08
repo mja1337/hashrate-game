@@ -65,10 +65,24 @@ function poolAccount(s=state){
 /* WHAT A PAYOUT COSTS. The same transaction the player pays for when they move coins by hand,
    because it is the same transaction — a pool sending to your address is an on-chain payment,
    and a payout to a multisig address costs more to spend from later for the same reason a
-   multisig transfer costs more: there is more of it. */
+   multisig transfer costs more: there is more of it.
+
+   IT COSTS WHAT THE DATE CHARGED. An ordinary payment is about 250 virtual bytes, priced at what a
+   byte cost on the day (treasury.js derives that from the fees blocks really collected). Before 2017
+   fees were not a market but a habit: wallets paid a fixed 0.0001-0.0005 BTC whatever the network
+   was doing, so those years keep a floor that comes to the 0.0002 BTC this game always charged
+   and the early economy is exactly what it was. From 2017 the market sets it: December 2017 costs
+   several times the old figure and 2025 a small fraction, which is the whole reason the payout
+   thresholds are a choice. Running a node still buys a cheaper payment. */
+const PAYMENT_VBYTES=250,HABIT_FEE_SAT_VB=80,HABIT_FEE_ENDS=Date.parse("2017-01-01T00:00:00Z");
+function paymentRateSatPerVb(t=state.time){
+  const market=feeRateSatPerVb(t);
+  return t<HABIT_FEE_ENDS?Math.max(market,HABIT_FEE_SAT_VB):market;
+}
 function flatNetworkFee(s=state){
-  const base=nodeOnline()&&s.nodeMode==="relay"?0.000035:nodeOnline()&&s.nodeMode!=="pruned"?0.00005:0.0002;
-  return base*(custodySetup(s).policy.threshold>1?1.35:1);
+  const base=PAYMENT_VBYTES*paymentRateSatPerVb(s.time)*1e-8;
+  const node=nodeOnline()&&s.nodeMode==="relay"?.175:nodeOnline()&&s.nodeMode!=="pruned"?.25:1;
+  return base*node*(custodySetup(s).policy.threshold>1?1.35:1);
 }
 function payoutNetworkFee(s=state){return flatNetworkFee(s)}
 

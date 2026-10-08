@@ -374,7 +374,11 @@ assert(inline.includes('if(from==="cold")return beginColdSpend(to,gross,fee,{fra
   "Leaving cold storage completes instantly again");
 // THE BILL IS A CUSTODY EVENT. The settlement decision has to say how far away the reserve is and
 // offer to fetch it, because the clock is stopped and a signing is measured in days of clock.
-assert(inline.includes('grid=>grid+(typeof settlementReserveCard==="function"?settlementReserveCard():"")') && inline.includes('data-action="settle-fetch"') && inline.includes('data-action="settle-fetch-rush"'),
+for (const act of ["settle-btc","settle-liquidate","settle-bridge","settle-defer","settle-receivership"]) {
+  assert(inline.includes(`action:"${act}"`) && inline.includes(`a==="${act}"`),
+    `The settlement modal offers "${act}" but the click handler does not know it, or the modal stopped offering it`);
+}
+assert(/settlement-choice-grid">\$\{reserve\}\$\{settlementOptions\(short,strike\)/.test(inline) && !inline.includes("alpha26SettlementModal") && inline.includes('data-action="settle-fetch"') && inline.includes('data-action="settle-fetch-rush"'),
   "The settlement decision no longer offers to fetch a reserve held in cold storage");
 assert(inline.includes('else if(a==="settle-fetch")fetchReserve(false);else if(a==="settle-fetch-rush")fetchReserve(true);'),
   "The fetch-the-reserve buttons are not wired to anything");
@@ -384,6 +388,8 @@ assert(inline.includes('if(CONFIRMABLE_ACTIONS.has(a)||(a==="transfer"&&b.datase
   "A cold spend starts without a review of its days and its fee");
 assert(inline.includes("function transferNetworkFee(from,fraction,opts={},s=state)") && inline.includes("const fee=transferNetworkFee(from,fraction,opts);"),
   "The network fee a player is shown and the fee transfer() charges are no longer one function");
+assert(/e\.fx==="china"&&state\.region==="sichuan"\{?[\s\S]{0,260}custodyOnRegionalBan\(e\.fx\)/.test(inline.replace(/\n/g," ")) && inline.includes("const BAN_SEIZURE={china:{region:\"sichuan\""),
+  "A ban on mining no longer reaches the bank box: applyEvent has to call custodyOnRegionalBan for the China event");
 assert(!/baseFee=nodeOnline\(\)&&state\.nodeMode/.test(inline),
   "transfer() has its own copy of the flat network fee again; it has to ask flatNetworkFee()");
 assert(inline.includes('utxoAdd("cold",s)') && inline.includes('utxoConsume("cold",fraction)'),
@@ -503,7 +509,7 @@ assert(inline.includes("advanceCoinCover(next,silent);") && inline.includes("fun
   const code = lendingSource.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
   assert(!/nextRand\(/.test(code), "A lending event draws from the shared random stream; a price call and a liquidation are functions of the price, not of dice");
 }
-assert(inline.includes("advanceSecuredLoan(next,silent);") && inline.includes('if(e.fx==="lenders")applyLenderFailure();'),
+assert(inline.includes("advanceSecuredLoan(next,silent);") && inline.includes('applyLenderFailure(e.fx.split(":")[1]||"celsius");'),
   "A loan against coins is no longer advanced by the tick, or the 2022 lender failure no longer reaches it");
 assert(inline.includes("+securedPledgedBtc():0)}") && inline.includes('-(typeof securedPrincipal==="function"?securedPrincipal():0)+'),
   "Pledged coins are no longer counted as the borrower's, or the loan is no longer a liability in net worth");
@@ -513,7 +519,7 @@ assert(inline.includes('else if(a==="secured-borrow")borrowSecured(b.dataset.mod
   "A loan can no longer be sized below what the coins allow, which is the only way to make one safe");
 assert(inline.includes('${l.warned&&!l.call?`<div class="risk medium">Close to a margin call'),
   "A loan close to its margin call no longer says so on screen");
-assert(inline.includes('else if(a==="secured-borrow")') && inline.includes('else if(a==="secured-repay")repaySecuredLoan();') && inline.includes('else if(a==="secured-topup")addSecuredCollateral(Number(v));') && inline.includes('else if(a==="settle-borrow")borrowForSettlement(v);'),
+assert(inline.includes('else if(a==="secured-borrow")') && inline.includes('else if(a==="secured-repay")repaySecuredLoan(Number(v)||1);') && inline.includes('else if(a==="secured-topup")addSecuredCollateral(Number(v));') && inline.includes('else if(a==="settle-borrow")borrowForSettlement(v);'),
   "The borrow, repay, add-collateral or settlement-borrow buttons are not wired to anything");
 assert(inline.includes("${custodyCoverSection()}${custodyLoanSection()}") && inline.includes("return settlementReserveOnly()+settlementBorrowCards();"),
   "Borrowing against coins is no longer offered on the custody tab or in the settlement decision");
@@ -534,8 +540,9 @@ assert(inline.includes("function insiderDailyHazard(days,hostile)") && inline.in
   "The insider risk is no longer a daily hazard with a hostile half and a patient half that waits a quarter");
 assert(inline.includes("${key.exposed&&assigned?`<small class=\"modal-note\">${custodyExposureRisk()}</small>`:\"\"}") && inline.includes("and it rises every day. Replace it before it is."),
   "An exposed key no longer says how long it has been known and what the chance is today");
-assert(inline.includes('else if(a==="custody-holder")setKeyHolder(id,v);') && inline.includes('else if(a==="custody-rotate")rotateCustodyKey(id,v);'),
-  "The hand-over and rotate buttons are not wired to anything");
+assert(inline.includes('else if(a==="custody-holder")setKeyHolder(id,v);') && inline.includes('else if(a==="custody-rotate")rotateCustodyKey(id,v,b.dataset.rush==="1");')
+  && inline.includes('else if(a==="custody-wipe")wipeCustodySigner(id);') && inline.includes('data-action="custody-wipe"') && inline.includes('data-rush="1"'),
+  "The hand-over, rotate, rush and wipe-signer buttons are not wired to anything");
 assert(inline.includes("${key?custodyHolderControls(key):\"\"}") && inline.includes("${custodyRotationRows()}"),
   "The key cards no longer say who holds a key or offer to replace it");
 assert(inline.includes("${hired&&custodyDismissNote(s.id)?"),

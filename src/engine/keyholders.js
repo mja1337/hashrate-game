@@ -160,8 +160,10 @@ function rotateBlockReason(keyId,deviceUid,s=state){
   if(device.keyId)return "Generate the new key on a signer that holds none, or the two keys will not be independent.";
   return "";
 }
-function rotationDays(){return coldSpendDays()+1}
-function rotateCustodyKey(keyId,deviceUid){
+/* A rush skips the careful steps and pays the priority fee, as a rush cold spend does: half the days, never fewer than
+   two, because a rotation is a signing and a quorum cannot be fully rushed. */
+function rotationDays(rush=false){const days=coldSpendDays()+1;return rush?Math.max(2,Math.ceil(days/2)):days}
+function rotateCustodyKey(keyId,deviceUid,rush=false){
   const reason=rotateBlockReason(keyId,deviceUid);
   if(reason)return showToast("Cannot rotate",reason,"bad","custody");
   const c=state.custody,old=custodyKey(keyId),device=custodyDevice(deviceUid),product=custodyProduct(device.product);
@@ -171,11 +173,35 @@ function rotateCustodyKey(keyId,deviceUid){
   // A person who knew the old key is not handed the new one.
   key.holder=old.exposed&&old.exposed.cause==="former-employee"?"owner":custodyHolder(old);
   // Every coin is swept to the new wallet, and the fee is the real one for the weight being gathered.
-  const fee=Math.min(state.wallets.cold||0,transferNetworkFee("cold",1)),days=rotationDays();
+  const fee=Math.min(state.wallets.cold||0,transferNetworkFee("cold",1,{rush})),days=rotationDays(rush);
   state.wallets.cold=Math.max(0,(state.wallets.cold||0)-fee);
-  c.rotation={old:old.id,new:key.id,due:state.time+days*DAY,started:state.time,fee,days};
-  log(`Rotating ${old.label} to ${key.label}`,`${days} day${days===1?"":"s"} · ${fmtBtc(fee)} to sweep the coins`,"custody");
+  c.rotation={old:old.id,new:key.id,due:state.time+days*DAY,started:state.time,fee,days,rush:!!rush};
+  log(`Rotating ${old.label} to ${key.label}${rush?" (rushed)":""}`,`${days} day${days===1?"":"s"} · ${fmtBtc(fee)} to sweep the coins`,"custody");
   showToast("Rotation started",`${key.label} is generated and the coins are being swept to the new wallet. It takes ${days} day${days===1?"":"s"} and ${fmtBtc(fee)}. Until it finishes the old key still controls the coins, and signing is paused.`,"info","custody");
+  save();render();
+}
+/* The signer a retired key was on still holds it, and a signer holding a key cannot be the one a new key is
+   generated on. A real operator resets the device, which is the whole point of owning a spare; the seed backup is
+   untouched, and the retired key stays retired. */
+/* A spare signer a replacement key could be generated on. */
+function custodySpareSigners(){
+  return (state.custody.devices||[]).filter(d=>!d.destroyed&&!d.keyId&&!d.restoring&&d.place!=="transit");
+}
+function wipeBlockReason(keyId,s=state){
+  const key=(s.custody.keys||[]).find(k=>k.id===keyId);
+  if(!key||!key.retired)return "Only a retired key's signer can be wiped; this key still controls coins.";
+  const device=(s.custody.devices||[]).find(d=>d.keyId===keyId&&!d.destroyed);
+  if(!device)return "No signer holds that key any more.";
+  if(device.restoring||device.place==="transit")return "That signer is not available.";
+  return "";
+}
+function wipeCustodySigner(keyId){
+  const reason=wipeBlockReason(keyId);
+  if(reason)return showToast("Cannot wipe",reason,"bad","custody");
+  const device=state.custody.devices.find(d=>d.keyId===keyId&&!d.destroyed),key=custodyKey(keyId);
+  device.keyId=null;
+  log(`Wiped the signer that held ${key.label}`,"It can hold a new key again","custody");
+  showToast("Signer wiped",`${key.label} is gone from the device. It is a spare again, and can take a replacement key.`,"success","custody");
   save();render();
 }
 function advanceRotation(silent=false){

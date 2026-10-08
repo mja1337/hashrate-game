@@ -34,6 +34,19 @@ const SECURED_MODES={
   collaborative:{id:"collaborative",name:"Collaborative custody",ltv:.5,rate:.007,callLtv:.8,liqLtv:.9},
   pledge:{id:"pledge",name:"Full-custody pledge",ltv:.4,rate:.010,callLtv:.75,liqLtv:.85}
 };
+/* WHO LENT. A pledge goes to a company, and which company is the whole question: three of these five stopped paying
+   out inside six months of 2022, and two did not. The player is told the name and does not choose it, because the
+   point is that from outside they all looked the same. `lost` is the share of the coins written off when it fails,
+   the rest is frozen as a claim in its bankruptcy (about what each one's customers saw). */
+const SECURED_LENDERS=[
+  {id:"celsius",name:"Celsius",failsOn:"2022-06-12",lost:.3},
+  {id:"voyager",name:"Voyager",failsOn:"2022-07-01",lost:.25},
+  {id:"blockfi",name:"BlockFi",failsOn:"2022-11-10",lost:.1},
+  {id:"nexo",name:"Nexo",failsOn:null,lost:0},
+  {id:"ledn",name:"Ledn",failsOn:null,lost:0}
+];
+function securedLender(id){return SECURED_LENDERS.find(x=>x.id===id)||null}
+function securedLenderFor(s=state){return SECURED_LENDERS[Math.floor(hashRoll(s.seed,"lender",s.time)*SECURED_LENDERS.length)%SECURED_LENDERS.length]}
 const SECURED_CALL_DAYS=14,SECURED_PENALTY=.05,SECURED_AUDIT_DISCOUNT=.001,SECURED_BUFFER=1.03,SECURED_WARN_GAP=.05;
 // A bill is a poor moment to borrow at the limit, so paying one pledges enough to start at 60% of it.
 const SECURED_SETTLEMENT_USE=.6;
@@ -98,6 +111,8 @@ function borrowSecured(mode,fraction,opts={}){
   utxoConsume(q.bucket,fraction);
   state.wallets[q.bucket]-=q.gross;
   const loan={mode,principal:0,pledged:0,rate:q.rate,since:state.time,call:null};
+  // Only a pledge is a claim on a company. A lender holding one key of your quorum has nothing to lose you.
+  if(mode==="pledge")loan.lender=securedLenderFor().id;
   if(q.days>0)loan.pending={gross:q.pledged,principal:q.principal,due:state.time+q.days*DAY,started:state.time};
   else{loan.pledged=q.pledged;loan.principal=q.principal;state.cash+=q.principal}
   state.securedLoan=loan;
@@ -117,15 +132,26 @@ function returnPledge(mode,btc){
     coldSpends().push({to:"cold",gross:btc,fee,due:state.time+days*DAY,started:state.time,days,purpose:"release"});
   } else {state.wallets.hot+=btc;utxoAdd("hot")}
 }
-function repaySecuredLoan(){
+/* Paying some of it back. `share` of what is owed is repaid and the same share of the coins comes back, so the loan to
+   value is where it was and a margin call is cured by the same arithmetic as by paying off the whole. Interest
+   runs on what is still owed, so it falls with it. */
+function repaySecuredLoan(share=1){
   const l=securedLoan();if(!l)return;
+  share=Math.min(1,Math.max(0,Number(share)||0));if(share<=0)return;
   if(l.pending)return showToast("Wait for the coins","The pledge is still on its way, so the loan cannot be settled yet.","bad","custody");
-  if(state.cash<l.principal)return showToast("Not enough cash",`Repaying costs ${fmtUsd(l.principal)} and you have ${fmtUsd(state.cash)}.`,"bad","custody");
-  state.cash-=l.principal;
-  returnPledge(l.mode,l.pledged);
-  state.securedLoan=null;
-  log("Loan against coins repaid",`${fmtUsd(l.principal)} · ${fmtBtc(l.pledged)} returned`,"custody");
-  showToast("Loan repaid",l.mode==="collaborative"?`${fmtBtc(l.pledged)} will be co-signed back to your cold storage.`:`${fmtBtc(l.pledged)} is back in your hot wallet.`,"success","custody");
+  const pay=l.principal*share,back=l.pledged*share,whole=share>=.999;
+  if(state.cash<pay)return showToast("Not enough cash",`Repaying costs ${fmtUsd(pay)} and you have ${fmtUsd(state.cash)}.`,"bad","custody");
+  state.cash-=pay;
+  returnPledge(l.mode,whole?l.pledged:back);
+  if(whole){
+    state.securedLoan=null;
+  } else {
+    l.principal-=pay;l.pledged-=back;
+    // Back to the same share of its value as before, so a call is judged afresh on the next day's price.
+    if(l.call&&l.pledged>0&&l.principal/(l.pledged*priceAt(state.time))<=SECURED_MODES[l.mode].callLtv*.95){l.call=null;log("Margin call cured","You repaid enough","custody")}
+  }
+  log(whole?"Loan against coins repaid":"Part of the loan repaid",`${fmtUsd(pay)} · ${fmtBtc(whole?l.pledged:back)} returned${whole?"":` · ${fmtUsd(l.principal)} still owed`}`,"custody");
+  showToast(whole?"Loan repaid":"Part of the loan repaid",l.mode==="collaborative"?`${fmtBtc(whole?l.pledged:back)} will be co-signed back to your cold storage.`:`${fmtBtc(whole?l.pledged:back)} is back in your hot wallet.`,"success","custody");
   save();render();
 }
 /* More coins against the same loan, which is what a margin call asks for. */
@@ -190,22 +216,26 @@ function advanceSecuredLoan(next,silent=false){
 
 /* ---- the lender fails -------------------------------------------------------------------------- */
 
-/* Celsius, June 2022. A lender is a company, and what its customers held was a claim on it. A
-   pledge sent to it is exactly that; coins in a wallet where it held one key of three never were. */
-function applyLenderFailure(){
+/* A lender is a company, and what its customers held was a claim on it. A pledge sent to the one that failed is
+   exactly that; coins in a wallet where a lender held one key of three never were. A loan with no lender named
+   is one from before lenders had names, and was always Celsius. */
+function applyLenderFailure(lenderId="celsius"){
   const l=securedLoan();if(!l)return;
+  const mine=l.lender||"celsius",who=securedLender(lenderId);
   if(l.mode==="collaborative"){
-    log("Your lender failed","It held one key of three. Your coins did not move and the loan was sold on","custody");
-    showToast("Your lender failed, and your coins did not move","It held one key of your quorum, so it could not have taken them. The loan carries on with whoever bought it.","success","custody");
+    log("A lender failed","Yours held one key of three. Your coins did not move and the loan was sold on","custody");
+    showToast("A lender failed, and your coins did not move","Your lender held one key of your quorum, so it could not have taken them. The loan carries on with whoever bought it.","success","custody");
     return;
   }
-  const lost=l.pledged*.3,frozen=l.pledged*.7;
+  if(mine!==lenderId)return;
+  const lost=l.pledged*(who?who.lost:.3),frozen=l.pledged-lost;
   state.wallets.frozen+=frozen;state.securedLoan=null;
   // The debt does not go away with the collateral. It becomes ordinary borrowing, at the ordinary rate.
   state.projectLoan+=l.principal;
-  log("Your lender froze withdrawals",`-${fmtBtc(lost)} · ${fmtBtc(frozen)} frozen · ${fmtUsd(l.principal)} now owed as ordinary debt`,"custody");
-  reportCoinLoss({title:"The lender that held your coins froze",kind:"counterparty",btc:lost,recovered:frozen,cause:"lenders",from:"coins pledged to a lender",
-    what:`${fmtBtc(frozen)} is frozen as a claim in the lender's bankruptcy and ${fmtBtc(lost)} is written off. You still owe ${fmtUsd(l.principal)}, now as ordinary borrowing at the ordinary rate.`,
+  const name=who?who.name:"Your lender";
+  log(`${name} froze withdrawals`,`-${fmtBtc(lost)} · ${fmtBtc(frozen)} frozen · ${fmtUsd(l.principal)} now owed as ordinary debt`,"custody");
+  reportCoinLoss({title:`${name}, which held your coins, froze`,kind:"counterparty",btc:lost,recovered:frozen,cause:"lenders",from:"coins pledged to a lender",
+    what:`${fmtBtc(frozen)} is frozen as a claim in ${name}'s bankruptcy and ${fmtBtc(lost)} is written off. You still owe ${fmtUsd(l.principal)}, now as ordinary borrowing at the ordinary rate.`,
     why:"Coins sent to a lender stop being coins you hold and become a claim on the company. Its failure took the collateral and left the debt.",
     remedy:"Borrow in collaborative custody, where the lender holds one key of several and cannot move the coins, or do not leave coins with a company that you have not seen the books of.",tab:"custody"});
 }

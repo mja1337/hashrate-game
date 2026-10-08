@@ -117,7 +117,8 @@ const COVER_COVERED=["hotwallet","burglary"];
 const COVER_EXCLUDED={
   entropy:"a key generated from a seed with a known flaw, which the policy treats as a known weakness left in place",
   phishing:"a seed you typed into a fake, which the policy treats as handing it over",
-  insider:"a key you knew somebody else held and had not replaced"
+  insider:"a key you knew somebody else held and had not replaced",
+  seizure:"a government opening a box in its own country, which no policy covers"
 };
 
 function coinCover(s=state){return s.coinCover&&typeof s.coinCover==="object"?s.coinCover:null}

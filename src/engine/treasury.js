@@ -16,8 +16,8 @@
    divided by that. A miner on a low payout threshold in December 2017 pays for it twice, once
    in the pool's own fee and again when the pile of small payouts has to be spent.
 
-   Pool payouts keep the flat fee in payouts.js: the pool is the one sending them, and the player
-   chooses the threshold. Everything the PLAYER spends from cold storage is priced here.
+   Pool payouts and ordinary payments are priced in payouts.js, by the same rate (paymentRateSatPerVb,
+   which holds a fixed-fee floor before 2017). Everything the PLAYER sweeps from cold storage is priced here.
 
    Loaded after signing.js, which it extends. Nothing here is called before the page has
    finished parsing. */
@@ -79,7 +79,7 @@ function sweepFeeBtc(inputs,outputs,quorum,t=state.time){
    card both ask, so the number a player is shown is the number that is charged.
 
    Leaving cold storage is a sweep and is priced as one. Every other move is an ordinary
-   payment and keeps the flat fee. */
+   payment and keeps the payment fee. */
 function transferNetworkFee(from,fraction,opts={},s=state){
   if(from!=="cold")return flatNetworkFee(s);
   const quorum=(custodySetup(s).policy.threshold||1)>1,inputs=utxoInputsFor("cold",fraction,s);

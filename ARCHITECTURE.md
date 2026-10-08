@@ -21,6 +21,7 @@
 - `src/engine/thermal.js` — cooling capacity, active heat load, room temperature and thermal stress.
 - `src/engine/nodes.js` — node power, synchronization, independent verification and Lightning capability.
 - `src/engine/simulation.js` — state, migrations, economics, ticking and live refresh.
+- `src/engine/event-effects.js` — what a dated event does to the operation (a lender failing, a leaked customer list, a ban closing a site). Loaded straight after simulation.js, which is at its size ceiling.
 - `src/engine/losses.js` — coins that leave and do not come back: the loss queue and its modal, venue failures, the hot-wallet incident roll.
 - `src/engine/facilities.js` — changing site in either direction: the shared risk model, the timed job and the commissioning that ends it.
 - `src/engine/fleet-ops.js` — the fleet's physical life: deliveries, racking, retirement, staged machines and what is true of the fleet while that work is half done.
@@ -40,10 +41,13 @@
 - `src/engine/lending.js` — borrowing against the coins themselves: collaborative custody and a full-custody pledge, margin calls and liquidation, and what a lender failing does to each. No dice: a call and a sale are functions of the price.
 - `src/ui/tabs/treasury.js` — the Treasury: Market, Custody and Finance as sections of one tab, with a position strip above them and a sticky section bar. `openTab()` turns every name those sections ever had into the Treasury plus the right section, so no toast, loss notice, banner or menu entry had to change; `activeTabKey()` is what help text, orientation copy, enhancers and live patching are keyed on. A contract scans the source for every tab name and requires each to resolve.
 - `src/ui/enhance/counterparties.js` — the posture, the audit, cover and the loan on the custody tab.
+- `src/ui/enhance/settlement.js` — the monthly settlement modal, built from a list of options (the reserve and loan cards from the Treasury sit first), not from a template patched by string replacement.
+- `src/ui/enhance/servicing.js` — the fleet servicing panel on the Mine tab.
 - `src/ui/enhance/people.js` — the holder controls on each key, rotation progress, and the warning on a staff card before somebody who knows a key is dismissed.
 - `src/ui/enhance/places.js` — the "Where things are kept" card.
 - `src/ui/enhance/treasury.js` — the settlement reserve card, the cold-spend review and the cost line, as sentences over the engine's numbers.
 - `src/engine/actions.js` — player mutations, transactions, imports and exports.
+- `src/ui/transaction-preview.js` — the review shown before a money action.
 - `src/ui/presentation.js` — formatting, charts and reusable visual helpers.
 - `src/ui/tabs/` — base tab markup split into Dashboard, Mine, Ledger, Market, operations and Method ownership.
 - `src/ui/enhance/` — post-render visuals split into Mine/Market, custody and operating-system ownership.

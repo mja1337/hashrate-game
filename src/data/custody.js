@@ -126,7 +126,7 @@ const CUSTODY_PLACES=[
   {id:"home",name:"Home",access:1,fee:0,rates:{fire:.0010,flood:.0007,burglary:.0015},
     blurb:"Away from the fleet, so a fire at the mine does not reach it. An ordinary house."},
   {id:"bank",name:"Bank deposit box",access:2,fee:15,rates:{fire:.0001,flood:.0001,burglary:.00005},
-    blurb:"Fireproof and guarded, and open only in banking hours. It costs a fee every month."},
+    blurb:"Fireproof and guarded, and open only in banking hours. It costs a fee every month, and it is in a country: a state that bans your business can open it."},
   {id:"trusted",name:"A trusted person's house",access:2,fee:0,rates:{fire:.0008,flood:.0006,burglary:.0010},
     blurb:"Free, and exactly as safe as their house and your friendship."},
 ];

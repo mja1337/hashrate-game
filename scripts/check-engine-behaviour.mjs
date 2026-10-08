@@ -1950,6 +1950,39 @@ rule("a break-in takes steel too, and a thief holding enough seeds holds the coi
   assert(quorum.factor > quorum.factor0, "an exposed key did not raise the compromise risk");
 });
 
+rule("a ban on mining can open the bank box, and only in the country that banned it", () => {
+  /* The safest place was safe against everything, which made it a free answer. It is in a country, and when that
+     country bans the business what is in it is within reach of the people who just did. The chance is a hash roll, so
+     the rule finds seeds on both sides of it rather than pinning a constant. */
+  const run = (region, seed, keys) => json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-06-21");state.facility="warehouse";state.region="${region}";state.seed=${seed};`)}
+    ${PLACED_WALLET("2of3", keys, "home")}
+    const out={opened:custodyOnRegionalBan("china",true),bank:placeHolds(placeItems("bank")),loss:!!pendingLoss()};
+    return out;})()`);
+  const inBank = [{device:"home",backup:"bank",steel:true},{device:"home",backup:"site",steel:true},{device:"home",backup:"trusted",steel:true}];
+  const empty = [{device:"home",backup:"home",steel:true},{device:"home",backup:"site",steel:true},{device:"home",backup:"trusted",steel:true}];
+  const results = [];
+  for (let seed = 1; seed <= 40; seed++) results.push(run("sichuan", seed, inBank));
+  const opened = results.filter(r => r.opened), spared = results.filter(r => !r.opened);
+  assert(opened.length > 0 && spared.length > 0, `a ban opened the box ${opened.length} times in 40 seeds; it should be a chance, not a certainty or an impossibility`);
+  assert(opened.every(r => r.bank === 0), "a seized box still held its contents, steel included");
+  assert(spared.every(r => r.bank > 0), "a box that was not opened lost its contents");
+  const elsewhere = []; for (let seed = 1; seed <= 40; seed++) elsewhere.push(run("texas", seed, inBank));
+  assert(elsewhere.every(r => !r.opened), "a ban in China opened a bank box belonging to a mine in Texas");
+  const nothing = []; for (let seed = 1; seed <= 40; seed++) nothing.push(run("sichuan", seed, empty));
+  assert(nothing.every(r => !r.opened), "an empty box was reported seized");
+});
+
+rule("cover does not pay for a government opening the box", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-06-21");state.facility="warehouse";`)}
+    ${PLACED_WALLET("single", [{device:"home",backup:"bank",steel:true}])}
+    state.coinCover={since:at("2020-01-01")};
+    const claim=coinCoverClaim({kind:"stolen",cause:"seizure"},1);
+    return{claim};})()`);
+  assert(r.claim && r.claim.paid === 0 && /government/.test(r.claim.note), `cover paid or said nothing for a seizure: ${JSON.stringify(r.claim)}`);
+});
+
 rule("signing takes as long as it takes to fetch the keys, and the safest place is the slowest", () => {
   const days = (policy, keys) => json(`(()=>{
     ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
@@ -2243,6 +2276,22 @@ rule("rotation is a job: it costs the sweep fee, takes days, pauses signing and 
   assert(!r.after.insider, "a retired key still counted as an insider risk");
 });
 
+rule("a rotation can be rushed: fewer days, three times the fee, never under two days", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${PLACED_WALLET("2of3", [{device:"bank",backup:"bank",steel:true},{device:"trusted",backup:"bank",steel:true},{device:"home",backup:"bank",steel:true}])}
+    state.custody.devices.push({uid:"dSpare",product:"trezorone",supplier:"trezor",boughtAt:0,keyId:null,place:"site"});
+    state.utxo={cold:40,hot:1};
+    const slow=rotationDays(false),fast=rotationDays(true),base=transferNetworkFee("cold",1),rushed=transferNetworkFee("cold",1,{rush:true});
+    const cold0=state.wallets.cold;
+    rotateCustodyKey("k0","dSpare",true);
+    return{slow,fast,base,rushed,charged:cold0-state.wallets.cold,job:custodyRotation()};})()`);
+  assert(r.fast < r.slow && r.fast >= 2, `rushing took ${r.fast} days against ${r.slow}`);
+  close(r.rushed / r.base, 3, 1e-9, "a rushed rotation did not cost three times the sweep fee");
+  close(r.charged, r.rushed, 1e-12, "the fee charged was not the rushed fee");
+  assert(r.job && r.job.rush === true && r.job.days === r.fast, "the rotation job did not record that it was rushed");
+});
+
 rule("a retired key cannot be put back in the wallet", () => {
   const r = json(`(()=>{
     ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
@@ -2251,6 +2300,22 @@ rule("a retired key cannot be put back in the wallet", () => {
     assignCustodyKey("k0");
     return{assigned:[...state.custody.assigned]};})()`);
   assert(r.assigned.length === 0, "a key retired by a rotation was assigned to the wallet again");
+});
+
+rule("the signer a retired key was on can be wiped and used again, and a live key's cannot", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${PLACED_WALLET("2of3", [{device:"site",backup:"bank",steel:true},{device:"site",backup:"bank",steel:true},{device:"site",backup:"bank",steel:true}])}
+    const live=wipeBlockReason("k0"),keep=state.custody.devices[0].keyId;
+    state.custody.keys[0].retired=true;state.custody.assigned=state.custody.assigned.filter(id=>id!=="k0");
+    const spareBefore=custodySpareSigners().length,backup=!!state.custody.keys[0].backup;
+    wipeCustodySigner("k0");
+    return{live,keep,spareBefore,spareAfter:custodySpareSigners().length,held:state.custody.devices[0].keyId,backup:!!state.custody.keys[0].backup,
+      retired:state.custody.keys[0].retired,again:wipeBlockReason("k0")};})()`);
+  assert(r.live && r.keep === "k0", `a key that still controls coins could have its signer wiped: "${r.live}"`);
+  assert(r.held === null && r.spareAfter === r.spareBefore + 1, "wiping did not free the signer");
+  assert(r.backup && r.retired === true, "wiping the signer touched the seed backup or un-retired the key");
+  assert(r.again, "a signer that was already wiped could be wiped again");
 });
 
 rule("a rotation needs an empty signer and a key that is in the wallet", () => {
@@ -2621,12 +2686,31 @@ rule("repaying a loan returns the coins, to the hot wallet at once or to cold st
   assert(r.collab.t >= 2 && r.collab.coldBack > r.collab.cp - 0.01 && r.collab.coldBack <= r.collab.cp, "the coins did not arrive back in cold storage, less the network fee");
 });
 
+rule("repaying part of a loan returns the same share of the coins and keeps the loan to value", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    borrowSecured("pledge",.5);
+    const l=securedLoan(),p0=l.principal,c0=l.pledged,ltv0=securedLtv(),interest0=securedInterestMonthly(),hot0=state.wallets.hot;
+    state.cash=p0;
+    repaySecuredLoan(.25);
+    const m=securedLoan();
+    const part={principal:m.principal,pledged:m.pledged,ltv:securedLtv(),interest:securedInterestMonthly(),cash:state.cash,hotBack:state.wallets.hot-hot0};
+    repaySecuredLoan(1);
+    return{p0,c0,ltv0,interest0,part,after:securedLoan(),cashEnd:state.cash};})()`);
+  close(r.part.principal, r.p0 * .75, 1e-6, "a quarter repaid did not leave three quarters owed");
+  close(r.part.pledged, r.c0 * .75, 1e-12, "a quarter repaid did not release a quarter of the coins");
+  close(r.part.ltv, r.ltv0, 1e-9, "repaying part of the loan moved the loan to value");
+  close(r.part.interest, r.interest0 * .75, 1e-6, "interest did not fall with what was owed");
+  close(r.part.cash, r.p0 * .75, 1e-6, "a quarter repaid did not cost a quarter of the principal");
+  assert(r.after === null && Math.abs(r.cashEnd) < 1e-6, "repaying the rest did not close the loan at exactly what was left");
+});
+
 rule("a lender failing takes a pledge and leaves the debt, and spares a quorum it held one key of", () => {
   const pledge = json(`(()=>{
     ${CUSTODY_SITE(`state.time=at("2022-06-12");state.facility="warehouse";`)}
     borrowSecured("pledge",.5);
-    const l=securedLoan(),pledged=l.pledged,principal=l.principal,loan0=state.projectLoan,frozen0=state.wallets.frozen;
-    applyLenderFailure();
+    const l=securedLoan();l.lender="celsius";const pledged=l.pledged,principal=l.principal,loan0=state.projectLoan,frozen0=state.wallets.frozen;
+    applyLenderFailure("celsius");
     return{loan:securedLoan(),frozen:state.wallets.frozen-frozen0,debt:state.projectLoan-loan0,pledged,principal,loss:pendingLoss()&&pendingLoss().kind,
       lostBtc:pendingLoss()&&pendingLoss().btc};})()`);
   const collab = json(`(()=>{
@@ -2641,8 +2725,32 @@ rule("a lender failing takes a pledge and leaves the debt, and spares a quorum i
   close(pledge.lostBtc, pledge.pledged * .3, 1e-9, "30% of a failed lender's pledge should be written off");
   close(pledge.debt, pledge.principal, 1e-6, "the debt did not survive the collateral as ordinary borrowing");
   assert(collab.loan && collab.pledged === collab.before.pledged && !collab.loss && collab.projectLoan === collab.before.loan, "a lender that held one key of three cost the borrower coins");
-  const hit = json(`(()=>EVENTS.filter(e=>e.fx==="lenders").map(e=>e.date))()`);
-  assert(hit.length === 1 && hit[0] === "2022-06-12", `the lender failure is not in the record on the right date: ${JSON.stringify(hit)}`);
+  const hit = json(`(()=>({events:EVENTS.filter(e=>String(e.fx||"").indexOf("lender")===0).map(e=>e.date).sort(),
+    lenders:SECURED_LENDERS.filter(x=>x.failsOn).map(x=>x.failsOn).sort()}))()`);
+  assert(hit.events.length === 3 && JSON.stringify(hit.events) === JSON.stringify(hit.lenders),
+    `the lender failures are not in the record on the dates the lenders fail: ${JSON.stringify(hit)}`);
+});
+
+rule("only the lender that failed takes the pledge, and a quorum never has one to lose", () => {
+  const run = (lender, failing) => json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2022-06-12");state.facility="warehouse";`)}
+    borrowSecured("pledge",.5);
+    securedLoan().lender="${lender}";
+    applyLenderFailure("${failing}");
+    return{kept:!!securedLoan(),loss:!!pendingLoss(),lostShare:pendingLoss()?pendingLoss().btc:0};})()`);
+  const hit = run("voyager", "voyager"), miss = run("voyager", "celsius"), survivor = run("nexo", "blockfi");
+  assert(!hit.kept && hit.loss, "a pledge to the lender that failed was not taken");
+  assert(miss.kept && !miss.loss && survivor.kept && survivor.loss === false, "a pledge to a different lender was taken when somebody else failed");
+  const chosen = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2020-03-01");state.facility="warehouse";`)}
+    borrowSecured("pledge",.5);const a=securedLoan().lender;
+    state.securedLoan=null;
+    ${LENDABLE_WALLET}
+    borrowSecured("collaborative",.5);const b=securedLoan().lender;
+    const seen=new Set();for(let i=0;i<200;i++){state.seed=i+1;state.time=at("2020-03-01")+i*DAY;seen.add(securedLenderFor().id)}
+    return{a,b,seen:[...seen],known:SECURED_LENDERS.some(x=>x.id===a)};})()`);
+  assert(chosen.known && chosen.b === undefined, `a pledge named ${chosen.a} and a quorum loan named ${chosen.b}; only a pledge is a claim on a company`);
+  assert(chosen.seen.length === 5, `the lender is not varying with the seed and the day: ${chosen.seen.join(", ")}`);
 });
 
 rule("a bill can be paid by borrowing against coins: a pledge at once, a quorum through the grace month", () => {
@@ -3917,6 +4025,25 @@ rule("the only machine you own can still be stopped and retired", () => {
   assert(r.stopped === 1, `the single machine could not be powered down (${r.stopped} stopped)`);
   assert(r.restarted === 0, `the single machine could not be restarted (${r.restarted} still off)`);
   assert(r.booked === 1, `the single machine could not be retired (${r.booked} booked)`);
+});
+
+rule("a payment costs what the date charged, and the early economy is unchanged", () => {
+  /* The payout fee used to be one number for every year, so a payout cost $0.02 in 2013 and $21 in 2025, and
+     a low threshold was never more or less foolish in a fee spike than in a quiet year. The years before 2017
+     keep the fixed fee wallets really paid (0.0002 BTC, what this game always charged); from 2017 the market
+     sets it. The properties: the early years are exactly as before, the 2017 spike costs more than the old
+     figure, a quiet modern year costs far less, and a node still makes it cheaper. */
+  const r = json(`(()=>{${SITE(`state.hardware={s19:5};`)}
+    state.custody.policy="single";state.custody.assigned=[];nodeOnline=()=>false;
+    const at_=d=>{state.time=at(d);return payoutNetworkFee()};
+    const early=[at_("2012-06-01"),at_("2014-06-01"),at_("2016-06-01")],spike=at_("2017-12-15"),quiet=at_("2025-06-01");
+    state.time=at("2021-06-01");const without=payoutNetworkFee();nodeOnline=()=>true;state.nodeMode="relay";const withNode=payoutNetworkFee();
+    return {early,spike,quiet,without,withNode}})()`);
+  assert(r.early.every(f => Math.abs(f - 0.0002) < 1e-12),
+    `before 2017 a payment costs the fixed 0.0002 BTC it always did, got ${r.early.join(", ")}`);
+  assert(r.spike > 0.0002 * 2, `the December 2017 spike should cost much more than the old flat fee, got ${r.spike}`);
+  assert(r.quiet < 0.0002 / 5, `a quiet 2025 payment should cost a fraction of the old flat fee, got ${r.quiet}`);
+  assert(r.withNode > 0 && r.withNode < r.without, `running a node should make a payment cheaper: ${r.withNode} vs ${r.without}`);
 });
 
 rule("a single-key wallet is not charged for a quorum it does not have", () => {

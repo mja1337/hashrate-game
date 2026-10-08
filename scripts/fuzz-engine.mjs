@@ -92,19 +92,22 @@ for (const seed of SEEDS) {
       ()=>backupCustodyConfig(),
       // Borrowing against the coins, repaying, adding collateral, and paying a bill with it.
       ()=>borrowSecured(pick(["collaborative","pledge"]),.1+rnd()*.9),
-      ()=>repaySecuredLoan(),
+      ()=>repaySecuredLoan(pick([.25,.5,1])),
       ()=>addSecuredCollateral(.1+rnd()*.5),
       ()=>{if(state.pendingSettlement)borrowForSettlement(pick(["collaborative","pledge"]))},
       ()=>toggleCoinCover(),
       ()=>commissionCustodyAudit(),
       // People: who holds a key, who leaves, and replacing a key onto a spare signer.
       ()=>{const k=((state.custody&&state.custody.keys)||[]).filter(x=>!x.retired);if(k.length)setKeyHolder(pick(k).id,pick(CUSTODY_HOLDERS))},
-      ()=>{const c=state.custody||{},spare=(c.devices||[]).filter(d=>!d.destroyed&&!d.keyId&&d.place!=="transit");if(spare.length&&c.assigned.length)rotateCustodyKey(pick(c.assigned),pick(spare).uid)},
+      ()=>{const c=state.custody||{},spare=(c.devices||[]).filter(d=>!d.destroyed&&!d.keyId&&d.place!=="transit");if(spare.length&&c.assigned.length)rotateCustodyKey(pick(c.assigned),pick(spare).uid,rnd()<.3)},
       /* Places: where things are kept, journeys, copies of the descriptor, and what a fire or a thief does. */
       ()=>{const d=(state.custody&&state.custody.devices)||[];if(d.length)moveCustodyItem("device",pick(d).uid,pick(["site","home","bank","trusted"]))},
       ()=>{const k=((state.custody&&state.custody.keys)||[]).filter(x=>x.backup);if(k.length)moveCustodyItem("backup",pick(k).id,pick(["site","home","bank","trusted"]))},
       ()=>moveCustodyItem("configcopy","config",pick(["site","home","bank","trusted"])),
-      ()=>applyPlaceIncident(pick(["site","home","bank","trusted"]),pick(["fire","flood","burglary"]),state.time,true),
+      ()=>applyPlaceIncident(pick(["site","home","bank","trusted"]),pick(["fire","flood","burglary","seizure"]),state.time,true),
+      // A retired key's signer wiped, and a ban that can open a bank box.
+      ()=>{const k=((state.custody&&state.custody.keys)||[]).filter(x=>x.retired);if(k.length)wipeCustodySigner(pick(k).id)},
+      ()=>custodyOnRegionalBan("china",true),
       ()=>{const c=state.custody||{},spare=(c.devices||[]).filter(d=>!d.destroyed&&!d.keyId),dead=(c.keys||[]).filter(k=>!custodyKeyLive(k)&&custodyKeyRestorable(k));if(spare.length&&dead.length)restoreCustodyKey(pick(spare).uid,pick(dead).id)},
     ];
     /* Over capacity is not automatically wrong, and the first version of this check did not

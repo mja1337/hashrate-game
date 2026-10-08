@@ -66,11 +66,12 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(a==="custody-cover")toggleCoinCover();
   else if(a==="secured-borrow")borrowSecured(b.dataset.mode,Number(v),{use:securedUseChoice});
   else if(a==="secured-use")setSecuredUse(Number(v));
-  else if(a==="secured-repay")repaySecuredLoan();
+  else if(a==="secured-repay")repaySecuredLoan(Number(v)||1);
   else if(a==="secured-topup")addSecuredCollateral(Number(v));
   else if(a==="settle-borrow")borrowForSettlement(v);
   else if(a==="custody-holder")setKeyHolder(id,v);
-  else if(a==="custody-rotate")rotateCustodyKey(id,v);
+  else if(a==="custody-rotate")rotateCustodyKey(id,v,b.dataset.rush==="1");
+  else if(a==="custody-wipe")wipeCustodySigner(id);
   else if(a==="custody-move")moveCustodyItem(b.dataset.kind,id,v);
   else if(a==="custody-restore-key")restoreCustodyKey(id,v);
   else if(a==="custody-lesson"){custodyLesson=v;render()}

@@ -193,18 +193,20 @@ function advancePlaceRisks(next,silent=false){
   }
 }
 
-const PLACE_KIND_WORDS={fire:["A fire","burned"],flood:["A flood","flooded"],burglary:["A break-in","was broken into"]};
+const PLACE_KIND_WORDS={fire:["A fire","burned"],flood:["A flood","flooded"],burglary:["A break-in","was broken into"],seizure:["A seizure","was opened by the authorities"]};
 
 function applyPlaceIncident(placeId,kind,next,silent=false){
   const c=state.custody,place=custodyPlace(placeId),policy=custodyPolicy(c.policy),items=placeItems(placeId);
   const before=custodyOperable(),assigned=new Map(custodyAssignedKeys().map(k=>[k.id,k.seed||k.id]));
   const lost={devices:[],backups:[],config:0},stolen=new Set(),kept=[];
+  // A seizure takes what a burglary takes, steel included: nobody asks whether the plate was fireproof.
+  const takes=kind==="burglary"||kind==="seizure",taker=kind==="seizure"?"The authorities":"Burglars";
   items.devices.forEach(d=>{d.destroyed={at:next,cause:kind};lost.devices.push(d)});
   items.backups.forEach(k=>{
     // Steel comes through a fire and a flood. Nothing comes through a break-in.
-    if(kind!=="burglary"&&k.backup.durability==="steel"){kept.push(k);return}
+    if(!takes&&k.backup.durability==="steel"){kept.push(k);return}
     k.backup={...k.backup,destroyed:true,cause:kind};lost.backups.push(k);
-    if(kind==="burglary"){k.exposed={cause:"burglary",at:next};if(assigned.has(k.id))stolen.add(assigned.get(k.id))}
+    if(takes){k.exposed={cause:kind,at:next};if(assigned.has(k.id))stolen.add(assigned.get(k.id))}
   });
   // The descriptor is paper in every place there is.
   if(items.config){
@@ -218,12 +220,12 @@ function applyPlaceIncident(placeId,kind,next,silent=false){
   log(title,gone==="nothing"?"Nothing was lost":`Lost: ${gone}`,"custody");
   const held=(state.wallets.hot||0)+(state.wallets.cold||0);
   // A burglar holding enough seeds to satisfy the wallet is a thief holding the coins.
-  if(kind==="burglary"&&policy.threshold>0&&stolen.size>=policy.threshold&&held>0){
+  if(takes&&policy.threshold>0&&stolen.size>=policy.threshold&&held>0){
     const taken=held*(PLACE_THEFT_FLOOR+PLACE_THEFT_SPREAD*hashRoll(state.seed,"theft",placeId,next)),hot=state.wallets.hot||0;
     state.wallets.hot=Math.max(0,hot-taken*hot/held);state.wallets.cold=Math.max(0,(state.wallets.cold||0)-taken*(1-hot/held));
-    reportCoinLoss({title:"Burglars took the keys, and the coins went with them",kind:"stolen",btc:taken,cause:"burglary",from:`the seed backups kept at ${placeSay(place)}`,
+    reportCoinLoss({title:`${taker} took the keys, and the coins went with them`,kind:"stolen",btc:taken,cause:kind,from:`the seed backups kept at ${placeSay(place)}`,
       what:`${what} at ${placeSay(place)}. They took ${gone}, and with ${stolen.size} of the ${policy.keys} seed${policy.keys===1?"":"s"} the wallet needs ${policy.threshold}. ${fmtBtc(taken)} left within the day.`,
-      why:"A seed backup is the coins. It sat in the same place as everything else, so one visit was enough to satisfy the wallet.",
+      why:kind==="seizure"?"A seed backup is the coins, and a box in a bank is the one place a government can open without asking you.":"A seed backup is the coins. It sat in the same place as everything else, so one visit was enough to satisfy the wallet.",
       remedy:policy.threshold>1?"Keep the keys of a quorum in different places: one stolen seed then spends nothing.":"A single seed in a single place is a single point of failure. Keep a second copy apart, and move the signer and the backup to different places.",tab:"custody"});
     return;
   }
@@ -313,4 +315,18 @@ function custodyOnRelocation(regionId,silent=false){
       why:"The signers travelled with the fleet and nothing else held the keys.",
       remedy:"Back every key up, and keep a backup in a place the fleet is not moving to.",tab:"custody"});
   } else if(!silent)showToast("Signers taken at the border",`${items.devices.length} device${items.devices.length===1?"":"s"} did not get through customs in ${dest.name}. ${custodyOperable()?"The keys can be restored from their backups onto new devices.":""}`,"bad","custody");
+}
+
+/* A BANK BOX IS IN A COUNTRY. When the country bans the business, what is in the box is within reach of the
+   people who just banned it. Only the one ban the game dates to a place it has a mine in (China, Sichuan) is
+   modelled, and only as a chance: a crackdown on mining is not an order to open every box. Nothing else
+   about a place changes, and a box in a region that is not the one banning is untouched. */
+const BAN_SEIZURE={china:{region:"sichuan",chance:.4}};
+function custodyOnRegionalBan(fx,silent=false){
+  const rule=BAN_SEIZURE[fx];
+  if(!rule||!state.custody||state.region!==rule.region)return false;
+  if(!placeHolds(placeItems("bank")))return false;
+  if(hashRoll(state.seed,"seizure",fx,state.time)>=rule.chance)return false;
+  applyPlaceIncident("bank","seizure",state.time,silent);
+  return true;
 }

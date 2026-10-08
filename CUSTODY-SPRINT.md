@@ -3,15 +3,15 @@
 A living list. Every workstream adds to **Open** whatever it noticed and did not fix, moves things to **Done**
 when they land, and records any decision that changes the plan. Read this before starting the next workstream.
 
-Plan: five workstreams, built and reviewed one at a time. Nothing is pushed until the user says so.
+Plan: five workstreams, built and reviewed one at a time. All five are pushed.
 
 | # | Workstream | State |
 |---|---|---|
 | 1 | The bill is a custody event (reach, fetch the reserve, rush, fee by weight) | pushed |
 | 2 | Places (devices and backups live somewhere; incidents hit places) | pushed |
-| 3 | People (key holders are staff; Security officer; rotation) | committed locally, awaiting review |
-| 4 | Counterparties (posture pricing, coin-theft cover, audit, BTC-secured loan) | committed locally; stock-take 2 done |
-| 5 | One Treasury tab | built, committed locally, awaiting review |
+| 3 | People (key holders are staff; Security officer; rotation) | pushed |
+| 4 | Counterparties (posture pricing, coin-theft cover, audit, BTC-secured loan) | pushed; stock-take 2 done |
+| 5 | One Treasury tab | pushed |
 
 ## When to take stock
 
@@ -34,18 +34,24 @@ the feature, a number that cannot be made to behave in simulation, or a decision
 | # | Point | From | When |
 |---|---|---|---|
 | 2 | Confirm on the Pixel 8a that the 3D floor no longer reverts (cause was throwaway WebGL probes; fixed and pushed) | 3D fix | the user, after trying it |
-| 6 | Pool payouts still use a flat fee that ignores the date, while spending from cold is priced by the real rate. Making payouts date-aware changes early-game economics, so it needs tuning | WS1 | still open: decided not to change early-game economics inside a custody workstream |
-| 9 | `settlementModal` is a base string patched by a chain of `.replace()` calls pinned by exact-text contracts; fragile. Consider one builder | WS1 | after the sprint |
-| 10 | Module budget: `simulation.js` 67.0K, `render.js` 66.6K, `actions.js` 66.3K, `mine-market.js` 66.8K of 70K | cross-cutting | every workstream |
-| 12 | Hot wallet stays single-key and instant; a hot-wallet policy is out of scope | plan | decide after WS4 |
-| 13 | Bank-box seizure after regional bans (uses the existing `fx` event hook) | plan | follow-up |
 
-| 21 | After a rotation the old signer still holds the retired key, so it cannot serve as a spare. A real operator wipes it. Needs a "wipe this signer" action | WS3 | small follow-up; low priority |
-| 23 | The security officer's other job (running an audit) arrives with WS4. Today the role only holds a key and halves insider risk | WS3 | WS4 |
-| 24 | A rotation cannot be rushed, and does not offer to start itself when somebody is dismissed | WS3 | only if play shows it is missed |
+Everything else that was open has been resolved; see the next section.
 
-| 28 | Only one loan against coins at a time, and no partial repayment. Both are simplifications | WS4 | only if play shows it is missed |
-| 29 | The lender-failure event applies to one real episode (Celsius, 12 June 2022). Voyager and BlockFi are not modelled separately | WS4 | probably leave |
+## Resolved after the sprint (the "get them all resolved" pass)
+
+| # | Point | Resolution |
+|---|---|---|
+| 6 | Pool payouts used a flat fee that ignored the date | **Fixed.** Every ordinary payment and pool payout is priced at 250 vB x the day's rate. Before 2017 a fixed-fee floor (80 sat/vB, which is exactly the 0.0002 BTC this game always charged) keeps the early economy unchanged; from 2017 the market sets it, so December 2017 costs about four times the old figure and 2025 about 1/20th. Node discounts and the 1.35x quorum premium are kept. Two rules: early years unchanged and spike/quiet/node ordering. |
+| 9 | `settlementModal` was a template patched by a chain of `.replace()` calls | **Fixed.** `src/ui/enhance/settlement.js` builds it from a list of options; the reserve and loan cards sit at the head. A contract requires every option's action to be handled. |
+| 10 | Module budget | **Eased.** `applyEvent` -> `event-effects.js`, `transactionPreview` -> `ui/transaction-preview.js`, `fleetServicingVisual` -> `ui/enhance/servicing.js`, and the settlement modal left `render.js`. simulation.js 65.3K, actions.js 57.3K, mine-market.js 58.4K, render.js 60.8K of 70K. |
+| 12 | Hot wallet stays single-key | **Decided, not built.** A hot wallet is the online convenience balance, and the game's lesson is to keep it small, not to give it a quorum. Cover, the reserve strip and the posture ladder already price it. A policy for it would be a second custody model with no decision attached to it. |
+| 13 | Bank-box seizure after regional bans | **Built.** The China ban of June 2021 can open a bank box when the mine is in Sichuan (40%, hash roll). Everything in it goes, steel included; enough seeds in it is a theft; cover excludes it. Other regions and an empty box are untouched. |
+| 21 | A retired key's signer could not be a spare | **Built.** "Wipe the signer" frees it; the backup is untouched and the key stays retired. |
+| 23 | The security officer's other job | Already done in WS4 (audits). |
+| 24 | A rotation could not be rushed or started for you | **Rush built** (half the days, never under two, 3x the sweep fee). Starting one automatically was **rejected**: it spends money and needs a choice of signer. The dismissal notice opens the Custody section where the rotate buttons are highlighted. |
+| 28 | One loan, no partial repayment | **Partial repayment built** (quarter, half, all: the same share of the coins comes back and the loan to value is unchanged). One loan at a time is a **decision**: the two lenders' terms differ and the call logic stays readable; repay part, top up and re-borrow covers the need. |
+| 29 | Only Celsius modelled | **Built.** A pledge goes to a named lender (Celsius, Voyager, BlockFi fail on their 2022 dates; Nexo and Ledn survive); only that lender's pledges are lost. Quorum loans have no lender to lose. Two new dated events. |
+| audit | The audit ($4,000, 14 days) and the posture discounts were left first-pass | **Checked.** At 0.35% cover the audited tier saves about 0.14% of holdings a year and the loan discount 0.1% of principal a month (1.2% a year), so an audit pays for itself only above roughly $3M held or $330k borrowed. That is the intent (a certificate is for a big operator), so the numbers stay. |
 
 ## Stock-take 2
 

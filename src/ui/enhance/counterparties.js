@@ -63,19 +63,19 @@ function securedLoanSummary(l){
   const ltv=securedLtv(),m=SECURED_MODES[l.mode],callIn=l.call?Math.max(0,Math.ceil((l.call.until-state.time)/DAY)):null;
   const bucket=l.mode==="collaborative"?"cold storage":"the hot wallet";
   return `<div class="metric-row">
-    <div class="metric"><div class="label">Owed</div><strong>${fmtUsd(l.principal)}</strong><small>${m.name} · ${(l.rate*100).toFixed(1)}% a month · ${fmtUsd(securedInterestMonthly())} on each bill</small></div>
+    <div class="metric"><div class="label">Owed</div><strong>${fmtUsd(l.principal)}</strong><small>${m.name}${l.lender&&securedLender(l.lender)?` with ${securedLender(l.lender).name}`:""} · ${(l.rate*100).toFixed(1)}% a month · ${fmtUsd(securedInterestMonthly())} on each bill</small></div>
     <div class="metric"><div class="label">Pledged</div><strong>${fmtBtc(securedPledgedBtc())}</strong><small>${l.pending?`${fmtBtc(l.pending.gross)} on its way, in ${Math.max(0,Math.ceil((l.pending.due-state.time)/DAY))} days`:l.mode==="collaborative"?"in a wallet the lender co-signs":"held by the lender"}</small></div>
     <div class="metric"><div class="label">Loan to value</div><strong class="${l.call?"profit-negative":""}">${l.pledged>0?Math.round(ltv*100)+"%":"—"}</strong><small>called at ${Math.round(m.callLtv*100)}%, sold at ${Math.round(m.liqLtv*100)}%</small></div></div>
     ${l.warned&&!l.call?`<div class="risk medium">Close to a margin call: the loan is at ${Math.round(ltv*100)}% of the coins' value and is called at ${Math.round(m.callLtv*100)}%.</div>`:""}
     ${l.call?`<div class="risk high">Margin call: repay or add coins within ${callIn} day${callIn===1?"":"s"}, or the lender sells.</div>`:""}
-    <div class="actions"><button class="action small ${l.call?"primary":""}" data-action="secured-repay" ${state.cash<l.principal||l.pending?`disabled title="${l.pending?"The pledge is still on its way":"You need "+fmtUsd(l.principal)}"`:""}>Repay ${fmtUsd(l.principal)}</button>
+    <div class="actions">${[.25,.5,1].map(sh=>{const pay=l.principal*sh,off=state.cash<pay||l.pending;return `<button class="action small ${l.call&&sh===1?"primary":""}" data-action="secured-repay" data-value="${sh}" ${off?`disabled title="${l.pending?"The pledge is still on its way":"You need "+fmtUsd(pay)}"`:`title="Returns ${Math.round(sh*100)}% of the coins${sh<1?" and keeps the same loan to value":""}."`}>${sh===1?`Repay ${fmtUsd(pay)}`:`Repay ${Math.round(sh*100)}% · ${fmtUsd(pay)}`}</button>`}).join("")}
     <button class="action small" data-action="secured-topup" data-value="0.25" ${l.pending||!(state.wallets[l.mode==="collaborative"?"cold":"hot"]>0)?"disabled":""}>Add 25% of ${bucket}</button></div>`;
 }
 function securedOffers(){
   return Object.values(SECURED_MODES).map(m=>{
     const reason=securedBlockReason(m.id),blurb=m.id==="collaborative"
       ?"The lender holds one key of your 2-of-3. It cannot move the coins on its own, and if it fails your coins do not move. The coins are swept into the wallet it co-signs, which takes days and a real fee."
-      :"You send the coins to the lender, at once, from the hot wallet. It needs nothing of your custody. It lends less and costs more, and the coins become a claim on a company.";
+      :"You send the coins to the lender, at once, from the hot wallet. It needs nothing of your custody. It lends less and costs more, and the coins become a claim on a company: one of several, picked for you, and you will not be told which of them is sound.";
     const buttons=reason?"":[.25,.5,1].map(f=>{const q=securedQuote(m.id,f,state,securedUseChoice);return `<button class="action small" data-action="secured-borrow" data-mode="${m.id}" data-value="${f}">Pledge ${Math.round(f*100)}% · ${fmtUsd(q.principal)}${q.days?` · ${q.days}d`:""}</button>`}).join("");
     return `<article class="venue"><div class="risk ${reason?"medium":"low"}">LENDS ${Math.round(m.ltv*100)}% · ${(securedRate(m.id)*100).toFixed(1)}% A MONTH</div><h3>${m.name}</h3><p>${blurb}</p>
       <p class="modal-note">Starts at ${Math.round(m.ltv*securedUseChoice*100)}% of the coins' value. Called at ${Math.round(m.callLtv*100)}%, sold at ${Math.round(m.liqLtv*100)}%, with a ${Math.round(SECURED_PENALTY*100)}% penalty.</p>
