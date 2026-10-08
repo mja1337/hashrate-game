@@ -415,3 +415,4 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--orange);outline-off
   .treasury-sections .mine-section{padding:7px 9px 8px}
   .treasury-sections .mine-section small{display:none}
 }
+@media(max-width:400px){.topbar{gap:6px;padding-left:10px;padding-right:10px}}
