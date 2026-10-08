@@ -1782,7 +1782,7 @@ rule("a save from before the coin count still opens, and its reserve is not free
    leave them unrecorded. */
 const PLACED_WALLET = (policy, keys, configPlace = "bank") => `
   setCustodyPolicy("${policy}");
-  state.custody.keys=[];state.custody.assigned=[];state.custody.devices=[];state.custody.moves=[];
+  state.custody.keys=[];state.custody.assigned=[];state.custody.devices=[];state.custody.moves=[];state.custody.restores=[];
   ${JSON.stringify(keys)}.forEach((spec,i)=>{
     const id="k"+i;
     state.custody.keys.push({id,seed:"s"+i,label:"KEY "+i,weakEntropy:false,
@@ -1857,6 +1857,44 @@ rule("a backup kept elsewhere is why a fire at the mine costs nothing", () => {
     return{held,after:state.wallets.hot+state.wallets.cold,operable:custodyOperable(),loss:pendingLoss(),backupAlive:!state.custody.keys[0].backup.destroyed};})()`);
   assert(r.operable && r.backupAlive, "a paper backup in a bank box was destroyed by a fire at the mine");
   assert(r.after === r.held && !r.loss, "coins were lost although the only backup was somewhere else");
+});
+
+rule("restoring a key takes as long as fetching its backup: the safest place is the slowest to recover from", () => {
+  const restoreFrom = place => json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${PLACED_WALLET("single", [{device:"site",backup:place,steel:true}])}
+    state.custody.devices[0].destroyed={cause:"fire"};
+    state.custody.devices.push({uid:"dNew",product:"trezorone",supplier:"trezor",boughtAt:0,keyId:null,place:"site"});
+    restoreCustodyKey("dNew","k0");
+    const d=state.custody.devices[1],start={live:custodyKeyLive(state.custody.keys[0]),restoring:d.restoring||null,reason:coldSpendBlockReason(),
+      jobs:custodyRestores().length,days:custodyRestores()[0]?custodyRestores()[0].days:0};
+    let t=0;while(custodyRestores().length&&t<20){tick(true);t++}
+    return{start,t,live:custodyKeyLive(state.custody.keys[0]),keyId:d.keyId,restoring:d.restoring||null,reasonAfter:coldSpendBlockReason()};})()`);
+  const mine = restoreFrom("site"), none = restoreFrom(undefined), home = restoreFrom("home"), bank = restoreFrom("bank");
+  assert(mine.start.live && mine.start.jobs === 0, "a backup at the mine took time to restore from");
+  assert(none.start.live && none.start.jobs === 0, "a backup with no recorded place took time to restore from, so an old save changed");
+  assert(home.start.days === 1 && bank.start.days === 2, `a backup at home took ${home.start.days} days and one in a bank ${bank.start.days}`);
+  assert(!bank.start.live && bank.start.restoring === "k0" && /signer is gone|way/i.test(bank.start.reason), `the wallet could sign while its key was being fetched: "${bank.start.reason}"`);
+  assert(bank.t >= 2 && bank.live && bank.keyId === "k0" && !bank.restoring && bank.reasonAfter === "", `the key was not on the signer once the backup arrived: ${JSON.stringify(bank)}`);
+});
+
+rule("a signer being restored onto is not a spare, and a backup on a journey cannot be restored from", () => {
+  const r = json(`(()=>{
+    ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    ${PLACED_WALLET("single", [{device:"site",backup:"bank",steel:true}])}
+    state.custody.devices[0].destroyed={cause:"fire"};
+    state.custody.devices.push({uid:"dNew",product:"trezorone",supplier:"trezor",boughtAt:0,keyId:null,place:"site"});
+    restoreCustodyKey("dNew","k0");restoreCustodyKey("dNew","k0");
+    const spareWhileRestoring=rotateBlockReason("k0","dNew"),twice=custodyRestores().length;
+    ${PLACED_WALLET("single", [{device:"site",backup:"bank",steel:true}])}
+    state.custody.devices[0].destroyed={cause:"fire"};
+    state.custody.devices.push({uid:"dNew",product:"trezorone",supplier:"trezor",boughtAt:0,keyId:null,place:"site"});
+    state.custody.keys[0].backup.place="transit";
+    restoreCustodyKey("dNew","k0");
+    return{spareWhileRestoring,twice,journey:{jobs:custodyRestores().length,keyId:state.custody.devices[1].keyId}};})()`);
+  assert(r.twice === 1, `restoring onto the same signer twice started ${r.twice} jobs`);
+  assert(/not available/i.test(r.spareWhileRestoring), `a device being restored onto was offered as a spare for a rotation: "${r.spareWhileRestoring}"`);
+  assert(r.journey.jobs === 0 && r.journey.keyId === null, "a key was restored from a backup that was on a journey");
 });
 
 rule("a copy of the descriptor in another place survives the fire that takes the first", () => {
@@ -2001,17 +2039,21 @@ rule("a save from before places still opens, and its keys price as they did", ()
   dirty.custody.devices = [{uid:"d9",product:"trezorone",supplier:"trezor",boughtAt:0,keyId:"k1",place:"the moon"}];
   dirty.custody.keys[0].backup.place = "mars";
   dirty.custody.configPlace = "nowhere";
+  // A signer marked as being restored onto with no job to finish it would be reserved for ever.
+  dirty.custody.devices[0].restoring = "k1";dirty.custody.restores = [{uid:"gone",keyId:"k1",due:1},"junk"];
   for (const [name, input] of [["fixture", save], ["damaged", dirty]]) {
     const loaded = loadWithSave(input);
     assert(loaded.ok, `the ${name} save could not be opened: ${loaded.message}`);
     const read = makeEval(loaded.sandbox);
     const r = JSON.parse(read(`JSON.stringify({placed:custodySetup().placed,fragile:custodySetup().fragile,
       devicePlace:state.custody.devices[0]?state.custody.devices[0].place:null,backupPlace:state.custody.keys[0].backup.place,
-      configPlace:state.custody.configPlace,moves:Array.isArray(state.custody.moves),days:coldSpendDays()})`));
+      configPlace:state.custody.configPlace,moves:Array.isArray(state.custody.moves),days:coldSpendDays(),
+      restoring:state.custody.devices[0]?state.custody.devices[0].restoring||null:null,restores:custodyRestores().length})`));
     assert(!r.placed && !r.fragile, `the ${name} save was treated as having places`);
     assert(r.moves, `the ${name} save has no list of journeys`);
     assert(r.devicePlace == null && r.backupPlace == null && r.configPlace == null, `the ${name} save kept a place that does not exist`);
     assert(r.days === 2, `the ${name} 2-of-3 save takes ${r.days} days to sign`);
+    assert(r.restoring === null && r.restores === 0, `the ${name} save left a signer reserved for a restore that no longer exists`);
   }
 });
 

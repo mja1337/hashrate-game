@@ -156,7 +156,7 @@ function rotateBlockReason(keyId,deviceUid,s=state){
   const c=s.custody,key=custodyKey(keyId),device=custodyDevice(deviceUid);
   if(custodyRotation(c))return "A rotation is already under way.";
   if(!key||!c.assigned.includes(keyId))return "Only a key in the wallet can be rotated.";
-  if(!device||device.destroyed||device.place==="transit")return "That signer is not available.";
+  if(!device||device.destroyed||device.restoring||device.place==="transit")return "That signer is not available.";
   if(device.keyId)return "Generate the new key on a signer that holds none, or the two keys will not be independent.";
   return "";
 }

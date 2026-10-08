@@ -23,7 +23,7 @@ function custodyExposureRisk(){
 
 /* A spare signer a replacement key could be generated on. */
 function custodySpareSigners(){
-  return (state.custody.devices||[]).filter(d=>!d.destroyed&&!d.keyId&&d.place!=="transit");
+  return (state.custody.devices||[]).filter(d=>!d.destroyed&&!d.keyId&&!d.restoring&&d.place!=="transit");
 }
 
 function custodyHolderControls(key){

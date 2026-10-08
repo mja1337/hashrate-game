@@ -161,6 +161,9 @@ function normalizeCustodyPlaces(c){
   if(c.configPlace!==undefined&&!ok(c.configPlace))delete c.configPlace;
   c.configCopies=(Array.isArray(c.configCopies)?c.configCopies:[]).filter(p=>ok(p)&&p!=="transit");
   c.moves=(Array.isArray(c.moves)?c.moves:[]).filter(m=>m&&ok(m.to)&&m.to!=="transit"&&Number.isFinite(Number(m.due))&&typeof m.kind==="string");
+  // A restore under way needs a device to put the key on; one whose device has gone, or that is already a signer, is dropped.
+  c.restores=(Array.isArray(c.restores)?c.restores:[]).filter(r=>r&&Number.isFinite(Number(r.due))&&(c.devices||[]).some(d=>d.uid===r.uid&&!d.keyId));
+  (c.devices||[]).forEach(d=>{if(d.restoring&&!c.restores.some(r=>r.uid===d.uid))delete d.restoring});
   // Something marked in transit with no journey under way would be stuck there for ever.
   const travelling=(kind,id)=>c.moves.some(m=>m.kind===kind&&m.id===id);
   (c.devices||[]).forEach(d=>{if(d.place==="transit"&&!travelling("device",d.uid))d.place="site"});

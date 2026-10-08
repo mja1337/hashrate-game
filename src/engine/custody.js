@@ -287,7 +287,18 @@ function generateCustodyKey(uid){
    the wallet still counts one key however many enclosures are holding it. */
 function restoreCustodyKey(uid,keyId){
   const device=custodyDevice(uid),key=custodyKey(keyId);
-  if(!device||!key||device.keyId)return;
+  if(!device||!key||device.keyId||device.restoring)return;
+  /* The seed is on its backup, and the backup is somewhere. Fetching it takes the days that place takes, so
+     the safest place is the slowest to recover from; at the mine, or with no place recorded, it is at once. */
+  const days=custodyRestoreDays(key);
+  if(days<0)return showToast("The backup is on a journey","It has to arrive before a key can be restored from it.","bad","custody");
+  if(days>0){
+    device.restoring=key.id;
+    custodyRestores().push({uid,keyId:key.id,started:state.time,due:state.time+days*DAY,days});
+    log(`Restoring ${key.label} from its backup`,`${custodyPlaceName(key.backup.place)} · ${days} day${days===1?"":"s"}`,"custody");
+    showToast("Fetching the backup",`${key.label}'s backup is at ${placeSay(key.backup.place)}. It takes ${days} day${days===1?"":"s"} to fetch and restore, and the wallet cannot sign with this key until it is done.`,"info","custody");
+    save();render();return;
+  }
   device.keyId=key.id;
   log(`Restored ${key.label} to a second device`,"Still one key, on two devices","custody");
   showToast("Seed restored",`${key.label} is now on two devices. That is still one key: a wallet cannot count it twice.`,"notice","custody");

@@ -50,13 +50,15 @@ function placeUnrecorded(){
 }
 /* Keys whose signer is gone but whose backup survives: the way back is a new device. */
 function placeRestoreRows(){
-  const c=state.custody,spare=(c.devices||[]).filter(d=>!d.destroyed&&!d.keyId);
+  const c=state.custody,spare=(c.devices||[]).filter(d=>!d.destroyed&&!d.keyId&&!d.restoring);
   return custodyAssignedKeys().filter(k=>!custodyKeyLive(k)&&custodyKeyRestorable(k)).map(k=>
     `<div class="incoming-fleet-row"><div class="incoming-fleet-name"><b>${k.label} has no working signer</b><small>Its backup survives. Restore it onto a device with no key on it.</small>
-      <div class="actions">${spare.length?spare.map(d=>`<button class="action small primary" data-action="custody-restore-key" data-id="${d.uid}" data-value="${k.id}">Restore onto ${custodyProduct(d.product)?.name||"a new device"}</button>`).join(""):`<span class="modal-note">Buy or build a signer first.</span>`}</div></div></div>`).join("");
+      <div class="actions">${spare.length?spare.map(d=>`<button class="action small primary" data-action="custody-restore-key" data-id="${d.uid}" data-value="${k.id}">Restore onto ${custodyProduct(d.product)?.name||"a new device"}${custodyRestoreDays(k)>0?` · ${custodyRestoreDays(k)}d`:""}</button>`).join(""):`<span class="modal-note">Buy or build a signer first.</span>`}</div></div></div>`).join("");
 }
 function placeJourneyRows(){
-  return custodyMoves().map(m=>{const ref=custodyItemRef(m.kind,m.id);
+  const restoring=custodyRestores().map(r=>{const k=custodyKey(r.keyId);
+    return `<div class="incoming-fleet-row"><div class="incoming-fleet-name"><b>Restoring ${k?k.label:"a key"} from its backup</b><small>${Math.max(0,Math.ceil((r.due-state.time)/DAY))}d remaining · the backup is being fetched from ${k&&k.backup?placeSay(k.backup.place):"where it is kept"}</small></div></div>`}).join("");
+  return restoring+custodyMoves().map(m=>{const ref=custodyItemRef(m.kind,m.id);
     return `<div class="incoming-fleet-row"><div class="incoming-fleet-name"><b>${ref?ref.name:"Item"} → ${custodyPlaceName(m.to)}</b><small>${Math.max(0,Math.ceil((m.due-state.time)/DAY))}d remaining · nowhere until it arrives, and cannot sign</small></div></div>`}).join("");
 }
 

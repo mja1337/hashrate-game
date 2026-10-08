@@ -581,6 +581,7 @@ function tick(silent=false){
   advancePoolPayouts();
   advanceColdSpends(silent);
   advanceCustodyMoves(silent);
+  advanceRestores(silent);
   advanceInsiderRisk(next);
   advanceRotation(silent);
   advanceAudit(silent);

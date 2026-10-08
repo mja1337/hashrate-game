@@ -68,10 +68,10 @@ Two numbers I could not settle from data and have left first-pass: the audit ($4
 posture-to-premium and rate discounts. Both are small next to the figures above and nothing in the data argues for
 moving them.
 
-**A design question for the user, not decided here:** a bank box dominates because nothing makes the safest place
-cost anything where it hurts. The honest fix is that restoring a key from a backup should take the backup's access
-days (two days from a bank, none at the mine), so a fire just before a bill makes the distance matter. It is a new
-mechanic, not a number, so it is not in this pass.
+**Decided with the user, and built:** a bank box dominated because nothing made the safest place cost anything where it hurts.
+Restoring a key from a backup now takes the backup's access days (two from a bank or a trusted person's house, one from
+home, none at the mine or with no place recorded), during which the wallet cannot sign with that key. A fire just before a
+bill now makes the distance matter, and an old save restores as instantly as it always did.
 
 ## Closed in the fix-up pass (before pushing WS1 and WS2)
 
@@ -103,6 +103,7 @@ mechanic, not a number, so it is not in this pass.
   audits run by the security officer; coin cover priced and paid by posture, refusing neglect, paid inside
   `reportCoinLoss`; two ways to borrow against coins (collaborative custody and a full-custody pledge) with margin calls,
   liquidation, interest in the bill, both usable to pay a settlement; the 2022 lender failure; the Market's reserve note.
+- Restoring a key takes the backup's access days (the user's call after stock-take 2).
 - Stock-take 2: cover repriced from 1.5% to 0.35% a year; loans can be sized below the limit and warn five points before a
   call; settlement loans start at 60% of the limit; net worth subtracts the operating loan.
 - WS3: holders (owner, treasury manager, security officer, field technician), dismissal exposes every key a person ever

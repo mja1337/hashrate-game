@@ -410,6 +410,10 @@ assert(inline.includes('else if(a==="custody-move")moveCustodyItem(b.dataset.kin
   "The move and restore buttons on the places card are not wired to anything");
 assert(inline.includes("function custodyKeyRestorable(key)") && inline.includes("function custodyConfigLocations(c)"),
   "The places card calls a helper that no longer exists, and the custody tab stops drawing");
+assert(inline.includes("advanceRestores(silent);") && inline.includes("const days=custodyRestoreDays(key);"),
+  "A key restored from a backup no longer takes the days the backup's place takes, so the safest place costs nothing to recover from");
+assert(inline.includes('${custodyRestoreDays(k)>0?` · ${custodyRestoreDays(k)}d`:""}'),
+  "The restore button no longer says how many days fetching the backup will take");
 assert(inline.includes("advancePlaceRisks(next,silent);") && inline.includes("advanceCustodyMoves(silent);") && inline.includes("function advanceOperationalRisks(next,silent=false)"),
   "Place incidents or journeys are no longer advanced by the tick, or ignore silent catch-up");
 assert(inline.includes("enforceConnectivityAvailability();custodyOnRelocation(job.id);") && inline.includes("custodyRelocationNotice();save();render();"),

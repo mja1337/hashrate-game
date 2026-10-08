@@ -36,7 +36,10 @@ const PLACE_THEFT_FLOOR=.5,PLACE_THEFT_SPREAD=.4;
 
 function custodyMoves(c=state.custody){return c.moves||(c.moves=[])}
 /* A place's name as it reads in the middle of a sentence: "at the mine", not "at The mine". */
-function placeSay(place){const name=typeof place==='string'?custodyPlaceName(place):place.name;return name.replace(/^The /,"the ")}
+function placeSay(place){
+  const id=typeof place==="string"?place:place.id;
+  return {site:"the mine",home:"home",bank:"the bank deposit box",trusted:"a trusted person's house",transit:"on its way"}[id]||custodyPlaceName(id).replace(/^The /,"the ");
+}
 
 /* ---- what survives ------------------------------------------------------------------ */
 
@@ -99,6 +102,31 @@ function custodyPlaceSummary(s=state){
     if(members.every(m=>custodySurvives(s,id=>id===m.id)))return{placed,fragile:true,fragileAt:place};
   }
   return{placed,fragile:false,fragileAt:null};
+}
+
+/* ---- restoring a key from its backup -------------------------------------------------------- */
+
+function custodyRestores(c=state.custody){return c.restores||(c.restores=[])}
+/* Days to fetch a key's backup: the days its place takes. -1 if it is on a journey; 0 where nothing says it
+   is anywhere, so every save and rule from before places behaves exactly as it did. */
+function custodyRestoreDays(key){
+  const b=key.backup;
+  if(!b||b.destroyed||!b.place)return 0;
+  if(b.place==="transit")return -1;
+  return placeAccess(custodyPlaceId(b.place));
+}
+function advanceRestores(silent=false){
+  const c=state.custody;if(!c)return;
+  c.restores=custodyRestores(c).filter(job=>{
+    if(pendingAt(job,state.time))return true;
+    const device=custodyDevice(job.uid),key=custodyKey(job.keyId);
+    if(device){delete device.restoring;if(key&&!device.destroyed&&!device.keyId){
+      device.keyId=key.id;
+      log(`${key.label} restored`,"The seed is on a signer again","custody");
+      if(!silent)showToast("Key restored",`${key.label} is on a working signer again.`,"success","custody");
+      renderFullQueued=true}}
+    return false;
+  });
 }
 
 /* ---- how long it takes ---------------------------------------------------------------- */
