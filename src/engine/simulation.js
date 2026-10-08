@@ -386,6 +386,7 @@ function advanceOperationalRisks(next,silent=false){
   const month=new Date(next).toISOString().slice(0,7);if(state.ops.riskMonth===month)return;state.ops.riskMonth=month;
   advanceCustodyRisks(next,silent);
   advancePlaceRisks(next,silent);
+  if(typeof advanceHotKeyRisk==="function")advanceHotKeyRisk(next,silent);
   advanceCoinCover(next,silent);
   advanceHotWalletRisk();
   if(firmwarePatchDue()&&!firmwareHijacked()&&nextRand()<firmwareHijackRisk()){state.ops.hijackUntil=next+DAY*(10+Math.floor(nextRand()*21));log("ASIC fleet hijacked","35% of hash diverted");showToast("Firmware compromise","Unpatched ASIC firmware is pointing part of your hash rate to an attacker. Patch it now.","bad");}

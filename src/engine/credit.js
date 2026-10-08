@@ -45,6 +45,7 @@ function custodyPostureFindings(s=state){
   const set=custodySetup(s),out=[],add=(id,text,blocks)=>out.push({id,text,blocks});
   if(!set.ready)add("unsigned","No wallet can sign yet: not every key the policy needs is assigned.","basic");
   else if(!custodyRecoverable(s))add("unrecoverable","The wallet could not be rebuilt if a signer were lost: a backup or the quorum's configuration is missing.","basic");
+  if(typeof hotKeyUnbacked==="function"&&hotKeyUnbacked(s))add("hotkey","The key to your online wallet exists only on the mining computer: one dead disk takes everything in it.","strong");
   if(set.exposed>0)add("exposed","A key of this wallet is known to somebody else. Replace it.","strong");
   if(custodyAssignedKeys(s).some(k=>k.weakEntropy))add("weak","A key was generated from a seed with a known flaw. Replace it.","strong");
   if(set.ready&&!set.placed)add("unplaced","Nothing records where the keys are kept, so nobody can say what a fire would take.","strong");

@@ -93,6 +93,7 @@ function advanceHotWalletRisk(){
   if(lost<=0)return;
   state.wallets.hot=Math.max(0,state.wallets.hot-lost);
   log("Hot-wallet key compromise",`-${fmtBtc(lost)} · cold storage unaffected`,"custody");
+  if(typeof hotKeyCompromised==="function")hotKeyCompromised();
   reportCoinLoss({
     title:"Your hot wallet was emptied",kind:"stolen",btc:lost,cause:"hotwallet",
     from:"the online hot wallet",

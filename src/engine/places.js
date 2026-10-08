@@ -175,7 +175,8 @@ function placeRate(placeId,kind,s=state){
 /* ---- the monthly roll ------------------------------------------------------------------ */
 
 function strandSelfHeld(cause,next){
-  const hot=state.wallets.hot||0,cold=state.wallets.cold||0,held=hot+cold;if(held<=0)return 0;
+  // The online wallet has its own key and its own fate; what is stranded here is what the wallet policy held.
+  const hot=typeof hotKey==="function"&&hotKey()?0:(state.wallets.hot||0),cold=state.wallets.cold||0,held=hot+cold;if(held<=0)return 0;
   const lost=held*(PLACE_STRAND_FLOOR+PLACE_STRAND_SPREAD*hashRoll(state.seed,"strand",cause,next));
   state.wallets.hot=Math.max(0,hot-lost*hot/held);state.wallets.cold=Math.max(0,cold-lost*cold/held);
   return lost;
@@ -195,7 +196,12 @@ function advancePlaceRisks(next,silent=false){
 
 const PLACE_KIND_WORDS={fire:["A fire","burned"],flood:["A flood","flooded"],burglary:["A break-in","was broken into"],seizure:["A seizure","was opened by the authorities"]};
 
+/* An incident reaches the first key too, if the computer it lives on is at the mine, or the seed backup was what was taken. */
 function applyPlaceIncident(placeId,kind,next,silent=false){
+  applyPlaceIncidentBase(placeId,kind,next,silent);
+  if(typeof hotKeyAfterIncident==="function")hotKeyAfterIncident(placeId,kind,next,silent);
+}
+function applyPlaceIncidentBase(placeId,kind,next,silent=false){
   const c=state.custody,place=custodyPlace(placeId),policy=custodyPolicy(c.policy),items=placeItems(placeId);
   const before=custodyOperable(),assigned=new Map(custodyAssignedKeys().map(k=>[k.id,k.seed||k.id]));
   const lost={devices:[],backups:[],config:0},stolen=new Set(),kept=[];

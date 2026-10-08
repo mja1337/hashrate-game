@@ -40,6 +40,8 @@
 - `src/engine/credit.js` — what borrowing costs and what a lender or insurer sees: the operating loan's rate (one function, not seven), the custody posture, the audit, and coin cover. Claims are paid inside `reportCoinLoss`, so no incident has to know that cover exists.
 - `src/engine/lending.js` — borrowing against the coins themselves: collaborative custody and a full-custody pledge, margin calls and liquidation, and what a lender failing does to each. No dice: a call and a sale are functions of the price.
 - `src/ui/tabs/treasury.js` — the Treasury: Market, Custody and Finance as sections of one tab, with a position strip above them and a sticky section bar. `openTab()` turns every name those sections ever had into the Treasury plus the right section, so no toast, loss notice, banner or menu entry had to change; `activeTabKey()` is what help text, orientation copy, enhancers and live patching are keyed on. A contract scans the source for every tab name and requires each to resolve.
+- `src/engine/hotkey.js` — the first key: the software key behind the online wallet, which lives on the mining computer and meets what meets the mine. Not part of any wallet policy; a run without one behaves as before.
+- `src/ui/enhance/hotkey.js` — the online wallet's card on the Custody section.
 - `src/ui/enhance/counterparties.js` — the posture, the audit, cover and the loan on the custody tab.
 - `src/ui/enhance/settlement.js` — the monthly settlement modal, built from a list of options (the reserve and loan cards from the Treasury sit first), not from a template patched by string replacement.
 - `src/ui/enhance/servicing.js` — the fleet servicing panel on the Mine tab.

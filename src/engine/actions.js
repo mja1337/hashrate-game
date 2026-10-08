@@ -363,12 +363,15 @@ function skipWalletSetup(){
   if(state.walletSetup.demo){completeWalletSetup();return}
   const rolls=[];for(let i=0;i<99;i++)rolls.push(Math.floor(nextRand()*6)+1);
   state.walletSetup.rolls=rolls;state.walletSetup.keyHex=deriveWalletKeyHex(rolls);
-  completeWalletSetup();
+  // Show the result and offer the backup, as the dice do: the key is real now, and what is done with it is a choice.
+  state.walletSetup.step=2;save();render();
 }
-function completeWalletSetup(){
+function completeWalletSetup(withBackup=false){
   if(state.walletSetup.done)return;
   const tier=walletSoftwareTierAt(state.campaignStart);
   if(!state.walletSetup.demo)state.walletSoftware=tier;state.walletSetup.done=true;
+  // The key the ceremony made is a real key: the one behind the online wallet.
+  if(!state.walletSetup.demo&&typeof createHotWallet==="function")createHotWallet({keyHex:state.walletSetup.keyHex,backup:!!withBackup});
   if(!state.walletSetup.demo)log("Game wallet ready",`Installed ${WALLET_SOFTWARE[tier].name} · illustrative keys only`,"custody");
   state.speed=state.walletSetup.demo?(state.walletSetup.resumeSpeed||0):(typeof state.walletSetup.resumeSpeed==="number"?state.walletSetup.resumeSpeed:1);save();setTimer();render();
 }

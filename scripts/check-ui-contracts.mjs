@@ -391,6 +391,12 @@ assert(inline.includes("state.walletSetup&&state.walletSetup.required&&!state.wa
   const versions = [...inline.matchAll(/title:"Alpha (\d+)\.(\d+) /g)].map(m => Number(m[1]) * 1000 + Number(m[2]));
   assert(versions.every((v, i) => i === 0 || versions[i - 1] >= v), "The changelog is out of order: versions must not increase as you read down");
 }
+assert(inline.includes("createHotWallet({keyHex:state.walletSetup.keyHex,backup:!!withBackup})") && inline.includes('else if(a==="wallet-setup-done")completeWalletSetup(v==="backup");') && inline.includes('data-action="wallet-setup-done" data-value="backup"'),
+  "The ceremony's key is no longer made into a real key, or the player is no longer offered a backup of it");
+assert(/function skipWalletSetup\(\)\{[\s\S]*?state\.walletSetup\.step=2;save\(\);render\(\);\s*\}/.test(inline),
+  "Letting the game generate the key skips the page that shows it and offers the backup");
+assert(inline.includes('typeof hotWalletCard==="function"?hotWalletCard():""') && inline.includes("function hotWalletCard()") && inline.includes('if(key.hot)return showToast("That is your online wallet"'),
+  "The online wallet's card is not on the Custody section, or its key can be assigned into a wallet policy");
 for (const act of ["settle-btc","settle-liquidate","settle-bridge","settle-defer","settle-receivership"]) {
   assert(inline.includes(`action:"${act}"`) && inline.includes(`a==="${act}"`),
     `The settlement modal offers "${act}" but the click handler does not know it, or the modal stopped offering it`);

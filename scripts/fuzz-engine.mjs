@@ -37,6 +37,8 @@ for (const seed of SEEDS) {
     state.custody.devices.push({uid:"d4",product:"trezorone",supplier:"trezor",boughtAt:state.time,keyId:null,place:"site"});
     state.custody.configBackedUp=true;state.custody.configPlace="site";state.custody.seq=7;
     state.wallets.hot=20;state.wallets.cold=80;
+    // The online wallet has a key of its own: a run from the ceremony has one, and its fate is separate from the quorum.
+    createHotWallet({keyHex:"0123456789abcdef"});
     /* The engine keeps its OWN random stream — faults, events, weather, market noise — and
        initialState() seeds it from Math.random(). Seeding only the action chooser made a run
        half-reproducible: the same actions every time, a different world each time. A failing
@@ -105,6 +107,11 @@ for (const seed of SEEDS) {
       ()=>{const k=((state.custody&&state.custody.keys)||[]).filter(x=>x.backup);if(k.length)moveCustodyItem("backup",pick(k).id,pick(["site","home","bank","trusted"]))},
       ()=>moveCustodyItem("configcopy","config",pick(["site","home","bank","trusted"])),
       ()=>applyPlaceIncident(pick(["site","home","bank","trusted"]),pick(["fire","flood","burglary","seizure"]),state.time,true),
+      // The first key: written down, lost to a dead disk, taken by a thief, and the monthly roll.
+      ()=>{const k=hotKey();if(k&&!k.backup)backupCustodyKey(k.id,"paperbackup")},
+      ()=>hotKeyLost(pick(["disk","fire","flood"]),state.time,true),
+      ()=>hotKeyStolen(pick(["burglary","seizure"]),state.time,true),
+      ()=>advanceHotKeyRisk(state.time+rnd()*400*DAY,true),
       // A retired key's signer wiped, and a ban that can open a bank box.
       ()=>{const k=((state.custody&&state.custody.keys)||[]).filter(x=>x.retired);if(k.length)wipeCustodySigner(pick(k).id)},
       ()=>custodyOnRegionalBan("china",true),

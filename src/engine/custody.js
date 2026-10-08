@@ -90,7 +90,7 @@ function custodyLossRisk(s=state){
   const held=(s.wallets?.hot||0)+(s.wallets?.cold||0);
   if(held<=0||s.time<at("2011-01-01"))return 0;
   const set=custodySetup(s);
-  if(!set.ready)return .0018;                        // no managed setup: whatever you scrawled
+  if(!set.ready)return typeof hotKey==="function"&&hotKey(s)?0:.0018;   // no managed setup: whatever you scrawled (the online wallet's own key has its own risk)
   let risk=.0016;
   if(set.unbacked===0)risk*=.35;                     // every key written down somewhere
   if(set.steelBacked>=set.assigned.length)risk*=.45; // and written down on something durable
@@ -333,6 +333,7 @@ function assignCustodyKey(keyId){
   const c=state.custody,policy=custodyPolicy(c.policy),key=custodyKey(keyId);
   if(!key)return;
   if(key.retired)return showToast("That key is retired","It was replaced because somebody else may know it. Putting it back would undo the rotation.","bad","custody");
+  if(key.hot)return showToast("That is your online wallet","The key behind your online wallet lives on the mining computer. A wallet policy needs keys on signers of their own.","bad","custody");
   if(c.assigned.includes(keyId))return;
   if(c.assigned.length>=policy.keys)return showToast("Wallet is full",`${policy.name} takes ${policy.keys} key${policy.keys===1?"":"s"}.`);
   const seeds=custodyAssignedKeys().map(k=>k.seed);
@@ -397,7 +398,7 @@ function advanceEntropyDrain(next){
 function advanceCustodyRisks(next,silent=false){
 const lossRisk=custodyLossRisk();
 if(lossRisk>0&&nextRand()<lossRisk){
-  const held=(state.wallets.hot||0)+(state.wallets.cold||0);
+  const held=(typeof hotKey==="function"&&hotKey()?0:(state.wallets.hot||0))+(state.wallets.cold||0);
   if(custodyRecoverable()){
     // The accident happened; the backups answered it. This is what they are for.
     const set=custodySetup();
@@ -409,7 +410,7 @@ if(lossRisk>0&&nextRand()<lossRisk){
       `The device is gone. ${set.policy.threshold>1?"Two of three keys and the wallet configuration":"The seed backup"} rebuilt the wallet for ${fmtUsd(effort)}.`,"notice","custody");
   } else {
     const lost=held*(.35+nextRand()*.4);
-    const hotShare=held>0?(state.wallets.hot||0)/held:0;
+    const hotShare=held>0&&!(typeof hotKey==="function"&&hotKey())?(state.wallets.hot||0)/held:0;
     state.wallets.hot=Math.max(0,state.wallets.hot-lost*hotShare);
     state.wallets.cold=Math.max(0,state.wallets.cold-lost*(1-hotShare));
     log("Self-held coins became unrecoverable",`-${fmtBtc(lost)} · no usable backup`,"custody");

@@ -27,7 +27,7 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(a==="dice-roll")rollDie();
   else if(a==="dice-finish")finishRolling();
   else if(a==="wallet-setup-skip")skipWalletSetup();
-  else if(a==="wallet-setup-done")completeWalletSetup();
+  else if(a==="wallet-setup-done")completeWalletSetup(v==="backup");
   else if(a==="upgrade-wallet-software")upgradeWalletSoftware();
   else if(a==="claim-faucet")claimFaucet();
   else if(a==="start-learning")startLearning(id);

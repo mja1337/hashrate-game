@@ -46,7 +46,7 @@ function custodyDevicesCard(){
         ${key&&assigned?`<button class="action small" data-action="custody-unassign" data-id="${key.id}">Remove from wallet</button>`:""}
       </div>${key?custodyHolderControls(key):""}</article>`;
   }).join("");
-  return `<section class="card span-12"><div class="card-head"><h2>Devices you own</h2><div class="meta">${devices.length} DEVICE${devices.length===1?"":"S"} · ${new Set(c.keys.map(k=>k.seed)).size} DISTINCT KEY${new Set(c.keys.map(k=>k.seed)).size===1?"":"S"}</div></div>
+  return `<section class="card span-12"><div class="card-head"><h2>Devices you own</h2><div class="meta">${devices.length} DEVICE${devices.length===1?"":"S"} · ${new Set(c.keys.filter(k=>!k.hot).map(k=>k.seed)).size} DISTINCT KEY${new Set(c.keys.filter(k=>!k.hot).map(k=>k.seed)).size===1?"":"S"}</div></div>
   <div class="card-pad">${custodyRotationRows()}<div class="venue-grid">${devices.length?rows:`<p class="modal-note">No custody hardware yet. A device is not custody on its own — it becomes custody when a key is generated on it and that key is assigned to a wallet.</p>`}</div></div></section>`;
 }
 
@@ -83,5 +83,5 @@ function custodyShopCard(){
 function enhanceKeys(){
   const grid=document.querySelector(".content .grid");if(!grid)return;
   if(grid.querySelector(".key-workbench"))return;
-  grid.insertAdjacentHTML("beforeend",`${custodyReadinessCard()}${custodyDevicesCard()}${custodyPlacesCard()}${custodyCounterpartiesCard()}${custodyShopCard()}`);
+  grid.insertAdjacentHTML("beforeend",`${typeof hotWalletCard==="function"?hotWalletCard():""}${custodyReadinessCard()}${custodyDevicesCard()}${custodyPlacesCard()}${custodyCounterpartiesCard()}${custodyShopCard()}`);
 }

@@ -4027,6 +4027,104 @@ rule("the only machine you own can still be stopped and retired", () => {
   assert(r.booked === 1, `the single machine could not be retired (${r.booked} booked)`);
 });
 
+/* ---- the first key ---------------------------------------------------------------------- */
+
+const HOT_RUN = (backup = false, extra = "") => `
+  ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";state.wallets.cold=0;${extra}`)}
+  createHotWallet({keyHex:"abcdef0123456789",backup:${backup}});`;
+
+rule("the key the ceremony makes is a real key: in the list, on the computer, and never part of a wallet policy", () => {
+  const r = json(`(()=>{${HOT_RUN(false)}
+    const k=hotKey();const before=[...state.custody.assigned];
+    assignCustodyKey(k.id);
+    return{k,keys:state.custody.keys.length,devices:state.custody.devices.length,assignedAfter:[...state.custody.assigned],before,
+      ready:custodySetup().ready,backed:hotKeyBackedUp(),again:createHotWallet({})};})()`);
+  assert(r.k && r.k.hot === true && r.k.fingerprint === "abcdef01" && r.k.deviceUid === null, `the first key is not a key on the computer: ${JSON.stringify(r.k)}`);
+  assert(r.devices === 0 && r.keys === 1, "making the first wallet bought a device or a second key");
+  assert(r.assignedAfter.length === 0 && r.ready === false, "the online wallet's key was put into the wallet policy, so a software key became the reserve");
+  assert(r.backed === false && r.again === null, "a second online wallet was made, or a wallet with no backup reported one");
+  const backed = json(`(()=>{${HOT_RUN(true)}return{backed:hotKeyBackedUp(),b:hotKey().backup}})()`);
+  assert(backed.backed && backed.b.place === "home" && backed.b.durability === "paper", "writing it down did not make a paper backup at home");
+});
+
+rule("a fire at the mine takes the computer, and a backup somewhere else is what saves the coins", () => {
+  const fire = (backup, where, steel = false) => json(`(()=>{${HOT_RUN(false)}
+    const k=hotKey();${backup?`k.backup={product:"${steel?"steelplate":"paperbackup"}",durability:"${steel?"steel":"paper"}",at:0,place:"${where}"};`:""}
+    const hot0=state.wallets.hot,cash0=state.cash,id0=k.id;
+    applyPlaceIncident("site","fire",state.time,true);
+    return{hot:state.wallets.hot,hot0,cash:cash0-state.cash,sameKey:hotKey()&&hotKey().id===id0,newKey:hotKey()?hotKey().id:null,oldRetired:!!k.retired,
+      loss:pendingLoss()?{cause:pendingLoss().cause,btc:pendingLoss().btc}:null};})()`);
+  const none = fire(false), apart = fire(true, "bank"), together = fire(true, "site"), steelHere = fire(true, "site", true);
+  assert(none.hot === 0 && none.loss && none.loss.cause === "nobackup" && Math.abs(none.loss.btc - none.hot0) < 1e-9, `a fire with no backup did not take the whole online wallet: ${JSON.stringify(none)}`);
+  assert(none.oldRetired && none.newKey && !none.sameKey, "a lost wallet was not replaced by a fresh key");
+  assert(apart.hot === apart.hot0 && !apart.loss && apart.sameKey && apart.cash > 0, `a backup in a bank box did not rebuild the wallet for a price: ${JSON.stringify(apart)}`);
+  assert(together.hot === 0 && together.loss, "a paper backup beside the computer survived the fire that took the computer");
+  assert(steelHere.hot === steelHere.hot0 && !steelHere.loss, "steel at the mine did not come through a fire");
+});
+
+rule("a break-in takes the computer and what it can reach, and a stolen backup is a stolen key", () => {
+  const a = json(`(()=>{${HOT_RUN(false)}
+    const k=hotKey(),hot0=state.wallets.hot,id0=k.id;
+    applyPlaceIncident("site","burglary",state.time,true);
+    return{hot:state.wallets.hot,hot0,loss:pendingLoss()&&{cause:pendingLoss().cause,kind:pendingLoss().kind},replaced:hotKey().id!==id0,retired:!!k.retired};})()`);
+  const b = json(`(()=>{${HOT_RUN(false)}
+    const k=hotKey();k.backup={product:"paperbackup",durability:"paper",at:0,place:"bank"};
+    const hot1=state.wallets.hot;
+    applyPlaceIncident("bank","seizure",state.time,true);
+    const last=lossQueue().slice(-1)[0];
+    return{hot:state.wallets.hot,hot1,cause:last&&last.cause};})()`);
+  assert(a.hot < a.hot0 && a.hot > 0 && a.loss && a.loss.cause === "burglary" && a.loss.kind === "stolen", `a break-in did not steal part of the online wallet: ${JSON.stringify(a)}`);
+  assert(a.replaced && a.retired, "a stolen key was kept in use");
+  assert(b.hot < b.hot1 && b.cause === "seizure", `a seized backup was not a stolen key: ${JSON.stringify(b)}`);
+});
+
+rule("the computer can fail on any month, only while there is something in it, and the roll never touches the shared random stream", () => {
+  const r = json(`(()=>{${HOT_RUN(false)}
+    const fresh=()=>{state.custody.keys=[];state.custody.hotKeyId=null;state.wallets.hot=10;state.lossQueue=[];createHotWallet({keyHex:"abcdef0123456789"})};
+    const month=t=>new Date(t).toISOString().slice(0,7);
+    let hit=null,miss=null,hits=0,months=0;
+    for(let seed=1;seed<=400;seed++)for(let m=0;m<12;m++){
+      const t=at("2021-01-01")+m*31*DAY,roll=hashRoll(seed,"hotdisk",month(t));months++;
+      if(roll<HOT_DISK_RATE){hits++;if(!hit)hit={seed,t}}else if(!miss)miss={seed,t};
+    }
+    const run=(w,keepEmpty)=>{state.seed=w.seed;state.time=w.t;state.wallets.hot=keepEmpty?0:10;state.custody.hotWarned=true;
+      const key=hotKey();advanceHotKeyRisk(w.t,true);return{replaced:hotKey()!==key,hot:state.wallets.hot}};
+    const failed=run(hit,false);
+    fresh();
+    const spared=run(miss,false);
+    fresh();
+    const empty=run(hit,true);
+    fresh();
+    state.custody.hotWarned=false;state.wallets.hot=10;state.seed=miss.seed;advanceHotKeyRisk(miss.t,true);
+    return{hits,months,failed,spared,empty,warned:state.custody.hotWarned,risk:hotKeyRisk()};})()`);
+  const rate = r.hits / r.months;
+  assert(rate > 0.0008 && rate < 0.0032, `the monthly roll hit ${r.hits} times in ${r.months} months (${rate}); it should be about the 0.15% rate`);
+  assert(r.failed.replaced && r.failed.hot === 0, "a month that rolls a failure did not lose the unbacked wallet");
+  assert(!r.spared.replaced && r.spared.hot === 10, "a month that rolls no failure touched the wallet");
+  assert(!r.empty.replaced, "the computer failed with nothing in the wallet");
+  assert(r.warned && r.risk > 0, "a wallet with coins and no backup was not warned, or carries no risk");
+});
+
+rule("a run with no first key behaves exactly as it did before there was one", () => {
+  const r = json(`(()=>{${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
+    const none={key:hotKey(),risk:hotKeyRisk(),lossUnready:custodyLossRisk(),finding:custodyPostureFindings().some(f=>f.id==="hotkey"),backed:hotKeyBackedUp()};
+    const hot0=state.wallets.hot;advanceHotKeyRisk(at("2021-03-01"),true);applyPlaceIncident("site","fire",state.time,true);
+    return{none,hotAfter:state.wallets.hot,hot0,setup:hotKeyAfterIncident("site","fire",0,true)};})()`);
+  assert(r.none.key === null && r.none.risk === 0 && r.none.lossUnready === 0.0018 && !r.none.finding && !r.none.backed, `a run with no first key changed: ${JSON.stringify(r.none)}`);
+  assert(r.hotAfter === r.hot0, "an incident touched an online wallet that has no first key behind it");
+});
+
+rule("a wallet whose key is on one disk is a finding for anyone who prices custody, and a backup clears it", () => {
+  const r = json(`(()=>{${HOT_RUN(false)}
+    const one=custodyPostureFindings().find(f=>f.id==="hotkey");
+    const unready=custodyLossRisk();
+    hotKey().backup={product:"paperbackup",durability:"paper",at:0,place:"bank"};
+    return{one:one&&one.blocks,unready,cleared:!custodyPostureFindings().some(f=>f.id==="hotkey")};})()`);
+  assert(r.one === "strong", `an unbacked online key was not a finding that blocks a strong posture: ${r.one}`);
+  assert(r.unready === 0, "the generic accident still rolls against coins whose key has its own risk");
+  assert(r.cleared, "a backup did not clear the finding");
+});
+
 rule("a run that begins with the first-wallet ceremony does not start until it has a wallet", () => {
   /* Nothing can be paid to an address that does not exist. A run flagged as needing its first wallet holds the clock
      until the ceremony is done, and an old save or a rule that never set the flag runs exactly as it always did. */

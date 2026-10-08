@@ -81,7 +81,7 @@ function treasuryStrip(){
   const moving=[reach.inFlight>0?`${fmtBtc(reach.inFlight)} on its way`:"",loan?`${fmtBtc(securedPledgedBtc())} pledged`:""].filter(Boolean).join(" · ");
   return `<section class="card treasury-strip" aria-label="Treasury position"><div class="metric-row">
     <div class="metric"><div class="label">Spendable</div><strong>${fmtUsd(state.cash)}</strong><small>${runway||"cash"}${state.debt>0?` · ${fmtUsd(state.debt)} overdue`:""}</small></div>
-    <div class="metric"><div class="label">Hot wallet</div><strong>${fmtBtc(reach.hot)}</strong><small>sellable today</small></div>
+    <div class="metric"><div class="label">Hot wallet</div><strong>${fmtBtc(reach.hot)}</strong><small>sellable today${typeof hotKeyUnbacked==="function"&&hotKeyUnbacked()?" · key not backed up":""}</small></div>
     <div class="metric"><div class="label">Reserve</div><strong>${fmtBtc(reach.cold)}</strong><small>${reserve}${moving?` · ${moving}`:""}</small></div>
     <div class="metric"><div class="label">Custody</div><strong>${posture.tier}</strong><small>${first?first.text:"nothing is holding it back"}</small></div>
     <div class="metric"><div class="label">Next bill</div><strong>${reach.daysToBill} day${reach.daysToBill===1?"":"s"}</strong><small>${fmtUsd(forecast.estimated)}${reach.coldTooSlow?" · the reserve is too slow to meet it":forecast.cashAfter<0?" · cash will not cover it":" · covered"}</small></div>
