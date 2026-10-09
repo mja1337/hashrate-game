@@ -9,9 +9,8 @@
    contract would refuse one. */
 
 const FEEDBACK_REPO="https://github.com/mja1337/hashrate-game";
-/* An address that is only for this project, so people without a GitHub account can write. Empty
-   until one exists; the footer shows the link only when it is set. */
-const FEEDBACK_EMAIL="";
+/* So people without a GitHub account can write. The footer shows the link only when this is set. */
+const FEEDBACK_EMAIL="jandex@protonmail.com";
 /* A tip over Lightning, through a payment page. A plain outbound link: no address is shown here, nothing is
    embedded, and nothing is requested until the player follows it. */
 const TIP_URL="https://strike.me/@jandex";

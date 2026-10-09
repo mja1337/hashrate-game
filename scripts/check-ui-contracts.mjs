@@ -1859,6 +1859,7 @@ assert(css.includes(".svg-sprite-defs{position:absolute;width:0;height:0;overflo
   // The footer: feedback, debug text and what is stored.
   for (const text of ["Report a bug", "Suggest something", 'data-action="copy-debug"', "No accounts, no tracking, no analytics"]) assert(footer.includes(text), `The footer lost "${text}"`);
   assert(footer.includes('const TIP_URL="https://strike.me/@jandex"') && footer.includes('class="footer-tip"') && footer.includes('rel="noopener noreferrer"'), "The Lightning tip link is gone from the footer, or no longer opens safely");
+  assert(/const FEEDBACK_EMAIL="[^"@]+@[^"@]+"/.test(footer) && footer.includes("mailto:${FEEDBACK_EMAIL}"), "The footer has lost its Email link for people without a GitHub account");
   assert(footer.includes("issues/new?") && footer.includes("version:APP_VERSION"), "The feedback links no longer carry the version");
   assert(inline.includes("${footerHtml()}"), "render() no longer draws the footer from footer.js");
   // The key's warning: true, and in readable text.

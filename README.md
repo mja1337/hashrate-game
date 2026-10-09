@@ -56,7 +56,7 @@ GitHub Pages builds from `main`, so **every push to `main` is live within about 
 
 ## Feedback and privacy
 
-The footer's **Report a bug** and **Suggest something** open the issue forms in `.github/ISSUE_TEMPLATE/`, with the version and the in-game date filled in through the URL. **Copy debug info** puts the version, date, browser, window size and any error on the clipboard, with none of the save in it. Nothing is sent from the game and there is no analytics: the network contract would refuse it. `FEEDBACK_EMAIL` in `src/ui/footer.js` is empty; set it to a project-only address if one is wanted and the footer will show an Email link. The footer and Method say what is stored: nothing leaves the browser.
+The footer's **Report a bug** and **Suggest something** open the issue forms in `.github/ISSUE_TEMPLATE/`, with the version and the in-game date filled in through the URL. **Copy debug info** puts the version, date, browser, window size and any error on the clipboard, with none of the save in it. Nothing is sent from the game and there is no analytics: the network contract would refuse it. `FEEDBACK_EMAIL` in `src/ui/footer.js` is the address for people without a GitHub account; clear it and the footer drops the Email link. The footer and Method say what is stored: nothing leaves the browser.
 
 ## Third-party code
 
