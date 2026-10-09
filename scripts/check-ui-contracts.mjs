@@ -1884,6 +1884,7 @@ assert(css.includes(".svg-sprite-defs{position:absolute;width:0;height:0;overflo
   assert(inline.includes("const DISASTER_SCENES=") && inline.includes("function lossEmblemHtml(scene)") && inline.includes("function floorSceneArtHtml()") && inline.includes("function floorSceneBannerHtml()"), "The disaster art is gone");
   assert(inline.includes("lossEmblemHtml(loss.scene)") && inline.includes("floorSceneArtHtml()") && inline.includes("floorSceneBannerHtml()") && inline.includes("floorSceneSignature()"), "The loss window or the mining floor no longer draws the disaster");
   for (const scene of ["fire", "flood", "burglary", "grid", "net"]) assert(css.includes(`.floor-scene.scene-${scene} .floor-scene-art`), `The floor has no overlay for ${scene}`);
+  assert(inline.includes("function floorSmokeHtml()") && (inline.match(/floorSmokeHtml\(\)/g) || []).length >= 3 && css.includes(".floor-smoke{position:absolute;inset:0;z-index:3;pointer-events:none") && /prefers-reduced-motion:reduce\)\{\.floor-smoke i\{animation:none/.test(css), "Smoke is gone from the burning floor, takes clicks, or ignores reduced motion");
   assert(css.includes(".floor-scene{position:absolute;inset:0;z-index:6;pointer-events:none") && /prefers-reduced-motion:reduce\)\{\.glyph-fire/.test(css), "The floor overlay takes clicks again, or the flame ignores reduced motion");
   // Good news waits behind a modal; a refused save is visible.
   assert(notify.includes("TOAST_DEFERRABLE") && inline.includes("flushDeferredToasts();"), "A toast can land on top of a modal again");

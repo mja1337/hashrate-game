@@ -70,5 +70,12 @@ function floorSceneBannerHtml(){
   const meta=DISASTER_SCENES[sc.kind],days=Math.max(1,Math.ceil((sc.until-state.time)/DAY));
   return `<div class="floor-scene-banner scene-${sc.kind}" role="status">${disasterGlyph(sc.kind,30)}<div><b>${meta.caption}</b><span>${meta.aftermath} · ${days} day${days===1?"":"s"}</span></div></div>`;
 }
+/* Smoke over the machines during a fire: six soft puffs rising and thinning, and a haze across the top of the picture. It is
+   laid inside the floor itself (the 3D view's stage, or the flat floor) so it sits over the machines and not the card around
+   them. Under reduced motion the puffs hold still as a static haze. */
+function floorSmokeHtml(){
+  const sc=floorScene();
+  return sc&&sc.kind==="fire"?`<div class="floor-smoke" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>`:"";
+}
 /* Part of what makes the floor repaint when the picture changes, so an overlay never outlives its cause. */
 function floorSceneSignature(){const sc=floorScene();return sc?`${sc.kind}:${sc.until}`:""}
