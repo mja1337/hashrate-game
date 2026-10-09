@@ -17,7 +17,7 @@ function refreshSpeedControls(){
   if(pause){
     pause.classList.toggle("running",!!state.speed);pause.classList.toggle("paused",!state.speed);
     pause.dataset.value=String(state.speed?0:(state.returnSpeed||1));
-    pause.setAttribute("aria-label",state.speed?"Pause simulation":"Resume simulation");
+    pause.setAttribute("aria-label",state.speed?"Pause simulation":"Run simulation");
     const icon=pause.querySelector(".pause-icon"),label=pause.querySelector(".pause-label");
     if(icon)icon.textContent=state.speed?"Ⅱ":"▶";
     if(label)label.textContent=state.speed?"Pause":"Run";

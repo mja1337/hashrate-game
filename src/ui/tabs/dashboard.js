@@ -13,9 +13,9 @@ function renderHeader(){
     <div class="clock"><strong id="live-date">${dateFmt(state.time)}</strong><span id="live-block">BLOCK ~${fmtNum(approxHeight(state.time))}</span></div>
     <div class="xp-meter" title="Operator level — earned from difficulty-1 shares found (submitted to your pool when pool mining), new best-share records, machines deployed and repairs completed"><div class="xp-meter-top"><b id="live-xp-level">LV ${xpProgress().level}</b><span id="live-xp-remaining">${fmtNum(Math.ceil(xpProgress().remaining))} XP to go</span></div><div class="xp-track"><i id="live-xp-fill" style="width:${xpProgress().percent.toFixed(1)}%"></i></div><span class="xp-best" id="live-xp-best">Best share ${state.xp.bestDifficulty?fmtDifficulty(state.xp.bestDifficulty):"—"}</span></div>
     <div class="speeds" aria-label="Simulation speed">${speedButtons}</div>
-    <div class="save-state"><i class="save-dot"></i>LOCAL SAVE</div>
-    <button class="mobile-pause-button ${state.speed?"running":"paused"}" data-action="speed" data-value="${state.speed?0:(state.returnSpeed||1)}" aria-label="${state.speed?"Pause simulation":"Resume simulation"}"><span class="pause-icon" aria-hidden="true">${state.speed?"Ⅱ":"▶"}</span><span class="pause-label">${state.speed?"Pause":"Run"}</span></button>
-    <button class="mobile-menu-button ${mobileMenuOpen?"active":""}" data-action="mobile-menu" aria-label="${mobileMenuOpen?"Close":"Open"} navigation" aria-expanded="${mobileMenuOpen}"><i></i><i></i><i></i><span>Menu</span></button>
+    <div class="save-state${saveFailing?" save-failing":""}">${saveStateHtml()}</div>
+    <button class="mobile-pause-button ${state.speed?"running":"paused"}" data-action="speed" data-value="${state.speed?0:(state.returnSpeed||1)}" aria-label="${state.speed?"Pause simulation":"Run simulation"}"><span class="pause-icon" aria-hidden="true">${state.speed?"Ⅱ":"▶"}</span><span class="pause-label">${state.speed?"Pause":"Run"}</span></button>
+    <button class="mobile-menu-button ${mobileMenuOpen?"active":""}" data-action="mobile-menu" aria-label="Menu, ${mobileMenuOpen?"close":"open"} navigation" aria-expanded="${mobileMenuOpen}"><i></i><i></i><i></i><span>Menu</span></button>
   </header>
   <section class="ticker" aria-label="Bitcoin network dashboard">
     <div class="tick"><div class="label">Liquid fiat</div><div id="live-fiat" class="value green">${fmtUsd(state.cash)}</div><div class="subvalue">spendable now</div></div>

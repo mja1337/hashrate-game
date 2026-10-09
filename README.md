@@ -14,7 +14,7 @@ python3 scripts/dev-server.py 8090
 
 Then open `http://localhost:8090`. The server sends `Cache-Control: no-store`, so a plain reload always picks up edited source. Any static server works; the file can also be opened directly, though some browsers restrict `localStorage` on `file://`.
 
-Saves live in `localStorage` under `hashrate-genesis-save-v1`, with cross-run career history under `hashrate-career-v1`. **New run** in the footer resets the current game.
+Saves live in `localStorage` under `hashrate-genesis-save-v1`, with cross-run career history under `hashrate-career-v1`. **New run** in the footer resets the current game. A stored save that cannot be used (not JSON, or the wrong shape) is never overwritten: its raw text is kept under `hashrate-genesis-save-v1.unreadable`, the footer offers to export it, and a fresh run starts. If the page cannot start at all, `src/app/recovery.js` (which loads first and uses no game code) shows a recovery page with Export my save, Start a new run and Try again.
 
 ## Safety checks
 
@@ -35,7 +35,28 @@ node scripts/check-engine-behaviour.mjs
 
 Contracts are written to fail for a reason a reader can act on, and new ones are worth mutation-testing: reintroduce the bug and confirm the check catches it.
 
-The first three suites match source text. That is fast and catches a great deal, but it pins the implementation rather than the rule: three of them broke during one refactoring session while the behaviour they guarded was intact, because a function had been renamed or an expression had moved. `check-engine-behaviour.mjs` exists for the other half of the problem — it runs the engine, so a rename passes and only a change in the game's economics fails. **When a check is about what the simulation does rather than how the source reads, put it there.** Pinning an exact calibration constant is usually the wrong instinct: assert the property the constant is meant to produce, so the number can be retuned without a false alarm.
+The first three suites match source text (the engine-behaviour suite does not). That is fast and catches a great deal, but it pins the implementation rather than the rule: three of them broke during one refactoring session while the behaviour they guarded was intact, because a function had been renamed or an expression had moved. `check-engine-behaviour.mjs` exists for the other half of the problem — it runs the engine, so a rename passes and only a change in the game's economics fails. **When a check is about what the simulation does rather than how the source reads, put it there.** Pinning an exact calibration constant is usually the wrong instinct: assert the property the constant is meant to produce, so the number can be retuned without a false alarm.
+
+## Releasing and rolling back
+
+GitHub Pages builds from `main`, so **every push to `main` is live within about 40 seconds**. Nothing else stands between a commit and a player.
+
+- **Every local asset URL carries the version** (`?v=2.23`, from `APP_VERSION`), in `index.html` and in the lazily loaded 3D scripts. Pages lets a browser keep a file for ten minutes, so without this a player could load new modules beside old ones, and the load-order rules in `ARCHITECTURE.md` mean that can throw. The structure check fails if any asset lacks the current version. Because of this, **bump `APP_VERSION` for every change that ships, hotfixes included**: the bump is what makes browsers fetch the new files together.
+- **Before pushing a release:** bump `APP_VERSION`, add the changelog entry and update Method, then run all four checks on the exact commit you are pushing.
+- **The launch tag** marks the build that went out: `git tag -a v2.23-launch -m "Launch build"`, pushed with `git push origin v2.23-launch`. Move it with `git tag -fa` only if the launch commit itself changes before anyone has played it.
+- **Launch-weekend freeze:** from Saturday morning to Sunday evening, push to `main` only for hotfixes that bump the version and pass all four checks. No feature commits.
+- **Rolling back** without rewriting history: revert everything after the tag, then push.
+
+  ```bash
+  git revert --no-edit v2.23-launch..HEAD
+  git push
+  ```
+
+  The reverted tree carries the launch build's own `?v=` URLs, so browsers that cached them get a consistent set. Rehearse it once on a throwaway clone before you need it.
+
+## Feedback and privacy
+
+The footer's **Report a bug** and **Suggest something** open the issue forms in `.github/ISSUE_TEMPLATE/`, with the version and the in-game date filled in through the URL. **Copy debug info** puts the version, date, browser, window size and any error on the clipboard, with none of the save in it. Nothing is sent from the game and there is no analytics: the network contract would refuse it. `FEEDBACK_EMAIL` in `src/ui/footer.js` is empty; set it to a project-only address if one is wanted and the footer will show an Email link. The footer and Method say what is stored: nothing leaves the browser.
 
 ## Third-party code
 
@@ -62,8 +83,9 @@ something that creeps. The no-network check does apply, and applies to it first.
 | `src/data/` | Hardware, facilities, regions, pools, progression, events, glossary. |
 | `src/engine/` | History lookup, thermal, nodes, operator XP, simulation, settlement, custody and signing, treasury reach and fees, maintenance, pools, actions, recap. |
 | `src/ui/` | Formatting, art, per-tab markup, post-render enhancers, the live tick, modals and shell. |
-| `src/app/` | Delegated DOM events and startup. |
-| `scripts/` | The data build and the three checks. |
+| `src/app/` | The recovery page, delegated DOM events and startup. |
+| `scripts/` | The data build and the four checks. |
+| `.github/` | The bug and suggestion issue forms. |
 
 Two load-order constraints are load-bearing and contract-enforced: `operator.js` and `hardware.js` must both precede `simulation.js`, because `simulation.js` calls into them from a top-level save migration. Reversing either aborts the whole engine on load with a blank page and no console error worth reading.
 

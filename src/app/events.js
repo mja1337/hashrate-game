@@ -17,6 +17,11 @@ document.getElementById("app").addEventListener("click",e=>{
   if(a==="activity-more"){activityLimit+=100;render();return}
   if(a==="starting-mode"){if(STARTING_MODES.some(mode=>mode.id===v)){introDifficulty=v;introStep=1;render()}return}
   if(a.indexOf("tour-")===0){tourAction(a);return}
+  // The tour promises the clock is held, so the speed buttons say so rather than quietly starting it. Pausing is always allowed.
+  if(a==="speed"&&Number(v)>0&&tourActive()){showToast("The tour is holding the clock","Finish or skip the tour to start playing.","blocked");return}
+  if(a==="copy-debug"){copyDebugInfo(b);return}
+  if(a==="export-unreadable"){const raw=unreadableSaveText();if(raw)downloadText(raw,"hashrate-save-unreadable.json");return}
+  if(a==="save-notice-dismiss"){saveProblem=null;render();return}
   if(a==="dismiss-guidance"){if(id&&!state.guidance.dismissed.includes(id)){state.guidance.dismissed.push(id);save()}render();return}
   if(a==="mobile-menu"){mobileMenuOpen=!mobileMenuOpen;render(false);return}
   if(a==="mobile-menu-section"){mobileMenuSection=v;mobileMenuOpen=true;render(false);return}

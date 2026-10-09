@@ -4448,6 +4448,75 @@ rule("a restored pool account cannot carry an impossible lifetime total", () => 
     `a corrupt save kept impossible totals: paid ${r.repairedPaid}, fees ${r.repairedFees}`);
 });
 
+/* ---- THE SAVE GUARD: a save the game cannot use is set aside, never replaced or left blank ---- */
+
+const UNREADABLE = "hashrate-genesis-save-v1.unreadable";
+const BAD_SAVES = {
+  "a date that is not a number": { raw: JSON.stringify({ version: 1, started: true, time: "abc", walletSetup: { done: true } }) },
+  "text cut off part-way through": { raw: '{"version":1,"started":true,"time":1230940800000,"cash":15' },
+  "a bare null": { raw: "null" },
+  "a list where a table belongs": { raw: JSON.stringify({ version: 1, time: 1230940800000, wallets: [] }) },
+};
+for (const [what, { raw }] of Object.entries(BAD_SAVES)) {
+  rule(`a stored save with ${what} loads as a fresh run and the original text is kept`, () => {
+    const sandbox = loadEngine(null, raw);
+    const read = makeEval(sandbox);
+    assert(read("state.started") === false && read("Number.isFinite(state.time)"), "an unusable save was loaded into the run instead of being set aside");
+    assert(read("saveProblem!==null") === true, "nothing told the UI that a save had been set aside");
+    assert(read(`localStorage.getItem("${UNREADABLE}")`) === raw, "the raw text of the unusable save was not kept");
+    assert(read("unreadableSaveKept") === true, "the footer would not offer to export the kept save");
+    // The first save of the new run overwrites the live key, not the kept copy.
+    read("save()");
+    assert(read(`localStorage.getItem("${UNREADABLE}")`) === raw, "starting the new run overwrote the kept copy");
+  });
+}
+
+rule("a good save, and a first visit, load without setting anything aside", () => {
+  const save = JSON.parse(fs.readFileSync(new URL("./fixtures/save-pre-custody-sprint.json", import.meta.url), "utf8"));
+  const old = makeEval(loadEngine(save));
+  assert(old("saveProblem")=== null && old("state.started") === true, "a readable old save was set aside");
+  assert(old(`localStorage.getItem("${UNREADABLE}")`) === null, "a readable save left an unreadable copy behind");
+  const fresh = makeEval(loadEngine());
+  assert(fresh("saveProblem") === null && fresh("unreadableSaveKept") === false, "a first visit reported a problem");
+});
+
+rule("an imported file goes through the same shape check as a stored save", () => {
+  const fixture = JSON.parse(fs.readFileSync(new URL("./fixtures/save-pre-custody-sprint.json", import.meta.url), "utf8"));
+  assert(run(`saveShapeProblem(${JSON.stringify(fixture)})`) === "", "the old-save fixture was refused by the shape check");
+  assert(run(`saveShapeProblem({version:1,time:"abc",wallets:{},hardware:{}})`) !== "", "an import with a non-numeric date was accepted");
+  assert(run(`saveShapeProblem({version:1,time:1,wallets:{},hardware:{},activity:{}})`) !== "", "an import whose activity is not a list was accepted");
+  assert(/saveShapeProblem\(parsed\)/.test(fs.readFileSync(new URL("../src/engine/actions.js", import.meta.url), "utf8")), "importSave no longer runs the shape check");
+});
+
+rule("a browser that refuses to store the game is noticed once, and clears when storage works again", () => {
+  const read = makeEval(loadEngine());
+  read(`globalThis.__announced=0;globalThis.announceSaveState=()=>{__announced++};globalThis.__set=localStorage.setItem;localStorage.setItem=()=>{throw new Error("QuotaExceededError")}`);
+  assert(read("save()") === false && read("saveFailing") === true, "a refused write was reported as saved");
+  read("save();save()");
+  assert(read("__announced") === 1, `the player was told ${read("__announced")} times rather than once`);
+  read("localStorage.setItem=__set");
+  assert(read("save()") === true && read("saveFailing") === false, "saving did not recover when storage came back");
+  assert(read("__announced") === 2, "the recovery was not announced");
+});
+
+rule("the first wallet's key never comes from the run's seed", () => {
+  const read = makeEval(loadEngine());
+  read(`${SITE()}state.walletSetup={done:false,step:0,rolls:[],keyHex:"",required:true};state.rng=12345;`);
+  read("skipWalletSetup()");
+  const r = JSON.parse(read("JSON.stringify({rng:state.rng,n:state.walletSetup.rolls.length,hex:state.walletSetup.keyHex,step:state.walletSetup.step,ok:state.walletSetup.rolls.every(x=>x>=1&&x<=6)})"));
+  assert(r.rng === 12345, "generating the key consumed the game's seeded stream, so the key follows from the seed the header shows");
+  assert(r.n === 99 && /^[0-9a-f]{64}$/.test(r.hex) && r.step === 2 && r.ok, "the generated key is not 99 dice and 64 hex digits");
+  assert(JSON.parse(read("JSON.stringify(secureDice(5))")).length === 5, "secureDice returned the wrong number of rolls");
+});
+
+rule("the fourth halving lands on its UTC day, 20 April 2024, not the 19th", () => {
+  // Block 840,000 was mined at 00:09 UTC on 20 April 2024. It is still the 19th in the Americas.
+  assert(run('subsidyAt(at("2024-04-19"))') === 6.25, "the subsidy had already halved on 19 April 2024");
+  assert(run('subsidyAt(at("2024-04-20"))') === 3.125, "the subsidy had not halved by 20 April 2024");
+  const event = run('JSON.stringify(EVENTS.find(e=>e.id==="halving4").date)');
+  assert(event === '"2024-04-20"', `the halving event is dated ${event}`);
+});
+
 /* Reported from an exit hook rather than inline, because inline made the gate
    position-dependent: it sat a few lines above the end of the file, and two rules appended
    after it ran, failed, pushed onto `failures` and were never printed. The suite announced

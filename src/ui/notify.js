@@ -6,7 +6,7 @@
    triggering a render, so a burst of events cannot rebuild the page. */
 
 function feedbackKind(title,kind="info"){if(kind!=="info")return kind;return /not enough|unavailable|required|blocked|failed|invalid|too small|no (?:running|spendable|saleable|asic)|still due|power down|already (?:on|scheduled)|one-way|limit/i.test(title)?"blocked":"success"}
-function feedbackLabel(kind){return({bad:"Action needed",warning:"Advance warning",notice:"Rules change",blocked:"Cannot do that",milestone:"Milestone reached",success:"Completed",info:"Update"})[kind]||"Update"}
+function feedbackLabel(kind){return({bad:"Action needed",warning:"Advance warning",notice:"Rules change",blocked:"Cannot do that",milestone:"Milestone reached",success:"Completed",status:"Update",info:"Update"})[kind]||"Update"}
 function toastMarkup(t){const linked=!!t.tab,kind=feedbackKind(t.title,t.kind),assertive=["bad","warning","notice","blocked"].includes(kind),repeats=Math.max(0,Number(t.repeats)||0);return `<div class="toast toast-${kind} ${linked?"toast-clickable":""} ${repeats?"toast-repeated":""}" role="${assertive?"alert":"status"}" aria-live="${assertive?"assertive":"polite"}" ${linked?`data-action="tab" data-value="${t.tab}"${t.anchor?` data-anchor="${t.anchor}"`:""}`:`data-action="dismiss-toast"`}><div class="toast-copy"><small>${feedbackLabel(kind)}${repeats?` · ${repeats+1} together`:""}</small><b>${escapeHtml(t.title)}</b><span>${escapeHtml(t.message)}</span>${repeats?`<em class="toast-repeat">and ${repeats} more like it just now</em>`:""}</div>${linked?`<i class="toast-go"><span>Open ${escapeHtml(t.tab)}</span> →</i>`:""}<button class="toast-dismiss" data-action="dismiss-toast" aria-label="Dismiss this message" title="Dismiss">×</button></div>`}
 function dismissToast(){clearTimeout(toastTimer);toastTimer=null;toast=null;document.querySelector(".toast")?.remove()}
 /* WHEN THE SAME THING KEEPS HAPPENING.
@@ -25,11 +25,34 @@ function dismissToast(){clearTimeout(toastTimer);toastTimer=null;toast=null;docu
    particulars — "Mining capacity lost to a fault" is one situation whether it is an S19 or an
    S21 this time. A genuinely different notice still interrupts immediately, because a burst of
    faults must never bury the one that says a settlement is due. */
+/* A TOAST DOES NOT SIT ON A DECISION.
+
+   Good news (a milestone, a finished lesson) used to land on top of whatever modal was open, over its
+   heading and, on a phone, over half its buttons. While a modal is up, a notice that is only good news
+   waits, and the newest few are shown when it closes. Anything that warns, blocks or says "bad" still
+   appears at once: those are about the thing the player is doing. */
+const TOAST_DEFERRABLE=["success","milestone","info","status"];
+let deferredToasts=[];
+function blockingModalOpen(){return !!document.querySelector(".modal-backdrop")}
+function flushDeferredToasts(){
+  if(!deferredToasts.length||blockingModalOpen())return;
+  const t=deferredToasts[deferredToasts.length-1];deferredToasts=[];
+  showToast(t.title,t.message,t.kind,t.tab,t.anchor,t.lifeMs);
+}
+/* The header's save pill, and the one toast that says the browser will not store the game. Called by
+   writeSave() when that changes, never per save. */
+function saveStateHtml(){return `<i class="save-dot"></i>${saveFailing?"NOT SAVING":"LOCAL SAVE"}`}
+function announceSaveState(){
+  const pill=document.querySelector(".save-state");
+  if(pill){pill.classList.toggle("save-failing",saveFailing);pill.innerHTML=saveStateHtml()}
+  if(saveFailing)showToast("Your game is not being saved","This browser is refusing to store it: a private window, blocked site data or a full disk. Use Export save in the footer to keep your progress.","warning");
+}
 const TOAST_COALESCE_MS=9000,TOAST_BASE_MS=8500,TOAST_MAX_MS=20000;
 let toastRepeats=0,toastLastTitle="",toastLastAt=0;
 function toastLife(){return Math.min(TOAST_MAX_MS,TOAST_BASE_MS+toastRepeats*1200)}
 function showToast(title,message,kind="info",tab=null,anchor=null,lifeMs=0){
   kind=feedbackKind(title,kind);
+  if(TOAST_DEFERRABLE.includes(kind)&&blockingModalOpen()){deferredToasts=[...deferredToasts.filter(t=>t.title!==title),{title,message,kind,tab,anchor,lifeMs}].slice(-3);return}
   const now=Date.now(),repeat=title===toastLastTitle&&now-toastLastAt<TOAST_COALESCE_MS&&!!document.querySelector(".toast");
   toastRepeats=repeat?toastRepeats+1:0;
   toastLastTitle=title;toastLastAt=now;

@@ -37,7 +37,8 @@ function approxHeight(t){return Math.max(0,Math.floor(heightAt(t)))}
 const chainSizeAt=t=>t>END?futureChainSizeAt(t):interp(CHAIN_GB,t,false);
 const FUTURE_HALVING_INTERVAL=210000*600*1000;
 /* Bitcoin's subsidy is an integer number of satoshis halved by integer division. Projected epochs must floor the same way, or the sandbox pays fractions of the smallest unit that can exist. */
-const INITIAL_SUBSIDY_SATS=5000000000, RECORDED_HALVINGS=[at("2012-11-28"),at("2016-07-09"),at("2020-05-11"),at("2024-04-19")], LAST_RECORDED_HALVING=RECORDED_HALVINGS[RECORDED_HALVINGS.length-1];
+/* Halving days are UTC days of the block that triggers them: block 840,000 was mined at 00:09 UTC on 20 April 2024, which is still the 19th in the Americas. */
+const INITIAL_SUBSIDY_SATS=5000000000, RECORDED_HALVINGS=[at("2012-11-28"),at("2016-07-09"),at("2020-05-11"),at("2024-04-20")], LAST_RECORDED_HALVING=RECORDED_HALVINGS[RECORDED_HALVINGS.length-1];
 function subsidyHalvingIndex(t){for(let i=0;i<RECORDED_HALVINGS.length;i++)if(t<RECORDED_HALVINGS[i])return i;return RECORDED_HALVINGS.length+Math.floor((t-LAST_RECORDED_HALVING)/FUTURE_HALVING_INTERVAL)}
 function subsidySatsAt(t){const halvings=subsidyHalvingIndex(t);return halvings>=64?0:Math.floor(INITIAL_SUBSIDY_SATS/2**halvings)}
 function subsidyAt(t){return subsidySatsAt(t)/1e8}
@@ -55,7 +56,7 @@ function feeAt(t){if(t>END)return futureFeeAt(t);return FEES.length?Math.max(0,i
 function futureYears(t){return Math.max(0,(Math.min(t,SANDBOX_END)-END)/(DAY*365.25))}
 function decayedTrend(v0,g0,gInf,halfLifeYears,years){const k=Math.LN2/halfLifeYears;return v0*Math.exp(gInf*years+(g0-gInf)/k*(1-Math.exp(-k*years)))}
 function instRate(g0,gInf,halfLifeYears,years){const k=Math.LN2/halfLifeYears;return gInf+(g0-gInf)*Math.exp(-k*years)}
-function halvingPhase(t){const epoch=FUTURE_HALVING_INTERVAL,anchor=at("2024-04-19");return(((t-anchor)%epoch)+epoch)%epoch/epoch}
+function halvingPhase(t){const epoch=FUTURE_HALVING_INTERVAL,anchor=at("2024-04-20");return(((t-anchor)%epoch)+epoch)%epoch/epoch}
 const PRICE_G0=.22,PRICE_GINF=.03,PRICE_HALFLIFE=15,HASH_G0=.15,HASH_GINF=.02,HASH_HALFLIFE=12;
 /* The cycle and the volatility below are measured from the recorded history the run has
    just replayed, not invented. Detrending each of the three complete halving epochs and

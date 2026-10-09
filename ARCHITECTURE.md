@@ -28,6 +28,9 @@
 - `src/engine/connectivity.js` — how the site reaches the network, what that costs and how often it stops; satellite is priced differently from fixed lines.
 - `src/engine/immersion.js` — dielectric tanks, converting air-cooled miners and what submerging a machine changes.
 - `src/engine/recap.js` — cross-run career persistence and the end-of-run narrative.
+- `src/app/recovery.js` — the page shown when the game cannot start, and the text a bug report carries. Loaded **first**, before any game code, and uses none of it: it is plain ES5 with inline styles so it works if everything else fails. `bootstrap.js` sets `gameBooted` after the first render; without it, the page takes over `#app` on load.
+- `src/engine/save-guard.js` — what happens to a stored save that cannot be used (it is kept under its own key, never overwritten) and to a browser that will not store the game (`saveFailing`). Loaded before `simulation.js`, which reads the save at the top level through it.
+- `src/ui/footer.js` — the footer: feedback links to the issue forms, "Copy debug info", the statement of what is stored, and the notice that a save was set aside.
 - `src/engine/render-queue.js` — when the clock's effects reach the screen. Loaded before `simulation.js` on purpose, since its flags are top-level `let` bindings.
 - `src/engine/settlement.js` — the month boundary: the bill, the forecast, and the rescues when cash falls short. Nothing is sold on the player's behalf.
 - `src/engine/custody.js` — devices, keys, wallet policy, backups and the monthly custody risk rolls. Loads after `simulation.js`, so anything its migration needs lives in `src/data/custody.js`.
@@ -70,8 +73,9 @@ Run these before handing off a change:
 node scripts/check-project-structure.mjs
 node scripts/check-ui-contracts.mjs
 node scripts/check-historical-data.mjs
+node scripts/check-engine-behaviour.mjs
 ```
 
-The checks enforce dependency order, external assets, module size, unique Mine purchase quantities, historical-series integrity and JavaScript syntax.
+The checks enforce dependency order, external assets, a version on every local asset URL (see the README's release section), module size, unique Mine purchase quantities, historical-series integrity and JavaScript syntax.
 
 `scripts/fixtures/` holds saves written by earlier versions of the engine. A rule loads one to prove an old save still opens, so a fixture is never regenerated: it stays as the shape it was written in.

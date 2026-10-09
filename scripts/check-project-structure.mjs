@@ -3,6 +3,8 @@ import { readFile, readdir, stat } from "node:fs/promises";
 const root = new URL("../", import.meta.url);
 const html = await readFile(new URL("index.html", root), "utf8");
 const expectedScripts = [
+  /* First, and with no game code in it: the page a player gets if anything below fails to start. */
+  "src/app/recovery.js",
   "historical-data.js",
   "src/config/timeline.js",
   "src/data/network.js",
@@ -26,6 +28,8 @@ const expectedScripts = [
   /* Before simulation.js: it declares the repaint flags with `let`, and simulation.js reaches
      them at load through its migration block. */
   "src/engine/render-queue.js",
+  /* Before simulation.js, which reads the stored save at the top level through it. */
+  "src/engine/save-guard.js",
   "src/engine/simulation.js",
   "src/engine/event-effects.js",
   "src/engine/settlement.js",
@@ -78,6 +82,7 @@ const expectedScripts = [
   "src/ui/enhance/counterparties.js",
   "src/ui/enhance/operations.js",
   "src/ui/live.js",
+  "src/ui/footer.js",
   "src/ui/render.js",
   "src/app/events.js",
   "src/app/bootstrap.js",
@@ -89,9 +94,31 @@ function assert(condition, message) {
 
 assert(!/<style[\s>]/i.test(html), "index.html contains an inline stylesheet");
 assert(!/<script(?!\s+src=)[^>]*>/i.test(html), "index.html contains inline application JavaScript");
-assert(html.includes('<link rel="stylesheet" href="src/styles/app.css">'), "The external application stylesheet is not linked");
+/* EVERY LOCAL ASSET CARRIES THE VERSION.
 
-const actualScripts = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map(match => match[1]);
+   GitHub Pages lets a browser keep any file for ten minutes, and the page loads seventy-odd of
+   them. Without a version in each URL a player could be handed new modules beside old ones for the
+   first ten minutes after a deploy, and the load-order rules in ARCHITECTURE.md mean that mix
+   can throw. With one, bumping APP_VERSION changes every URL at once. The lazily loaded 3D scripts
+   are versioned the same way in src/ui/floor3d/mount.js. */
+const version = /const APP_VERSION="([^"]+)"/.exec(await readFile(new URL("src/data/content.js", root), "utf8"))?.[1];
+assert(version, "There is no APP_VERSION in src/data/content.js");
+assert(html.includes(`<link rel="stylesheet" href="src/styles/app.css?v=${version}">`), "The external application stylesheet is not linked with the current version");
+const assetUrls = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map(match => match[1]);
+for (const url of assetUrls) assert(url.endsWith(`?v=${version}`), `${url} does not carry ?v=${version}: a cached old module could load beside a new one`);
+{
+  const mount = await readFile(new URL("src/ui/floor3d/mount.js", root), "utf8");
+  assert(mount.includes("node.src=`${src}?v=${APP_VERSION}`"), "The lazily loaded 3D scripts are not versioned with APP_VERSION");
+}
+for (const needed of ['property="og:image"', 'property="og:title"', 'property="og:description"', 'name="twitter:card"', 'rel="apple-touch-icon"'])
+  assert(html.includes(needed), `index.html has lost its ${needed} tag: shared links lose their preview`);
+{
+  const notFound = await readFile(new URL("404.html", root), "utf8");
+  assert(notFound.includes('href="/hashrate-game/"') && !/<script/i.test(notFound), "404.html must link back to the game and carry no script");
+}
+for (const file of ["og.png", "apple-touch-icon.png"]) assert((await stat(new URL(file, root))).size > 1000, `${file} is missing or empty`);
+
+const actualScripts = assetUrls.map(url => url.replace(/\?v=.*$/, ""));
 assert(JSON.stringify(actualScripts) === JSON.stringify(expectedScripts), "Application scripts are missing or loaded out of dependency order");
 assert(new Set(actualScripts).size === actualScripts.length, "A script is loaded more than once");
 
@@ -193,5 +220,5 @@ for (const file of ["src/styles/app.css", ...expectedScripts]) {
   assert(dead.length === 0, `Operator skills that cost points and change nothing: ${dead.join(", ")}`);
 }
 
-assert((await stat(new URL("index.html", root))).size < 5_000, "index.html is becoming a monolith again");
+assert((await stat(new URL("index.html", root))).size < 8_000, "index.html is becoming a monolith again");
 console.log(`Project structure passed: ${expectedScripts.length - 1} application modules, one generated historical bundle, one stylesheet`);

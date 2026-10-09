@@ -44,6 +44,7 @@ const FILES = [
   "src/engine/operator.js",
   // Before simulation.js, matching index.html — see the note in render-queue.js.
   "src/engine/render-queue.js",
+  "src/engine/save-guard.js",
   "src/engine/simulation.js",
   "src/engine/event-effects.js",
   "src/engine/settlement.js",
@@ -70,10 +71,12 @@ const FILES = [
    load-time migration executes against it exactly as it would in the browser — including the
    part of it that only runs for old save shapes, which is where a load-order bug can hide
    until a real player opens a real save. */
-export function loadEngine(seedSave = null) {
+export function loadEngine(seedSave = null, rawSave = null) {
   const noop = () => {};
   const store = {};
   if (seedSave) store["hashrate-genesis-save-v1"] = JSON.stringify(seedSave);
+  // Text stored exactly as given, for saves that are not valid JSON at all.
+  if (rawSave !== null) store["hashrate-genesis-save-v1"] = rawSave;
   const sandbox = {
     console,
     Math, Date, JSON, Number, String, Object, Array, Boolean, Map, Set, WeakMap,

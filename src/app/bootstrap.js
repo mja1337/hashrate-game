@@ -2,5 +2,18 @@
 
 const originalApplyEvent=applyEvent;applyEvent=function(e){originalApplyEvent(e);if(e.imp===3&&state.storyPause)state.eventResume=true};
 const originalTick=tick;tick=function(silent=false){const old=state.speed;originalTick(silent);if(!silent&&old!==state.speed)setTimer()};
-document.addEventListener("visibilitychange",()=>{if(document.visibilityState!=="visible"||!state.started||state.speed<=0||state.ended)return;const stepMs=2000/state.speed,steps=Math.min(3650,Math.floor((Date.now()-(state.lastReal||Date.now()))/stepMs));for(let i=0;i<steps&&state.speed>0&&!state.ended;i++)tick(true);state.lastReal=Date.now();save();render();setTimer()});
-holdRendersDuringPress();if(state.ended)state.speed=0;setTimer();startMempoolTimer();render();
+/* A hidden tab pauses the game. It used to keep ticking at whatever rate the browser allowed and then
+   fast-forward on return, so a player came back to months of faults and a bill they had not watched
+   arrive. Pausing costs nothing a player wanted; the speed they had is kept, and play does not resume
+   by itself. */
+let pausedWhileAway=false;
+document.addEventListener("visibilitychange",()=>{
+  if(!state.started||state.ended)return;
+  if(document.visibilityState==="hidden"){
+    if(state.speed>0){state.returnSpeed=state.speed;state.speed=0;pausedWhileAway=true;setTimer();save();refreshSpeedControls()}
+  }else if(pausedWhileAway){
+    pausedWhileAway=false;state.lastReal=Date.now();refreshSpeedControls();
+    showToast("Paused while you were away","The clock stops when this tab is hidden. Press play to carry on.","status");
+  }
+});
+holdRendersDuringPress();if(state.ended)state.speed=0;setTimer();startMempoolTimer();render();window.gameBooted=true;

@@ -157,6 +157,8 @@ function tourAfterRender(){
   document.querySelectorAll(".tour-target").forEach(e=>e.classList.remove("tour-target"));
   if(!tourActive())return;
   app.insertAdjacentHTML("beforeend",tourCardHtml());
+  // A decision that opens while the tour is up (a bill, a loss) takes the screen; the card comes back when it closes.
+  document.body.classList.toggle("tour-modal",!!app.querySelector(".modal-backdrop"));
   const s=tourStep(),el=s.center?null:tourFindTarget(s);
   if(el){
     el.classList.add("tour-target");

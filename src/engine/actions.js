@@ -345,23 +345,29 @@ function deriveWalletKeyHex(rolls){
   let n=0n;for(const r of rolls)n=n*6n+BigInt(r-1);
   return n.toString(16).padStart(64,"0").slice(-64);
 }
+/* Dice for a key come from the browser's own source of randomness, and a byte that would favour
+   some faces is thrown away (256 does not divide by six). The game's seeded stream is never used
+   here: that seed is printed in the header, and a key made from it could be made again. */
+function secureDice(count){
+  const rolls=[],buf=new Uint8Array(Math.max(16,count*2));
+  while(rolls.length<count){crypto.getRandomValues(buf);for(const b of buf)if(b<252&&rolls.length<count)rolls.push((b%6)+1)}
+  return rolls;
+}
 function rollDie(){
   if(state.walletSetup.done||state.walletSetup.rolls.length>=99)return;
-  const buf=new Uint8Array(1);crypto.getRandomValues(buf);
-  state.walletSetup.rolls.push((buf[0]%6)+1);
+  state.walletSetup.rolls.push(secureDice(1)[0]);
   save();render();
 }
 function finishRolling(){
   if(state.walletSetup.done||state.walletSetup.rolls.length<8)return;
-  const buf=new Uint8Array(99-state.walletSetup.rolls.length);crypto.getRandomValues(buf);
-  buf.forEach(b=>state.walletSetup.rolls.push((b%6)+1));
+  secureDice(99-state.walletSetup.rolls.length).forEach(r=>state.walletSetup.rolls.push(r));
   state.walletSetup.step=2;state.walletSetup.keyHex=deriveWalletKeyHex(state.walletSetup.rolls);
   save();render();
 }
 function skipWalletSetup(){
   if(state.walletSetup.done)return;
   if(state.walletSetup.demo){completeWalletSetup();return}
-  const rolls=[];for(let i=0;i<99;i++)rolls.push(Math.floor(nextRand()*6)+1);
+  const rolls=secureDice(99);
   state.walletSetup.rolls=rolls;state.walletSetup.keyHex=deriveWalletKeyHex(rolls);
   // Show the result and offer the backup, as the dice do: the key is real now, and what is done with it is a choice.
   state.walletSetup.step=2;save();render();
@@ -576,5 +582,5 @@ function exportSave(){
   const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="hashrate-save.json";a.click();URL.revokeObjectURL(url);
 }
 function importSave(file){
-  const reader=new FileReader();reader.onload=()=>{try{const parsed=JSON.parse(String(reader.result));if(!parsed||parsed.version!==1||!parsed.wallets||!parsed.hardware)throw new Error("invalid");const restored=Object.assign(initialState(),parsed,{lastReal:Date.now()});restored.points=Number.isFinite(Number(restored.points))?Math.max(0,Math.floor(Number(restored.points))):0;restored.skills=Array.isArray(restored.skills)?[...new Set(restored.skills.filter(id=>SKILLS.some(s=>s.id===id)))]:[];restored.seen=Array.isArray(restored.seen)?restored.seen:[];restored.milestones=Array.isArray(restored.milestones)?restored.milestones:[];restored.milestoneLog=Array.isArray(restored.milestoneLog)?restored.milestoneLog:[];restored.exposureWarned=Array.isArray(restored.exposureWarned)?restored.exposureWarned:[];restored.maintenance.selfRepairs=restored.maintenance.selfRepairs&&typeof restored.maintenance.selfRepairs==="object"?restored.maintenance.selfRepairs:{};restored.xp=normalizeXp(restored.xp);restored.exposureWarned=Array.isArray(restored.exposureWarned)?restored.exposureWarned:[];restored.startingGrant=!!restored.startingGrant;restored.difficulty=STARTING_MODES.some(mode=>mode.id===restored.difficulty)?restored.difficulty:(startingModeForCash(restored.startingCash)?.id||"legacy");delete restored.treasuryPolicy;if(restored.custody)normalizeCustodyPlaces(restored.custody);restored.operator=Object.assign(initialState().operator,restored.operator||{});restored.operator.eras=restored.operator.eras||{};OPERATOR_ERAS.forEach(era=>restored.operator.eras[era.id]=Object.assign({months:0,solvent:0,profitable:0,uptime:0,competitive:0},restored.operator.eras[era.id]||{}));restored.poweredDownHardware=restored.poweredDownHardware&&typeof restored.poweredDownHardware==="object"?restored.poweredDownHardware:{};restored.thermal=Object.assign({temperature:22,equipment:{}},restored.thermal||{});restored.thermal.equipment=restored.thermal.equipment&&typeof restored.thermal.equipment==="object"?restored.thermal.equipment:{};COOLING_EQUIPMENT.forEach(item=>restored.thermal.equipment[item.id]=Math.max(0,Math.floor(Number(restored.thermal.equipment[item.id])||0)));HARDWARE.forEach(h=>restored.poweredDownHardware[h.id]=Math.max(0,Math.min(restored.hardware[h.id]||0,Math.floor(Number(restored.poweredDownHardware[h.id])||0))));migrateActivity(restored);migrateHardwareAlerts(restored,!!parsed.hardwareAlerts);state=restored;activeTab="dashboard";activityFilter="all";activityLimit=100;clearTimeout(faucetTimer);faucet=null;save();setTimer();render();showToast("Run restored","The imported ledger is now active.")}catch(e){showToast("Import failed","That file is not a valid Hashrate save.")}};reader.readAsText(file);
+  const reader=new FileReader();reader.onload=()=>{try{const parsed=JSON.parse(String(reader.result));if(!parsed||parsed.version!==1||!parsed.wallets||!parsed.hardware||saveShapeProblem(parsed))throw new Error("invalid");const restored=Object.assign(initialState(),parsed,{lastReal:Date.now()});restored.points=Number.isFinite(Number(restored.points))?Math.max(0,Math.floor(Number(restored.points))):0;restored.skills=Array.isArray(restored.skills)?[...new Set(restored.skills.filter(id=>SKILLS.some(s=>s.id===id)))]:[];restored.seen=Array.isArray(restored.seen)?restored.seen:[];restored.milestones=Array.isArray(restored.milestones)?restored.milestones:[];restored.milestoneLog=Array.isArray(restored.milestoneLog)?restored.milestoneLog:[];restored.exposureWarned=Array.isArray(restored.exposureWarned)?restored.exposureWarned:[];restored.maintenance.selfRepairs=restored.maintenance.selfRepairs&&typeof restored.maintenance.selfRepairs==="object"?restored.maintenance.selfRepairs:{};restored.xp=normalizeXp(restored.xp);restored.exposureWarned=Array.isArray(restored.exposureWarned)?restored.exposureWarned:[];restored.startingGrant=!!restored.startingGrant;restored.difficulty=STARTING_MODES.some(mode=>mode.id===restored.difficulty)?restored.difficulty:(startingModeForCash(restored.startingCash)?.id||"legacy");delete restored.treasuryPolicy;if(restored.custody)normalizeCustodyPlaces(restored.custody);restored.operator=Object.assign(initialState().operator,restored.operator||{});restored.operator.eras=restored.operator.eras||{};OPERATOR_ERAS.forEach(era=>restored.operator.eras[era.id]=Object.assign({months:0,solvent:0,profitable:0,uptime:0,competitive:0},restored.operator.eras[era.id]||{}));restored.poweredDownHardware=restored.poweredDownHardware&&typeof restored.poweredDownHardware==="object"?restored.poweredDownHardware:{};restored.thermal=Object.assign({temperature:22,equipment:{}},restored.thermal||{});restored.thermal.equipment=restored.thermal.equipment&&typeof restored.thermal.equipment==="object"?restored.thermal.equipment:{};COOLING_EQUIPMENT.forEach(item=>restored.thermal.equipment[item.id]=Math.max(0,Math.floor(Number(restored.thermal.equipment[item.id])||0)));HARDWARE.forEach(h=>restored.poweredDownHardware[h.id]=Math.max(0,Math.min(restored.hardware[h.id]||0,Math.floor(Number(restored.poweredDownHardware[h.id])||0))));migrateActivity(restored);migrateHardwareAlerts(restored,!!parsed.hardwareAlerts);state=restored;activeTab="dashboard";activityFilter="all";activityLimit=100;clearTimeout(faucetTimer);faucet=null;save();setTimer();render();showToast("Run restored","The imported ledger is now active.")}catch(e){showToast("Import failed","That file is not a valid Hashrate save.")}};reader.readAsText(file);
 }

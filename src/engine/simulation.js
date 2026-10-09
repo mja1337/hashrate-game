@@ -22,7 +22,7 @@ const initialState=()=>{const seed=Math.floor(Math.random()*4294967296);return{
   connectivity:"fixed",history:[],activity:[],activitySeq:0,log:[{time:START,text:"Client synced to the network tip",amount:"~block "+approxHeight(START)}]
 }};
 let state,loadedHasHardwareAlerts=false,loadedHasHardwareToastSeen=false,activeTab="dashboard",mobileMenuOpen=false,mobileMenuSection="play",activityFilter="all",activityLimit=100,tradePercentages={},hardwarePurchaseChoice={},custodyLesson="malware",selectedVenue="mtgox",introDifficulty="easy",introStartingCash=STARTING_LIQUIDITY_MIN,pendingTransaction=null,toast=null,toastTimer=null,timer=null,faucet=null,faucetTimer=null,mempoolTimer=null,introStep=0;
-try{const raw=localStorage.getItem(SAVE_KEY);if(raw){const parsed=JSON.parse(raw);loadedHasHardwareAlerts=!!parsed.hardwareAlerts;loadedHasHardwareToastSeen=!!parsed.hardwareToastSeen;state=Object.assign(initialState(),parsed)}else state=initialState()}catch(e){state=initialState()}
+{const stored=loadStoredSave();state=initialState();if(stored){loadedHasHardwareAlerts=!!stored.hardwareAlerts;loadedHasHardwareToastSeen=!!stored.hardwareToastSeen;state=Object.assign(state,stored)}}
 const ACTIVITY_CATEGORIES=["trade","fleet","finance","reward","custody","learning","operations","milestone"];
 function activityCategory(text=""){
   if(/bought|sold|treasury policy|ETF exposure|strategy/i.test(text))return"trade";
@@ -624,4 +624,4 @@ function setTimer(){
   if(state.speed>0){state.lastReal=Date.now();timer=setInterval(tick,Math.max(70,2000/state.speed))}
 }
 function startMempoolTimer(){clearInterval(mempoolTimer);mempoolTimer=setInterval(()=>{if(activeTab==="dashboard"&&state.speed>0)refreshDashboardVisuals()},1200)}
-function save(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(state))}catch(e){}}
+function save(){return writeSave(state)}

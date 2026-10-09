@@ -4,7 +4,7 @@ import vm from "node:vm";
 const root = new URL("../", import.meta.url);
 const html = await readFile(new URL("index.html", root), "utf8");
 const css = await readFile(new URL("src/styles/app.css", root), "utf8");
-const appScripts = [...html.matchAll(/<script src="(src\/[^"]+\.js)"><\/script>/g)].map(match => match[1]);
+const appScripts = [...html.matchAll(/<script src="(src\/[^"?]+\.js)(?:\?v=[^"]*)?"><\/script>/g)].map(match => match[1]);
 const inline = (await Promise.all(appScripts.map(file => readFile(new URL(file, root), "utf8")))).join("\n");
 const engineModules = (await readdir(new URL("src/engine/", root))).filter(name => name.endsWith(".js"));
 const simulationSource = await readFile(new URL("src/engine/simulation.js", root), "utf8");
@@ -1310,7 +1310,7 @@ async function collectCopyFiles(dir) {
 await collectCopyFiles("src/");
 // A save key is an identifier, an export filename is a filename, and a shipped release
 // note records what was written at the time. None of them are player-facing prose.
-const LEGACY_EXEMPT = ['"hashrate-save.json"', '"hashrate-career-v1"', '"hashrate-genesis-save-v1"', "not a valid Hashrate save."];
+const LEGACY_EXEMPT = ['"hashrate-save.json"', '"hashrate-career-v1"', '"hashrate-genesis-save-v1"', "not a valid Hashrate save.", '"hashrate-genesis-save-v1.unreadable"', '"hashrate-save-raw.json"', '"hashrate-save-unreadable.json"', '"https://github.com/mja1337/hashrate-game"'];
 const legacyHits = [];
 for (const file of copyFiles) {
   const source = await readFile(new URL(file, root), "utf8");
@@ -1838,5 +1838,45 @@ assert((inline.match(/const MINER_SVG_DEFS=/g) || []).length === 1, "The shared 
 const artIdx = appScripts.indexOf("src/ui/art.js"), consumerIdx = appScripts.indexOf("src/ui/enhance/mine-market.js");
 assert(artIdx >= 0 && artIdx < consumerIdx, "art.js owns MINER_SVG_DEFS and must load before the sprite functions that reference it");
 assert(css.includes(".svg-sprite-defs{position:absolute;width:0;height:0;overflow:hidden;pointer-events:none}"), "The defs carrier must take no layout space and no pointer events");
+
+/* LAUNCH-WEEK GUARDS. Each of these is a promise made to a player who is not the developer. */
+{
+  const recovery = await readFile(new URL("src/app/recovery.js", root), "utf8");
+  const bootstrap = await readFile(new URL("src/app/bootstrap.js", root), "utf8");
+  const events = await readFile(new URL("src/app/events.js", root), "utf8");
+  const footer = await readFile(new URL("src/ui/footer.js", root), "utf8");
+  const notify = await readFile(new URL("src/ui/notify.js", root), "utf8");
+  // A boot that throws must never leave a blank page.
+  assert(appScripts[0] === "src/app/recovery.js", "The recovery page has to load before any game code, or a failed start is blank again");
+  assert(/window\.addEventListener\("load",function\(\)\{if\(!window\.gameBooted\)show\(\)\}\)/.test(recovery) && /render\(\);window\.gameBooted=true;/.test(bootstrap),
+    "Bootstrap no longer says the first render succeeded, or the recovery page no longer checks");
+  for (const label of ["Export my save", "Start a new run", "Try again", "Copy debug info"]) assert(recovery.includes(label), `The recovery page lost its "${label}" button`);
+  assert(!/(^|[^.\w])fetch\(|XMLHttpRequest|sendBeacon/.test(recovery + footer), "Feedback and recovery must not send anything: they only link out and copy text");
+  // The tour's promise that the clock is held.
+  assert(events.includes('if(a==="speed"&&Number(v)>0&&tourActive())'), "The speed buttons start the clock during the tour again");
+  // Leaving the tab pauses the game; it does not fast-forward on return.
+  assert(/visibilityState==="hidden"[\s\S]*state\.speed=0/.test(bootstrap) && !/tick\(true\)/.test(bootstrap), "A hidden tab no longer pauses the game, or the catch-up burst is back");
+  // The footer: feedback, debug text and what is stored.
+  for (const text of ["Report a bug", "Suggest something", 'data-action="copy-debug"', "No accounts, no tracking, no analytics"]) assert(footer.includes(text), `The footer lost "${text}"`);
+  assert(footer.includes("issues/new?") && footer.includes("version:APP_VERSION"), "The feedback links no longer carry the version");
+  assert(inline.includes("${footerHtml()}"), "render() no longer draws the footer from footer.js");
+  // The key's warning: true, and in readable text.
+  assert(!inline.includes("cannot receive real bitcoin"), "The wallet ceremony says the key cannot receive real bitcoin, which is not true of any 64-digit key");
+  assert(/<p class="modal-warning"><b>Do not use this key for real bitcoin\./.test(inline), "The warning under the key is back in the smallest text");
+  assert(/\.modal-note\{[^}]*font:11px/.test(css) && /\.footer\{[^}]*font:11px/.test(css), "The modal notes or the footer are back to nine pixels");
+  // Keyboard focus survives a repaint, and a modal takes it. Secondary text keeps a readable contrast.
+  assert(inline.includes("function captureFocus()") && inline.includes("restoreFocus(focusSelector);"), "A full render drops keyboard focus again");
+  {
+    const lum = hex => { const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(c => c <= .03928 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4); return .2126 * r + .7152 * g + .0722 * b; };
+    const ratio = (a, b) => { const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x); return (hi + .05) / (lo + .05); };
+    const token = name => new RegExp(`--${name}:(#[0-9a-f]{6})`).exec(css)?.[1];
+    for (const fg of ["muted", "dim"]) for (const bg of ["bg", "panel", "panel2"])
+      assert(ratio(token(fg), token(bg)) >= 4.5, `--${fg} on --${bg} is below 4.5:1: secondary text is hard to read`);
+  }
+  // Good news waits behind a modal; a refused save is visible.
+  assert(notify.includes("TOAST_DEFERRABLE") && inline.includes("flushDeferredToasts();"), "A toast can land on top of a modal again");
+  assert(notify.includes("function announceSaveState()") && inline.includes("saveStateHtml()"), "A browser that refuses to store the game is no longer shown in the header");
+  assert(/function save\(\)\{return writeSave\(state\)\}/.test(inline), "save() no longer reports whether the game was stored");
+}
 
 console.log("UI contracts passed: Mine purchases, difficulty and mobile speed controls, transaction precision, enhancement guards, mempool containment, fleet servicing, repair labour, overdrive, Method coverage, speed-resume safety, the exchange trade-ticket flow, network-hash display parity, bad-event impact effects, timed facility-upgrade risk, mining-floor connectivity/power status, the 100-year procedural sandbox continuation, pool fee display, pool shutdown fail-over, the custody transfer slider, Lightning gating, live market pricing, mempool realism, disabled-control tooltips, the single-venue market redesign, Mine-tab scroll stability, full-refurbishment puzzle consistency, the proactive settlement warning, connectivity ping, the unified incoming-fleet pipeline, proportional fleet-health severity colors, rival operators, milestone moments, the end-of-run recap, cross-run career persistence, the dice-entropy wallet-setup ceremony, the era-accurate wallet-software upgrade path, the resetGame() operator-era crash fix, the real mailing-list learning items, the Dashboard build-queue card, hands-on self-servicing before technicians are hired, the fault-clearing/offline-threshold repair fix, the non-blocking faucet popup, tiered spare parts, the historically-grounded custody/region exposure warnings, free self-serviced labour with real self-damage risk, the four hardware self-help skills, staff dismissal the operator XP/level system, dated pool payout schemes, one drawing per machine, and scroll-anchored, frame-aligned repaints");

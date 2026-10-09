@@ -104,7 +104,7 @@ function ensureFloor3dLoaded(){
     chain=chain.then(()=>new Promise((resolve,reject)=>{
       if(document.querySelector(`script[data-floor3d="${src}"]`))return resolve();
       const node=document.createElement("script");
-      node.src=src;node.dataset.floor3d=src;
+      node.src=`${src}?v=${APP_VERSION}`;node.dataset.floor3d=src;
       node.onload=resolve;node.onerror=()=>reject(new Error(src));
       document.head.appendChild(node);
     }));
