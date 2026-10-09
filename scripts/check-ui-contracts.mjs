@@ -1895,6 +1895,14 @@ assert(css.includes(".svg-sprite-defs{position:absolute;width:0;height:0;overflo
   // An order is visible on the machine's own card, and the racking toasts do not invent a crew.
   assert(inline.includes("function hardwareOrderStrip(h)") && inline.includes("hardwareOrderStrip(h)") && css.includes(".hw-order-strip{"), "A machine on order no longer shows where it is on its own card");
   assert(!inline.includes("Machines came online as the crew") && !inline.includes("come back as the crew works") && !inline.includes("Wait for the crew to finish"), "A racking toast talks about a crew again, which a run with no technicians does not have");
+  // The home office is a room, not a factory, in the 3D floor: its own dressing, no industrial grille, no hi-vis.
+  {
+    const scenery = await readFile(new URL("src/ui/floor3d/scenery.js", root), "utf8");
+    const cooling = await readFile(new URL("src/ui/floor3d/cooling.js", root), "utf8");
+    assert(scenery.includes("function homeOffice(api,w,d,s)") && scenery.includes("if(home)homeOffice(api,w,d,s);") && scenery.includes("if(!home){"), "The home office has lost its own dressing in the 3D floor");
+    assert(cooling.includes("p.id!=='home'){box([1.1,1.05,.35]"), "The home office has a steel wall grille again where its window should be");
+    assert(scenery.includes("if(!home)for(const y of [.94,.84])"), "People at the home office wear hi-vis again");
+  }
   // Good news waits behind a modal; a refused save is visible.
   assert(notify.includes("TOAST_DEFERRABLE") && inline.includes("flushDeferredToasts();"), "A toast can land on top of a modal again");
   assert(notify.includes("function announceSaveState()") && inline.includes("saveStateHtml()"), "A browser that refuses to store the game is no longer shown in the header");

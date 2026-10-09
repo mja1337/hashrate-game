@@ -159,7 +159,8 @@ const FloorCooling=(()=>{
     if(!plant.installed.length&&!plant.pending.length){
       /* An unequipped room still has a grille in the wall — it just does nothing, and now it
          is visibly nothing rather than a spinning fan implying cooling never bought. */
-      if(!p.outdoor){box([1.1,1.05,.35],[0,1.75,-d/2+.32],C.steel);box([.92,.86,.05],[0,1.75,-d/2+.5],C.dark);}
+      // A spare room has a window for this, drawn by the home-office dressing in scenery.js, not a steel grille.
+      if(!p.outdoor&&p.id!=='home'){box([1.1,1.05,.35],[0,1.75,-d/2+.32],C.steel);box([.92,.86,.05],[0,1.75,-d/2+.5],C.dark);}
       return;
     }
     const layout={wallX:-w/2+1.6,padZ:-d/2+1,groundX:-w/2+4};

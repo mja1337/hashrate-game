@@ -18,6 +18,11 @@ const FloorScenery=(()=>{
       {type:'shelves',name:'Spares',x:-w/2+1.25,z:-d/2+2.2,w:1.5,d:1.2}];
     /* No desk at home: the laptop draws its own, and a spare room with a second desk
        carrying a monitor plugged into nothing reads as scenery placed for its own sake. */
+    if(p.id==='home'){
+      // A spare room, not a bay: the bench is a corner of a desk and the shelving is a bookcase against the wall.
+      items[0].name='Repair corner';
+      items[1]={type:'shelves',name:'Bookcase',x:-w/2+.45,z:-d/2+2.6,w:.9,d:1.8};
+    }
     if(p.id!=='home')items.push({type:'pallets',name:'Deliveries',x:w/2-1.8,z:d/2-1.7,w:1.6,d:1.1});
     if(FloorModel.presets.indexOf(p)>=2)items.push({type:'forklift',name:'Loading bay',x:w/2-1.8,z:-d/2+2.3,w:1.4,d:2});
     if(large){
@@ -50,9 +55,63 @@ const FloorScenery=(()=>{
       return {...c,x,z,id:i,color:roleColors[c.role]};
     });
   }
+  /* THE HOME OFFICE. The first site is a spare room, and it used to be dressed as a small factory: a concrete slab, a ruled
+     grid on the floor, hazard chevrons, steel posts with strip lights, a switch cabinet with an emergency stop and a
+     cardboard-box shelf. Everything here is the same instanced geometry the industrial rooms use, drawn as what a spare
+     room has: floorboards and a rug, painted walls with skirting, a window with curtains, a bookcase, a filing cabinet,
+     a plant, pictures and a clock. Positions keep clear of the middle of the floor, where the machines are drawn. */
+  function homeOffice(api,w,d,s){
+    const {box,part,lamp,C}=api,back=-d/2;
+    const cyl=(size,pos,col,rot=[0,0,0])=>part('cylinder',size,pos,col,rot);
+    // Floor: a dark subfloor edge, then boards in a few tones, then a rug.
+    box([w+.4,.38,d+.4],[0,-.25,0],0x4b3a2c);
+    box([w,.13,d],[0,-.015,0],0x6f573f);
+    const tones=[0xb48d62,0xa98259,0xbd9669,0xa07a52,0xb88f65];
+    for(let k=0,x=-w/2;x<w/2-.01;x+=.2,k++)box([.19,.016,d],[x+.1,.062,0],tones[(k*3+(k>>2))%tones.length]);
+    box([4.6,.02,3.2],[.4,.078,.5],0x44586f);box([4.3,.024,2.9],[.4,.082,.5],0x6a84a2);
+    for(const dz of [-.75,.75])box([4.3,.026,.07],[.4,.084,.5+dz],0xd9cdb4);
+    // Walls: warm paint, a pale skirting board and cornice, and two wall lights.
+    const paint=0xd9ceb8,trim=0xf1ece0;
+    box([w,2.9,.16],[0,1.45,back],paint);box([.16,2.9,d],[-w/2,1.45,0],paint);
+    box([w,.2,.06],[0,.16,back+.11],trim);box([.06,.2,d],[-w/2+.11,.16,0],trim);
+    box([w,.1,.08],[0,2.84,back+.12],trim);box([.08,.1,d],[-w/2+.12,2.84,0],trim);
+    for(const x of [-3.1,3.6]){box([.16,.3,.1],[x,1.95,back+.17],0x8a7a62);lamp([.12,.2,.07],[x,1.98,back+.24],0xffd9a0,-1,1.9)}
+    // A window on the back wall, with a sill, mullions and a pair of curtains on a rod.
+    const wx=1.2;
+    box([2.5,1.6,.06],[wx,1.8,back+.1],trim);box([2.3,1.4,.05],[wx,1.8,back+.13],0xcfe6f2,-1,true);
+    box([.06,1.4,.07],[wx,1.8,back+.15],trim);box([2.3,.06,.07],[wx,1.8,back+.15],trim);
+    box([2.7,.07,.28],[wx,1.0,back+.2],trim);
+    cyl([.03,3.3,.03],[wx,2.72,back+.22],0x7a6a58,[0,0,Math.PI/2]);
+    for(const dx of [-1.45,1.45]){box([.6,1.95,.1],[wx+dx,1.72,back+.24],0xa5705a);for(let k=0;k<3;k++)box([.03,1.9,.11],[wx+dx-.2+k*.2,1.72,back+.25],0x8d5c49)}
+    // Pictures and a clock.
+    for(const [x,y,pw,ph,art] of [[-2.4,1.85,.9,.65,0xc7b98e],[-1.3,1.7,.5,.4,0x9fbcc4]]){box([pw,ph,.04],[x,y,back+.12],0x4a3a2c);box([pw-.12,ph-.12,.05],[x,y,back+.13],art);box([pw*.4,ph*.28,.055],[x+pw*.1,y-ph*.12,back+.135],0x7a8f6a)}
+    cyl([.24,.04,.24],[3.3,2.2,back+.12],0xf1ece0,[Math.PI/2,0,0]);cyl([.26,.03,.26],[3.3,2.2,back+.1],0x4a3a2c,[Math.PI/2,0,0]);
+    box([.02,.15,.02],[3.3,2.26,back+.15],0x2a2a2a);box([.11,.02,.02],[3.34,2.2,back+.15],0x2a2a2a);
+    // The consumer unit, on the left wall: the room's only plant, and the thing that tells you the power is on.
+    box([.14,.6,.42],[-w/2+.15,1.5,.6],0xe7e2d6);box([.05,.4,.3],[-w/2+.24,1.5,.6],0xcfc8b8);
+    if(s.power)lamp([.04,.07,.09],[-w/2+.27,1.7,.6],C.green,-1,1.5);else box([.04,.07,.09],[-w/2+.27,1.7,.6],C.dark,-1,true);
+    // Storage: a bookcase against the left wall, books and archive boxes.
+    const bx=-w/2+.4,bz=-d/2+2.6,bookTones=[0x9c3d3a,0x3d6f9c,0x4f8f5a,0xc9a24a,0x6b4f8f,0xd8d0be,0x2f4f4f,0xb86a3a];
+    box([.45,2.05,.04],[bx,1.05,bz-.9],0x7a5a3c);box([.45,2.05,.04],[bx,1.05,bz+.9],0x7a5a3c);box([.04,2.05,1.84],[bx-.2,1.05,bz],0x6a4c32);box([.45,.05,1.84],[bx,2.08,bz],0x7a5a3c);
+    for(let j=0;j<5;j++){
+      const y=.08+j*.5;box([.45,.04,1.84],[bx,y,bz],0x7a5a3c);
+      if(j===0){for(let k=0;k<3;k++){box([.34,.3,.5],[bx+.02,y+.18,bz-.55+k*.55],0xcdbf9f);box([.02,.12,.3],[bx+.2,y+.2,bz-.55+k*.55],0xf4f0e4)}continue}
+      let zz=bz-.85,i=j*7;
+      while(zz<bz+.8){const bw=.04+((i*5)%4)*.012,bh=.27+((i*3)%5)*.035;box([.28,bh,bw],[bx+.04,y+.02+bh/2,zz+bw/2],bookTones[i%bookTones.length]);zz+=bw+.008;i++;if(j===3&&zz>bz+.1)break}
+    }
+    // A filing cabinet and a plant in the back corner.
+    const fx=-w/2+1.5;box([.52,1.3,.62],[fx,.72,back+.45],0x8c9a93);
+    for(let k=0;k<3;k++){box([.46,.34,.02],[fx,.35+k*.42,back+.77],0x7d8b85);box([.2,.03,.03],[fx,.42+k*.42,back+.79],0xd4d9d6)}
+    const px=-w/2+.55,pz=back+.55;
+    cyl([.25,.34,.25],[px,.24,pz],0xb4623f);cyl([.27,.05,.27],[px,.43,pz],0x9c5334);
+    for(let k=0;k<7;k++)part('box',[.07,.55,.2],[px+Math.sin(k*.9)*.1,.78,pz+Math.cos(k*.9)*.1],k%2?0x4f8f5a:0x3f7a4c,[Math.cos(k*.9)*.45,k*.9,Math.sin(k*.9)*.45]);
+  }
   function populate(s,api){
     const {box,part,fan,label,C}=api,{p}=FloorModel.definitions(s),site=plan(s),w=p.width,d=p.depth;
     const cylinder=(size,pos,col,rot=[0,0,0])=>part('cylinder',size,pos,col,rot);
+    const home=p.id==='home';
+    if(home)homeOffice(api,w,d,s);
+    if(!home){
     const gridColor=site.large?0x374952:C.floor;
     box([site.width+.4,.38,site.depth+.4],[site.cx,-.25,site.cz],C.slab);
     box([site.width,.13,site.depth],[site.cx,-.015,site.cz],gridColor);
@@ -85,6 +144,7 @@ const FloorScenery=(()=>{
     // Emergency stop, red and unmissable, because that is what one looks like.
     part('cylinder',[.09,.05,.09],[-w/2+.7,1.12,d/2-.4],0xd4392f,[Math.PI/2,0,0]);
     for(let i=0;i<3;i++)box([.12,.16,.04],[-w/2+.49+i*.21,.8,d/2-.38],C.orange);
+    }
     // Roofs removed on the live containers so racks and their status stay legible.
     if(p.id==='container')for(let row=0;row<3;row++){
       const z=(row-1)*4.4;
@@ -102,7 +162,13 @@ const FloorScenery=(()=>{
     for(const item of site.items){
       const {x,z}=item;
       const B=(size,offset,col)=>box(size,[x+offset[0],offset[1],z+offset[2]],col);
-      if(item.type==='workbench'){
+      if(home&&item.type==='shelves')continue;
+      if(home&&item.type==='workbench'){
+        B([1.6,.06,.75],[0,.74,0],0x9a7549);for(const dx of [-.72,.72])for(const dz of [-.3,.3])B([.06,.72,.06],[dx,.37,dz],0x6a4c32);
+        B([.5,.2,.26],[.45,.87,.05],C.red);B([.5,.03,.28],[.45,.99,.05],0x9a2f24);B([.14,.03,.1],[.45,1.03,.05],C.edge);
+        B([.55,.025,.38],[-.45,.79,.05],0x286b60);for(let k=0;k<4;k++)B([.07,.07,.14],[-.62+k*.16,.84,.05],C.edge);
+        B([.04,.3,.04],[-.1,.95,-.2],0x3a3a3a);B([.3,.05,.04],[-.02,1.1,-.2],0x3a3a3a);api.lamp([.1,.05,.1],[x+.12,1.07,z-.18],0xffd9a0,-1,2);
+      }else if(item.type==='workbench'){
         B([2.1,.12,1.03],[0,.9,0],C.wood);for(const dx of [-.85,.85])B([.1,.85,.85],[dx,.47,0],C.steel);
         B([.65,.15,.4],[.35,1.06,.1],C.red);B([.8,.045,.55],[-.55,1,.05],0x286b60);
         for(let k=0;k<4;k++)B([.08,.09,.18],[-.84+k*.2,1.07,.07],C.edge);
@@ -150,7 +216,7 @@ const FloorScenery=(()=>{
         B([1.8,.2,3.2],[0,.25,0],C.steel);for(const dz of [-.8,.8]){cylinder([.35,.75,.35],[x,.75,z+dz],0x61a1b2,[0,0,Math.PI/2]);cylinder([.08,1.5,.08],[x,.5,z+dz],0xdb886a,[0,0,Math.PI/2]);}
         for(const dx of [-.73,.73])cylinder([.07,2.6,.07],[x+dx,.45,z],dx<0?0x5fb7df:0xdc8063,[Math.PI/2,0,0]);
       }
-      if(site.large||item.type==='workbench')label(item.name.toUpperCase(),[x,item.type==='hall'?3.45:item.type==='tower'?3.55:2.65,z+item.d/2+.12],Math.min(item.w+.8,4),.25);
+      if(!home&&(site.large||item.type==='workbench'))label(item.name.toUpperCase(),[x,item.type==='hall'?3.45:item.type==='tower'?3.55:2.65,z+item.d/2+.12],Math.min(item.w+.8,4),.25);
     }
     if(site.large){
       // Open mesh fence, bollards, utility poles and a marked service road.
@@ -167,9 +233,10 @@ const FloorScenery=(()=>{
       for(const dx of [-.105,.105]){box([.135,.51,.15],[x+dx,.38,z],C.steel);box([.15,.095,.27],[x+dx,.125,z+.055],C.dark);}
       box([.38,.46,.23],[x,.88,z],color);
       // Hi-vis, on both bands, because that is what anyone on an industrial floor wears.
-      for(const y of [.94,.84])box([.39,.045,.025],[x,y,z+.13],0xd8e84a);
-      cylinder([.13,.23,.13],[x,1.23,z],0xc19b7d);cylinder([.155,.09,.155],[x,1.4,z],role==='treasurer'?C.steel:0xe4ddb1);
-      cylinder([.18,.025,.18],[x,1.365,z],role==='treasurer'?C.steel:0xe4ddb1);
+      if(!home)for(const y of [.94,.84])box([.39,.045,.025],[x,y,z+.13],0xd8e84a);
+      cylinder([.13,.23,.13],[x,1.23,z],0xc19b7d);
+      if(home)cylinder([.145,.1,.145],[x,1.38,z],0x5b4636);
+      else{cylinder([.155,.09,.155],[x,1.4,z],role==='treasurer'?C.steel:0xe4ddb1);cylinder([.18,.025,.18],[x,1.365,z],role==='treasurer'?C.steel:0xe4ddb1)}
       part('box',[.12,.38,.13],[x-.25,.84,z],color,[0,0,.22]);part('box',[.12,.32,.13],[x+.25,.9,z+.035],color,[-.38,0,-.35]);
       if(role==='fieldtech')box([.34,.19,.2],[x-.28,.57,z],C.red);
       else box([.24,.3,.04],[x+.28,.92,z+.18],role==='logistics'?C.wood:C.dark);
