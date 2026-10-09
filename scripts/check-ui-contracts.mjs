@@ -1890,6 +1890,8 @@ assert(css.includes(".svg-sprite-defs{position:absolute;width:0;height:0;overflo
   // The next step up is teased, greyed, in Facilities and in the hardware catalogue; and the tip sits at the very bottom.
   assert(inline.includes("nextReleases(FACILITIES)") && inline.includes("nextReleases(REGIONS)") && inline.includes("nextReleases(HARDWARE)") && inline.includes("unlockInText(") && css.includes(".facility.teaser,.item.teaser"), "The next site, location or machine is no longer teased");
   assert(footer.indexOf('class="footer-tipline"') > footer.indexOf('class="footer-privacy"'), "The tip link is no longer the last thing in the footer");
+  // A tech node's detail is readable whatever it overlaps: its node is lifted above the others, and it opens where there is room.
+  assert(css.includes(".tech-node:hover,.tech-node:focus-within{z-index:30}") && css.includes(".tech-node.flip-up .tech-node-detail") && css.includes(".tech-node.align-right .tech-node-detail") && inline.includes("function placeTechDetail(node)"), "The tech tree's hover detail can be painted over by neighbouring nodes again, or cut off at the lattice's edge");
   // Good news waits behind a modal; a refused save is visible.
   assert(notify.includes("TOAST_DEFERRABLE") && inline.includes("flushDeferredToasts();"), "A toast can land on top of a modal again");
   assert(notify.includes("function announceSaveState()") && inline.includes("saveStateHtml()"), "A browser that refuses to store the game is no longer shown in the header");

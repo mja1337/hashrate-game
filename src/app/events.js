@@ -146,4 +146,16 @@ document.getElementById("app").addEventListener("change",e=>{
   if(e.target.id==="importSave"&&e.target.files&&e.target.files[0])importSave(e.target.files[0])
 });
 document.getElementById("app").addEventListener("toggle",e=>{if(e.target.classList?.contains("method-chapter")||e.target.classList?.contains("method-detail"))rememberMethodChapter(e.target);else if(e.target.classList?.contains("context-help"))rememberContextHelp(e.target)},true);
+/* A tech node's detail opens below it and to the right. In the last row, or the last column, the lattice's scroll area would
+   cut that off, so it opens upward or to the left when that is where the room is. Measured when the node is pointed at or
+   focused, because the room depends on where the page has been scrolled and how wide the lattice is. */
+function placeTechDetail(node){
+  const detail=node.querySelector(".tech-node-detail"),scroll=node.closest(".tech-tree-scroll");if(!detail||!scroll)return;
+  node.classList.remove("flip-up","align-right");
+  const box=scroll.getBoundingClientRect(),at_=node.getBoundingClientRect(),h=detail.offsetHeight,w=detail.offsetWidth;
+  const below=box.bottom-at_.bottom-6,above=at_.top-box.top-6;
+  if(h>below&&above>below)node.classList.add("flip-up");
+  if(at_.left+w>box.right)node.classList.add("align-right");
+}
+["mouseover","focusin"].forEach(type=>document.getElementById("app").addEventListener(type,e=>{const node=e.target.closest&&e.target.closest(".tech-node");if(node)placeTechDetail(node)}));
 document.getElementById("app").addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.matches(".story-item"))e.target.click()});

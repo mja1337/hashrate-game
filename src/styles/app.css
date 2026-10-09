@@ -265,13 +265,19 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--orange);outline-off
 .tech-node-face:focus-visible{outline:2px solid var(--orange);outline-offset:1px}
 /* Detail on demand, so the lattice stays a lattice. */
 .tech-node-detail{position:absolute;left:0;top:calc(100% + 6px);z-index:5;width:230px;padding:10px;
-  border:1px solid var(--line);background:#0c1213;box-shadow:0 8px 22px rgba(0,0,0,.55);
+  border:1px solid #3a4a4e;background:#0c1213;isolation:isolate;box-shadow:0 8px 22px rgba(0,0,0,.55);
   opacity:0;visibility:hidden;transition:opacity .12s}
 .tech-node:hover .tech-node-detail,.tech-node:focus-within .tech-node-detail{opacity:1;visibility:visible}
+/* The node is its own stacking layer, so a popover's z-index only ever ranked it inside its own node: every later node
+   painted over it, and their text showed through the detail. The node being read is lifted above its neighbours instead.
+   The popover opens upward, or to the left, when the lattice would cut it off (see placeTechDetail in events.js). */
+.tech-node:hover,.tech-node:focus-within{z-index:30}
+.tech-node.flip-up .tech-node-detail{top:auto;bottom:calc(100% + 6px)}
+.tech-node.align-right .tech-node-detail{left:auto;right:0}
 .tech-node-detail b{display:block;color:var(--text);font-size:11px}
-.tech-node-detail p{margin:4px 0 6px;color:var(--muted);font-size:10px;line-height:1.5}
-.tech-node-detail span{display:block;color:var(--dim);font:9px var(--mono);line-height:1.6}
-.tech-node-detail em{display:block;margin-top:6px;color:var(--orange2);font-style:normal;font:9px var(--mono)}
+.tech-node-detail p{margin:4px 0 6px;color:var(--muted);font-size:11px;line-height:1.5}
+.tech-node-detail span{display:block;color:var(--muted);font:10px var(--mono);line-height:1.6}
+.tech-node-detail em{display:block;margin-top:6px;color:var(--orange2);font-style:normal;font:10px var(--mono)}
 .tech-legend{display:flex;gap:14px;flex-wrap:wrap;padding:0 14px 14px;color:var(--dim);font:9px var(--mono)}
 .tech-key{display:inline-block;width:9px;height:9px;margin-right:4px;border:1px solid var(--line);vertical-align:-1px}
 .tech-key.unlocked{border-color:var(--orange);background:#17140d}
@@ -466,4 +472,4 @@ body.tour-on .speed:not([data-value="0"]),body.tour-on .mobile-pause-button.paus
 @keyframes smoke-rise{0%{transform:translate(0,12%) scale(.5);opacity:0}20%{opacity:.95}100%{transform:translate(8%,-130%) scale(1.9);opacity:0}}
 @media(prefers-reduced-motion:reduce){.floor-smoke i{animation:none;opacity:.4;transform:translate(0,-30%) scale(1.2)}}
 .next-up{color:var(--orange2);font-weight:700;letter-spacing:.06em;text-transform:uppercase}.facility.teaser,.item.teaser{border-style:dashed;filter:grayscale(.55)}.facility.teaser .risk,.item.teaser .owned-count{opacity:1}
-.footer .footer-tipline{flex-basis:100%;display:flex;justify-content:center;padding-top:10px;margin-top:4px;border-top:1px solid var(--line)}
+.footer .footer-tipline{flex-basis:100%;display:flex;justify-content:flex-start;padding-top:10px;margin-top:4px;border-top:1px solid var(--line)}
