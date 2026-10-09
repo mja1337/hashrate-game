@@ -1253,7 +1253,8 @@ rule("every connectivity plan is the best choice somewhere", () => {
         if(!cap)continue;
         const n=Math.max(1,Math.round(cap*0.77));
         let best=null;
-        for(const p of CONNECTIVITY_PLANS){
+        // "No internet" is the line cut, not a service to compare: it earns nothing by design.
+        for(const p of CONNECTIVITY_PLANS.filter(x=>x.id!==OFFLINE_PLAN_ID)){
           ${SITE(``)}
           state.time=at("2025-06-01");state.facility=f.id;state.region=reg;
           state.hardware={s21xp:n};state.connectivity=p.id;
@@ -4677,6 +4678,45 @@ rule("before the market opens there is no restructuring and no arrears; after it
   later(`${SITE(`state.time=at("2012-03-01");state.campaignStart=at("2009-01-03");state.cash=10;state.hardware={laptop:1};state.decommissionedHardware={};`)}`);
   later('queueMonthlySettlement(500,"2012-03",0,true)');
   assert(later("state.ended") === false && later("state.pendingSettlement") !== null, "a shortfall after the market opened ended the run");
+});
+
+/* ---- THE INTERNET, CUT ---- */
+
+rule("cutting the internet costs nothing, stops mining, and the clock keeps running", () => {
+  const read = makeEval(loadEngine());
+  read(`${SITE(`state.time=at("2015-03-01");state.campaignStart=at("2012-01-01");state.hardware={laptop:1,cpu:3};state.node=0;`)}`);
+  assert(read("internetMonthlyCost()") > 0 && read("operating()") === true, "the starting position is not an online mine");
+  read("cutInternet()");
+  assert(read("internetCut()") === true && read("internetMonthlyCost()") === 0, "the line was cut and still billed");
+  assert(read("operating()") === false && read("connectivityOutage()") === true, "a mine with no internet is still mining");
+  const mined = read("state.mined"), t0 = read("state.time");
+  read("for(let i=0;i<20;i++)tick(true)");
+  assert(read("state.mined") === mined, "coins were mined with the line cut");
+  assert(read("state.time") > t0, "the clock stopped when the line was cut");
+  assert(read("state.billLedger.internet") === 0 && read("state.billLedger.nodeNetwork") === 0, "an internet or node-network charge accrued with the line cut");
+  assert(read("activeSiteIncident()") === null, "a cut line was reported as a site incident with an end date");
+});
+
+rule("the major chapters that fall while the line is cut are held, and shown with their point when it is restored", () => {
+  const read = makeEval(loadEngine());
+  read(`${SITE(`state.time=at("2010-07-14");state.campaignStart=at("2009-01-03");state.hardware={laptop:1};state.storyPause=true;state.seen=state.seen.filter(id=>id!=="mtgoxopen");`)}`);
+  read("cutInternet()");
+  read("for(let i=0;i<8;i++)tick(true)");
+  const points = read("state.points");
+  assert(JSON.stringify(read("state.missedEvents")) === '["mtgoxopen"]', `the chapter was not held: ${read("JSON.stringify(state.missedEvents)")}`);
+  assert(read("state.activeEvent") === null, "a chapter opened with no connection to read it on");
+  read("restoreInternet()");
+  assert(read("state.activeEvent") === "mtgoxopen" && read("state.points") === points + 1, "the held chapter was not opened, with its point, when the line came back");
+  assert(read("state.connectivity") === "fixed" && read("state.missedEvents.length") === 0, "the line was not restored to what it was, or the chapter is still held");
+});
+
+rule("reconnecting goes back to the plan that was cut, or to the local line if that is gone", () => {
+  const read = makeEval(loadEngine());
+  read(`${SITE(`state.time=at("2022-03-01");state.connectivity="starlink";state.region="na";`)}`);
+  read("cutInternet()");assert(read("state.connectivityBefore") === "starlink", "the plan that was cut was not remembered");
+  read("restoreInternet()");assert(read("state.connectivity") === "starlink", `reconnecting gave ${read("state.connectivity")}`);
+  read("cutInternet();state.region=\"iran\"");read("restoreInternet()");
+  assert(read("state.connectivity") === "fixed", "a plan that is not available here was restored");
 });
 
 /* Reported from an exit hook rather than inline, because inline made the gate

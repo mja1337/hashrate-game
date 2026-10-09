@@ -474,3 +474,13 @@ body.tour-on .speed:not([data-value="0"]),body.tour-on .mobile-pause-button.paus
 .next-up{color:var(--orange2);font-weight:700;letter-spacing:.06em;text-transform:uppercase}.facility.teaser,.item.teaser{border-style:dashed;filter:grayscale(.55)}.facility.teaser .risk,.item.teaser .owned-count{opacity:1}
 .footer .footer-tipline{flex-basis:100%;display:flex;justify-content:flex-start;padding-top:10px;margin-top:4px;border-top:1px solid var(--line)}
 .hw-order-strip{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:0 0 10px;padding:8px 10px;border:1px solid var(--orange);border-left-width:4px;background:rgba(247,147,26,.09)}.hw-order-strip b{font:700 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--orange2)}.hw-order-strip span{flex:1 1 160px;color:var(--text);font-size:13px;line-height:1.45}
+
+/* The internet cut (src/ui/offline.js) */
+.offline-lock{padding:20px;display:grid;gap:14px}.offline-card{padding:26px 24px;text-align:left}.offline-card h1{margin:6px 0 10px}.offline-card .lead{max-width:60ch}.offline-card .actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px}.offline-icon{color:#9db4c0;margin-bottom:10px}
+.tab.offline-locked{opacity:.42;text-decoration:line-through}
+body.is-offline .ticker .tick.offline-masked .value,body.is-offline .ticker .tick.offline-masked .subvalue{visibility:hidden}body.is-offline .ticker .tick.offline-masked{position:relative}body.is-offline .ticker .tick.offline-masked:after{content:"NO LINK";position:absolute;left:12px;top:50%;font:700 10px var(--mono);letter-spacing:.1em;color:var(--dim)}
+.offline-sidebar{opacity:.85}
+/* The two moments that earn confetti (src/ui/confetti.js) */
+.confetti-canvas{position:fixed;inset:0;z-index:9500;pointer-events:none}
+.celebrate-banner{margin:0 0 12px;padding:6px 12px;display:inline-block;background:linear-gradient(90deg,#f7931a,#ffc267);color:#090c0d;font:700 11px var(--mono);letter-spacing:.12em;text-transform:uppercase}
+.event-celebrate .modal-top{height:8px;background:linear-gradient(90deg,#f7931a,#ffc267,#86c79a,#77a9c9,#b69ce0)}.event-celebrate h2{color:var(--orange2)}

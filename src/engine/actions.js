@@ -419,6 +419,8 @@ function payDebt(){
 }
 function setContract(id){if(!POWER_CONTRACTS.some(x=>x.id===id)||id===state.contract)return;state.contract=id;log("Power contract changed",powerContract().name);save();render()}
 function setConnectivityPlan(id){const plan=CONNECTIVITY_PLANS.find(x=>x.id===id);if(!plan||id===state.connectivity)return;
+  if(id===OFFLINE_PLAN_ID)return requestCutInternet();
+  if(internetCut()){state.connectivityBefore=id;return restoreInternet()}
   // One availability rule, read by both the chooser and this switch, so they cannot disagree.
   if(!connectivityAvailable(plan))return showToast("Connectivity unavailable",`${plan.name}: ${connectivityUnavailableReason(plan)}.`);state.connectivity=id;log("Connectivity plan changed",`${plan.name} · ${fmtUsd(internetMonthlyCost())}/month`);save();render()}
 function hireStaff(id){const s=STAFF.find(x=>x.id===id);if(!s||(id!=="fieldtech"&&hasStaff(id)))return;

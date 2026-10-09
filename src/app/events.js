@@ -92,6 +92,7 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(a==="sell-strategy")sellStrategy(id,Number(v));
   else if(a==="contract")setContract(id);
   else if(a==="connectivity")setConnectivityPlan(id);
+  else if(a==="reconnect-internet")restoreInternet();else if(a==="cut-internet")requestCutInternet();
   else if(a==="settle-btc"){state.settlementSaleMode=true;activeTab=openTab("market");save();render()}
   else if(a==="cancel-settlement-sale"){state.settlementSaleMode=false;render()}
   else if(a==="settle-liquidate")liquidateForSettlement();
@@ -114,7 +115,7 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(a==="mode"){if(state.mode!==v){state.mode=v;log(v==="pool"?"Pool mining selected":"Solo mining selected",v==="pool"?poolData().name:"No pool fee","operations")}save();render()}else if(a==="pool"){const selected=poolData(v);if(availablePool()&&selected&&!poolClosed(v)&&poolEligible(selected)){state.pool=v;state.mode="pool";log("Mining pool changed",`${selected.name} · ${(poolFee()*100).toFixed(2)}% fee`,"operations");save();render()}}else if(a==="toggle-power"){state.power=!state.power;log(state.power?"Mining fleet started":"Mining fleet stopped","manual","operations");save();render()}else if(a==="toggle-overdrive"){state.overdrive=!state.overdrive;log(state.overdrive?"Overdrive engaged":"Overdrive disengaged",state.overdrive?"+15% hash · +25% power draw · elevated wear and fault risk":"Back to rated settings","fleet");save();render()}else if(a==="toggle-auto-repair"){if(fieldTechnicianCount()<1)return;state.autoRepair=!state.autoRepair;log(state.autoRepair?"Auto-repair enabled":"Auto-repair disabled",state.autoRepair?"Technician crew will service faulted units automatically while parts are in stock":"Repairs need to be started manually again","fleet");save();renderMineContent()}
   else if(a==="settle-defer")deferSettlement();else if(a==="settle-fetch")fetchReserve(false);else if(a==="settle-fetch-rush")fetchReserve(true);else if(a==="pay-debt")payDebt();else if(a==="story"){state.activeEvent=id;state.eventResume=false;render()}
   else if(a==="close-loss")dismissLoss();
-  else if(a==="close-event"){state.activeEvent=null;resumeAfterModals();activateNextHardwareAlert();setTimer();save();render()}
+  else if(a==="close-event"){state.activeEvent=null;resumeAfterModals();if(surfaceMissedEvent()){save();render();return}activateNextHardwareAlert();setTimer();save();render()}
   else if(a==="continue-run"){state.ended=false;state.endDismissed=true;state.sandbox=true;state.speed=state.returnSpeed||1;log("Sandbox continuation started","historical feed complete");save();setTimer();render()}
   else if(a==="close-end"){state.endDismissed=true;save();render()}else if(a==="story-pause"){state.storyPause=!state.storyPause;save();render()}
   else if(a==="reset")resetGame();else if(a==="export")exportSave();else if(a==="import")document.getElementById("importSave").click();

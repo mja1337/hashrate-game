@@ -94,6 +94,10 @@ const CONNECTIVITY_PLANS=[
      drives anywhere. Starlink arriving made this a dead option at the old numbers, which is
      the contract catching a real mispricing rather than a design conflict. */
   {id:"sim",name:"Dual-SIM cellular failover",mult:1.25,risk:1,payout:1,failover:.08,desc:"Two mobile carriers cannot stop the last mile being cut, but the modems switch over automatically: the site is carrying traffic again in minutes rather than waiting days for a splice crew."},
+  /* Not a service at all: the line, cut. It costs nothing and nothing can mine or be looked up on it, which is the point. A run can be put
+     on hold this way (stop the machines, sell what is spare, cut the line, wait), at the price of not knowing what the world is doing. */
+  {id:"offline",name:"No internet (cut the line)",mult:0,flatBase:0,flatRisk:0,scaleDamp:0,payout:1,failover:0,risk:0,
+    desc:"Cancel the service. The line costs nothing, and nothing can mine: no pool, no network. Most of the game goes dark with it, because you cannot look anything up, and the news, prices and new hardware that arrive meanwhile wait for you until you reconnect. Machines left switched on keep drawing power."},
   {id:"fiber",name:"Business fibre + SLA",mult:2.8,risk:.32,payout:1.008,failover:1,minFacility:2,desc:"Diverse business routing and an SLA make the incident far less likely in the first place; faster propagation adds 0.8% effective mining revenue."}
 ];
 const STAFF=[

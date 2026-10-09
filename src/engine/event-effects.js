@@ -29,6 +29,9 @@ function applyEvent(e){
   if(e.fx==="computenorthx"){state.hardwareGlut={discount:.15,until:state.time+DAY*120};log("Compute North liquidation glut","Secondary ASIC prices soften for a season","fleet")}
   if(e.fx==="corescix"){state.hardwareGlut={discount:.22,until:state.time+DAY*180};log("Core Scientific liquidation glut","Secondary ASIC prices soften further","fleet")}
   if(e.fx==="riotx"&&state.region==="texas"){state.powerRateShock={multiplier:1.12,until:state.time+DAY*90};log("Regional grid strain","Texas power rates tick up while a large neighboring miner scales its load","operations")}
+  // With the line cut nobody hears of it: the chapter is held, and its skill point and its modal come when the line is back.
+  if(e.imp===3&&internetCut()&&(state.storyPause||e.celebrate)){queueMissedEvent(e);return}
   if(e.imp===3)state.points+=1;
-  if(e.imp===3&&state.storyPause){state.returnSpeed=state.speed||state.returnSpeed||1;state.speed=0;state.activeEvent=e.id}
+  // Opening of the market is shown whether or not story pauses are on: it is the moment the first months were building towards.
+  if(e.imp===3&&(state.storyPause||e.celebrate)){state.returnSpeed=state.speed||state.returnSpeed||1;state.speed=0;state.activeEvent=e.id}
 }

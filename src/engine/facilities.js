@@ -66,6 +66,7 @@ function siteStopReason(){
   if(gridCutOff())return `${fmtUsd(state.debt)} of unpaid bills has disconnected the grid.`;
   if(!state.power)return "Site power is switched off.";
   if(powerOutage())return `The regional grid is down until ${dateFmt(state.ops.powerOutageUntil)}.`;
+  if(internetCut())return "The internet is cut: nothing can mine until you reconnect.";
   if(connectivityOutage())return `The site has no internet until ${dateFmt(state.ops.outageUntil)}.`;
   if(fleetGrounded())return "The fleet is powered down and in transit between sites.";
   const fs=fleet(),f=facility();

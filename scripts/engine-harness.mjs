@@ -37,6 +37,7 @@ const FILES = [
   "src/engine/history.js",
   "src/engine/immersion.js",
   "src/engine/connectivity.js",
+  "src/engine/offline.js",
   "src/engine/thermal.js",
   "src/engine/fleet-ops.js",
   "src/engine/secondary.js",

@@ -36,7 +36,7 @@ function renderHeader(){
 }
 function nav(){
   const tabs=["dashboard","mine","pools","treasury","facilities","energy","learn","tech","ledger","method"];
-  return `<nav class="tabs" aria-label="Game sections">${tabs.map(t=>`<button class="tab ${activeTab===t?"active":""}" data-action="tab" data-value="${t}">${t}</button>`).join("")}</nav>`
+  return `<nav class="tabs" aria-label="Game sections">${tabs.map(t=>{const locked=typeof offlineTabLocked==="function"&&offlineTabLocked(t);return `<button class="tab ${activeTab===t?"active":""}${locked?" offline-locked":""}" data-action="tab" data-value="${t}"${locked?' title="No internet: this screen is locked"':""}>${t}</button>`}).join("")}</nav>`
 }
 function poolDashboard(){
   const t=state.time, net=hashAt(t), active=poolData(), rows=POOLS.filter(p=>p.id!=="solo"&&p.id!=="other"&&t>=at(p.date)&&!poolClosed(p.id,t)).map(p=>({p,share:poolShareAt(p.id,t),eligible:poolEligible(p)})).filter(x=>x.share>0).sort((a,b)=>b.share-a.share);

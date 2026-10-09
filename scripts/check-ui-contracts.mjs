@@ -1922,6 +1922,16 @@ assert(css.includes(".svg-sprite-defs{position:absolute;width:0;height:0;overflo
   assert(inline.includes("function endRunNoMarket(due)") && inline.includes("if(state.time<MARKET&&typeof endRunNoMarket===\"function\"&&endRunNoMarket(due))return;") && inline.includes('state.endReason==="nomarket"'), "A run can survive the gap before the market opens by restructuring again, or the end screen no longer says why it ended");
   assert(inline.includes('id:"no-market-cash"') && inline.includes('id="method-no-market"') && inline.includes("Before July 2010 there is no market"), "The Dashboard warning, the Method section or the tour no longer explain the no-market rule");
   assert(inline.includes("disabled:state.debt>0||noMarket") && inline.includes("disabled:noMarket,title:noMarket?NO_MARKET_RULE"), "The settlement screen offers arrears or restructuring before the market opens");
+  // The cut line locks the screens that need it, and the two big moments get confetti (not for a failed run, not for reduced motion).
+  {
+    const offline = await readFile(new URL("src/ui/offline.js", root), "utf8");
+    const confetti = await readFile(new URL("src/ui/confetti.js", root), "utf8");
+    assert(offline.includes('OFFLINE_OPEN_TABS=["dashboard","mine","ledger","method"]') && offline.includes("function offlineLockHtml(tab)") && offline.includes("function offlineDashboardHtml()"), "The offline lock has lost its list of open screens or its screens");
+    assert(inline.includes('if(activeTab==="dashboard")return offlineDashboardHtml();if(offlineTabLocked(activeTab))return offlineLockHtml(activeTab)') && inline.includes("offlineSidebarHtml()") && inline.includes("offlineHardwareLockCard()"), "A screen that needs the internet is no longer locked when the line is cut");
+    assert(!/<div class="[^"]*\bgrid\b[^"]*"[^>]*>\$\{/.test(offline.slice(offline.indexOf("function offlineLockHtml"), offline.indexOf("function offlineHardwareLockCard"))), "A lock screen is a .grid again, so enhancers fill it with the cards it should hide");
+    assert(confetti.includes("prefers-reduced-motion: reduce") && confetti.includes('state.endReason!=="receivership"&&state.endReason!=="nomarket"') && confetti.includes("ev.celebrate"), "Confetti ignores reduced motion, fires on a failed run, or has lost the market-opening moment");
+    assert(inline.includes('{id:"mtgoxopen",celebrate:true') && inline.includes("e.imp===3&&(state.storyPause||e.celebrate)"), "The market opening no longer always opens its window");
+  }
   // Good news waits behind a modal; a refused save is visible.
   assert(notify.includes("TOAST_DEFERRABLE") && inline.includes("flushDeferredToasts();"), "A toast can land on top of a modal again");
   assert(notify.includes("function announceSaveState()") && inline.includes("saveStateHtml()"), "A browser that refuses to store the game is no longer shown in the header");

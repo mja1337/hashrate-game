@@ -254,10 +254,10 @@ function operatorScoreBreakdown(){
 }
 function operatorGrade(score=operatorScoreBreakdown().total){return score>=900?"Legendary":score>=750?"Elite":score>=600?"Durable":score>=450?"Solvent":score>=300?"Survivor":"At risk"}
 function lightningLocked(){return state.lightning?.locked||0}
-function connectivityOutage(){return state.time<(state.ops?.outageUntil||0)}
+function connectivityOutage(){return (typeof internetCut==="function"&&internetCut())||state.time<(state.ops?.outageUntil||0)}
 function powerOutage(){return state.time<(state.ops?.powerOutageUntil||0)}
 function siteOutage(){return connectivityOutage()||powerOutage()}
-function activeSiteIncident(){if(powerOutage())return{kind:"Grid outage",until:state.ops.powerOutageUntil};if(connectivityOutage())return{kind:"Internet outage",until:state.ops.outageUntil};return null}
+function activeSiteIncident(){if(powerOutage())return{kind:"Grid outage",until:state.ops.powerOutageUntil};if(connectivityOutage()&&!(typeof internetCut==="function"&&internetCut()))return{kind:"Internet outage",until:state.ops.outageUntil};return null}
 
 function fleetGrounded(){return relocating()||upgradingFacility()}
 function claims(){return state.wallets.mtgox+state.wallets.bitfinex+state.wallets.quadriga+state.wallets.frontier+state.wallets.exchange+state.wallets.frozen}
@@ -535,7 +535,7 @@ function queueMinorHardwareReleases(prev,next){
   releases.forEach(h=>{seen.push(h.id);log(`New hardware available: ${h.name}`,`${fmtHash(h.hash)} · ${h.w} W`,"fleet");showToast("New generation available",`${h.name} (${h.maker}) just reached the catalog — ${fmtHash(h.hash)} at ${h.w} W.`,"info","mine")});
 }
 function activateNextHardwareAlert(){
-  const alerts=state.hardwareAlerts;if(alerts.active||!alerts.queue.length||state.activeEvent||state.pendingSettlement||pendingTransaction||state.ended)return false;
+  const alerts=state.hardwareAlerts;if(alerts.active||!alerts.queue.length||state.activeEvent||state.pendingSettlement||pendingTransaction||state.ended||internetCut())return false;
   const id=alerts.queue.shift();if(!asicHardware().some(h=>h.id===id))return activateNextHardwareAlert();
   alerts.resumeSpeed=state.speed>0?state.speed:(alerts.resumeSpeed||state.returnSpeed||1);state.speed=0;alerts.active=id;renderFullQueued=true;setTimer();return true;
 }
@@ -575,9 +575,9 @@ function tick(silent=false){
   queueExposureWarnings(prev,next);
   advanceOperationalRisks(next,silent);
   advanceNodeSync(silent);
-  if(!silent&&!faucet&&faucetActive(next)&&nextRand()<.05)triggerFaucet(next);
+  if(!silent&&!faucet&&faucetActive(next)&&nextRand()<.05&&!internetCut())triggerFaucet(next);
   const fs=fleet(),r=region(),f=facility(),nodeW=nodePowerWatts();state.operator.periodDays++;
-  const rate=powerRate(r,next),minerWatts=state.power&&state.debt<=0&&!state.policyLock&&!fleetGrounded()?fs.w*contractLoadFactor():0,nodeWatts=nodeHostPowered()?nodeW:0,dailyCosts={energy:dailyEnergyCostForWatts(minerWatts+nodeWatts,next,r)-curtailmentCreditDaily(minerWatts,next,r),rent:f.rent/30.4375,internet:internetMonthlyCost()/30.4375,staff:staffMonthlyCost()/30.4375,insurance:insuranceMonthlyCost()/30.4375,nodeNetwork:totalNodeMonthlyOverhead()/30.4375},daily=Object.values(dailyCosts).reduce((sum,value)=>sum+value,0);
+  const rate=powerRate(r,next),minerWatts=state.power&&state.debt<=0&&!state.policyLock&&!fleetGrounded()?fs.w*contractLoadFactor():0,nodeWatts=nodeHostPowered()?nodeW:0,dailyCosts={energy:dailyEnergyCostForWatts(minerWatts+nodeWatts,next,r)-curtailmentCreditDaily(minerWatts,next,r),rent:f.rent/30.4375,internet:internetMonthlyCost()/30.4375,staff:staffMonthlyCost()/30.4375,insurance:insuranceMonthlyCost()/30.4375,nodeNetwork:(internetCut()?0:totalNodeMonthlyOverhead())/30.4375},daily=Object.values(dailyCosts).reduce((sum,value)=>sum+value,0);
   Object.entries(dailyCosts).forEach(([key,value])=>state.billLedger[key]=(state.billLedger[key]||0)+value);state.bill+=daily;state.powerSpent+=daily;
   if(state.mode==="pool"&&!poolClosed(state.pool)&&!poolEligible()){const lostPool=poolData();state.mode="solo";log(`${lostPool.name} no longer available`,`Requires ${SKILLS.find(x=>x.id===lostPool.requires)?.name||lostPool.requires} · failed over to solo mining`,"operations");if(!silent)showToast("Pool unavailable",`${lostPool.name} needs ${SKILLS.find(x=>x.id===lostPool.requires)?.name||lostPool.requires}. Your fleet has failed over to solo mining rather than quietly mining solo while the tab still said pool.`,"bad","pools")}
   if(state.mode==="pool"&&poolClosed(state.pool)){const closedPool=poolData();state.mode="solo";
