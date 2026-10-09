@@ -10,7 +10,7 @@
 
 const FEEDBACK_REPO="https://github.com/mja1337/hashrate-game";
 /* So people without a GitHub account can write. The footer shows the link only when this is set. */
-const FEEDBACK_EMAIL="jandex@protonmail.com";
+const FEEDBACK_EMAIL="satoshistaysrad@proton.me";
 /* A tip over Lightning, through a payment page. A plain outbound link: no address is shown here, nothing is
    embedded, and nothing is requested until the player follows it. */
 const TIP_URL="https://strike.me/@jandex";
