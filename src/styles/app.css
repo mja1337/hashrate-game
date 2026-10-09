@@ -465,3 +465,5 @@ body.tour-on .speed:not([data-value="0"]),body.tour-on .mobile-pause-button.paus
 .floor-smoke i:nth-child(1){left:22%;animation-delay:0s}.floor-smoke i:nth-child(2){left:34%;animation-delay:1.3s;width:28%}.floor-smoke i:nth-child(3){left:46%;animation-delay:2.4s}.floor-smoke i:nth-child(4){left:28%;animation-delay:3.6s;width:40%}.floor-smoke i:nth-child(5){left:52%;animation-delay:4.7s;width:30%}.floor-smoke i:nth-child(6){left:38%;animation-delay:5.9s;width:36%}
 @keyframes smoke-rise{0%{transform:translate(0,12%) scale(.5);opacity:0}20%{opacity:.95}100%{transform:translate(8%,-130%) scale(1.9);opacity:0}}
 @media(prefers-reduced-motion:reduce){.floor-smoke i{animation:none;opacity:.4;transform:translate(0,-30%) scale(1.2)}}
+.next-up{color:var(--orange2);font-weight:700;letter-spacing:.06em;text-transform:uppercase}.facility.teaser,.item.teaser{border-style:dashed;filter:grayscale(.55)}.facility.teaser .risk,.item.teaser .owned-count{opacity:1}
+.footer .footer-tipline{flex-basis:100%;display:flex;justify-content:center;padding-top:10px;margin-top:4px;border-top:1px solid var(--line)}

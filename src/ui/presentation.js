@@ -120,3 +120,13 @@ function mempoolViz(){
   const waitMin=(2+rnd(777)*8).toFixed(1);
   return `<div class="mempool-viz"><div class="mp-chain">${blocksHtml}</div><div class="mp-arrow big">→</div><div class="mp-next"><div class="mp-next-label"><span>Next block</span><b>~${waitMin} min</b></div><div class="mp-mosaic">${cells.join("")}</div><div class="mp-legend2"><span><i class="dot hi"></i>high fee</span><span><i class="dot mid"></i>medium</span><span><i class="dot lo"></i>low</span></div><div class="mp-count">${fmtNum(txDay)} tx/day network-wide</div></div></div>`
 }
+
+/* How far off a date is, in the game's own time and in words a person would use: "in 9 days", "in 5 months", "in about 2 years". */
+function unlockInText(date,t=state.time){
+  const days=Math.max(1,Math.ceil((at(date)-t)/DAY));
+  if(days<14)return `in ${days} day${days===1?"":"s"}`;
+  if(days<60)return `in ${Math.round(days/7)} weeks`;
+  if(days<730)return `in ${Math.round(days/30.4)} months`;
+  const years=days/365.25,whole=Math.round(years*2)/2;
+  return `in about ${Number.isInteger(whole)?whole:whole.toFixed(1)} years`;
+}

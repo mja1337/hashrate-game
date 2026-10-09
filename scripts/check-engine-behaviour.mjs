@@ -4614,6 +4614,20 @@ rule("a fire, flood or break-in at the mine leaves its mark on the floor for thr
   assert(read("lossQueue()[lossQueue().length-1].scene") === "fire", "a loss did not carry its scene to the window");
 });
 
+rule("only the very next release is teased, and nothing already released or undated", () => {
+  const r = json(`(()=>{
+    const day=d=>Date.parse(d+"T00:00:00Z");
+    const sites=t=>nextReleases(FACILITIES,t).map(f=>f.id),regions=t=>nextReleases(REGIONS,t).map(x=>x.id),hw=t=>nextReleases(HARDWARE,t).map(h=>h.id);
+    const none=nextReleases(FACILITIES,day("2100-01-01"));
+    return{s2009:sites(day("2009-02-01")),s2012:sites(day("2012-06-01")),r2009:regions(day("2009-02-01")),r2019:regions(day("2019-03-01")),
+      hw:hw(day("2009-02-01")),none:none.length,mixed:nextReleases([{id:"a",date:"2020-01-01"},{id:"b"},{id:"c",date:"2019-01-01"},{id:"d",date:"2019-01-01"}],day("2018-01-01")).map(x=>x.id)}})()`);
+  assert(JSON.stringify(r.s2009) === '["garage"]' && JSON.stringify(r.s2012) === '["warehouse"]', `the next site was ${r.s2009} then ${r.s2012}`);
+  assert(JSON.stringify(r.r2009) === '["iceland"]', `the next location in 2009 was ${r.r2009}`);
+  assert(JSON.stringify(r.r2019) === '["iran"]', `after Texas the next location was ${r.r2019}`);
+  assert(r.hw.length >= 1 && r.none === 0, "the next machine was not found, or something was teased after the last release");
+  assert(JSON.stringify(r.mixed) === '["c","d"]', `ties share the next step and undated items are skipped: ${r.mixed}`);
+});
+
 /* Reported from an exit hook rather than inline, because inline made the gate
    position-dependent: it sat a few lines above the end of the file, and two rules appended
    after it ran, failed, pushed onto `failures` and were never printed. The suite announced

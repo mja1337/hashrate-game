@@ -1887,6 +1887,9 @@ assert(css.includes(".svg-sprite-defs{position:absolute;width:0;height:0;overflo
   for (const scene of ["fire", "flood", "burglary", "grid", "net"]) assert(css.includes(`.floor-scene.scene-${scene} .floor-scene-art`), `The floor has no overlay for ${scene}`);
   assert(inline.includes("function floorSmokeHtml()") && (inline.match(/floorSmokeHtml\(\)/g) || []).length >= 3 && css.includes(".floor-smoke{position:absolute;inset:0;z-index:3;pointer-events:none") && /prefers-reduced-motion:reduce\)\{\.floor-smoke i\{animation:none/.test(css), "Smoke is gone from the burning floor, takes clicks, or ignores reduced motion");
   assert(css.includes(".floor-scene{position:absolute;inset:0;z-index:6;pointer-events:none") && /prefers-reduced-motion:reduce\)\{\.glyph-fire/.test(css), "The floor overlay takes clicks again, or the flame ignores reduced motion");
+  // The next step up is teased, greyed, in Facilities and in the hardware catalogue; and the tip sits at the very bottom.
+  assert(inline.includes("nextReleases(FACILITIES)") && inline.includes("nextReleases(REGIONS)") && inline.includes("nextReleases(HARDWARE)") && inline.includes("unlockInText(") && css.includes(".facility.teaser,.item.teaser"), "The next site, location or machine is no longer teased");
+  assert(footer.indexOf('class="footer-tipline"') > footer.indexOf('class="footer-privacy"'), "The tip link is no longer the last thing in the footer");
   // Good news waits behind a modal; a refused save is visible.
   assert(notify.includes("TOAST_DEFERRABLE") && inline.includes("flushDeferredToasts();"), "A toast can land on top of a modal again");
   assert(notify.includes("function announceSaveState()") && inline.includes("saveStateHtml()"), "A browser that refuses to store the game is no longer shown in the header");
