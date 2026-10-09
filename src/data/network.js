@@ -70,3 +70,5 @@ const FEES=RECORDED.FEES||[];
 const TX=RECORDED.TX?.length?RECORDED.TX:FALLBACK_TX;
 const HEIGHT=RECORDED.HEIGHT||[];
 const CAP=RECORDED.CAP||[];
+// What a byte cost each day, as the blocks recorded it: the median, and the 90th percentile that jumping the queue paid.
+const FEERATE=RECORDED.FEERATE||[],FEERATE_HIGH=RECORDED.FEERATE_HIGH||[],RETARGET_HEIGHT=RECORDED.RETARGET_HEIGHT||[];

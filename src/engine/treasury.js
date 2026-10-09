@@ -67,7 +67,14 @@ function utxoConsume(bucket,fraction,s=state){
 /* Satoshis per virtual byte on a date, from the fees a block collected. Floored at one: the
    relay minimum, and the rate in every year before fees were a market at all. */
 function feeRateSatPerVb(t=state.time){
-  return Math.max(1,feeAt(t)*1e8/BLOCK_VBYTES);
+  const recorded=recordedFeeRate(t);
+  return Math.max(1,recorded!==null?recorded:feeAt(t)*1e8/BLOCK_VBYTES);
+}
+/* What jumping the queue costs, as a multiple of the ordinary rate: the day's 90th-percentile fee over its median, as the
+   blocks recorded it. A quiet day's queue is cheap to jump and a spike's is not. Outside the record it is the old flat three. */
+function rushMultiple(t=state.time){
+  const median=recordedFeeRate(t),high=recordedFeeRate(t,FEERATE_HIGH);
+  return median!==null&&high!==null?Math.min(6,Math.max(2,high/Math.max(1,median))):RUSH_FEE_MULTIPLE;
 }
 function sweepVbytes(inputs,outputs,quorum){
   return SWEEP_BASE_VBYTES+inputs*(quorum?SWEEP_VIN_QUORUM:SWEEP_VIN_SINGLE)+outputs*SWEEP_VOUT;
@@ -84,7 +91,7 @@ function transferNetworkFee(from,fraction,opts={},s=state){
   if(from!=="cold")return flatNetworkFee(s);
   const quorum=(custodySetup(s).policy.threshold||1)>1,inputs=utxoInputsFor("cold",fraction,s);
   const fee=sweepFeeBtc(Math.max(1,inputs),fraction>=.999?1:2,quorum,s.time);
-  return opts.rush?fee*RUSH_FEE_MULTIPLE:fee;
+  return opts.rush?fee*rushMultiple(s.time):fee;
 }
 /* An ordinary move between wallets is instant, so its effect on the coin count is too. */
 function utxoMoved(from,to,fraction,s=state){

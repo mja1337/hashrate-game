@@ -124,6 +124,59 @@ function difficulty(retargets) {
   return points;
 }
 
+// Fee RATES, in satoshis per virtual byte, as mempool.space publishes them per day: the
+// median and the 90th percentile of what the day's blocks actually paid. The older series
+// above is a fee TOTAL per block, which cannot say what a transaction of a given size cost
+// or what paying to jump the queue cost; these can. They are whole sat/vB as published, so
+// a day on which most transactions paid less than one reads zero.
+const FEERATE_ENDPOINT = "https://mempool.space/api/v1/mining/blocks/fee-rates/all";
+
+async function fetchFeeRates() {
+  const response = await fetch(FEERATE_ENDPOINT, { headers: { accept: "application/json" } });
+  if (!response.ok) throw new Error(`mempool.space returned ${response.status}: ${await response.text()}`);
+  const rows = await response.json();
+  if (!Array.isArray(rows) || rows.length < 6000) throw new Error("mempool.space returned too few daily fee-rate rows");
+  return rows;
+}
+
+function feeRateSeries(rows, field) {
+  const cutoff = day(END);
+  const byDate = new Map();
+  for (const row of rows) {
+    const date = new Date(row.timestamp * 1000).toISOString().slice(0, 10);
+    const value = Number(row[field]);
+    if (day(date) > cutoff || !Number.isFinite(value) || value < 0) continue;
+    byDate.set(date, Math.round(value * 100) / 100);
+  }
+  return [...byDate].sort((a, b) => day(a[0]) - day(b[0]));
+}
+
+// The height of each retarget, beside the difficulty it set, and the four halvings with the
+// UTC instant of the block that triggered them. A halving "date" in this game is the UTC
+// date of block 210,000 x n; keeping the block's own timestamp is what makes that checkable.
+function retargetHeights(retargets) {
+  const cutoff = day(END);
+  const points = [];
+  for (const { timestamp, height } of retargets) {
+    const date = new Date(timestamp * 1000).toISOString().slice(0, 10);
+    if (day(date) > cutoff) break;
+    if (points.length && points[points.length - 1][0] === date) points[points.length - 1][1] = height;
+    else points.push([date, height]);
+  }
+  return points;
+}
+
+async function fetchHalvings() {
+  const out = [];
+  for (const height of [210000, 420000, 630000, 840000]) {
+    const hash = (await (await fetch(`https://mempool.space/api/block-height/${height}`)).text()).trim();
+    const block = await (await fetch(`https://mempool.space/api/block/${hash}`)).json();
+    if (block.height !== height) throw new Error(`mempool.space returned block ${block.height} for height ${height}`);
+    out.push({ height, time: block.timestamp, utc: new Date(block.timestamp * 1000).toISOString() });
+  }
+  return out;
+}
+
 function smoothedFees(rows) {
   const valid = rows.filter(row => number(row.FeeTotNtv) !== null && number(row.BlkCnt) > 0);
   const selected = new Set();
@@ -243,13 +296,15 @@ function renderBundle(payload) {
   ].join("\n");
 }
 
-function render(data) {
+function render(data, halvings = []) {
   const generated = new Date().toISOString();
   return renderBundle({
     meta: {
-        source: "Coin Metrics Community Network Data · mempool.space difficulty adjustments",
+        source: "Coin Metrics Community Network Data · mempool.space difficulty adjustments, daily fee rates and halving blocks",
         sourceUrl: "https://community-api.coinmetrics.io/v4/timeseries/asset-metrics",
         difficultySourceUrl: RETARGET_ENDPOINT,
+        feeRateSourceUrl: FEERATE_ENDPOINT,
+        halvings,
         generated,
         through: END,
         transforms: {
@@ -260,6 +315,9 @@ function render(data) {
           transactions: "seven-day trailing mean of recorded TxCnt, recorded daily",
           height: "cumulative recorded daily block count, recorded daily",
           cap: "seven-day trailing mean of recorded CapMrktCurUSD, recorded weekly",
+          feeRate: "median sat/vB paid by each day's blocks, as published by mempool.space, whole sat/vB, recorded daily",
+          feeRateHigh: "90th-percentile sat/vB paid by each day's blocks: what jumping the queue cost, recorded daily",
+          retargetHeight: "block height of each difficulty retarget, one per retarget",
         },
     },
     ...data,
@@ -284,6 +342,30 @@ if (process.argv.includes("--recompress")) {
     }
   }
   console.log("re-encoded; every series decodes back identically");
+  process.exit(0);
+}
+
+// Adds or refreshes only the fee-rate, retarget-height and halving data in the existing
+// bundle, so introducing them cannot quietly pull revisions into price, hash, fees or height.
+if (process.argv.includes("--feerates-only")) {
+  const existing = readFileSync(OUTPUT, "utf8");
+  const context = { window: {} };
+  vm.runInNewContext(existing, context);
+  const payload = context.window.HISTORICAL_DATA;
+  if (!payload) throw new Error("Could not read the existing bundle");
+  const feeRows = await fetchFeeRates();
+  const retargets = await fetchRetargets();
+  payload.FEERATE = feeRateSeries(feeRows, "avgFee_50");
+  payload.FEERATE_HIGH = feeRateSeries(feeRows, "avgFee_90");
+  payload.RETARGET_HEIGHT = retargetHeights(retargets);
+  payload.meta.halvings = await fetchHalvings();
+  payload.meta.source = "Coin Metrics Community Network Data · mempool.space difficulty adjustments, daily fee rates and halving blocks";
+  payload.meta.feeRateSourceUrl = FEERATE_ENDPOINT;
+  payload.meta.transforms.feeRate = "median sat/vB paid by each day's blocks, as published by mempool.space, whole sat/vB, recorded daily";
+  payload.meta.transforms.feeRateHigh = "90th-percentile sat/vB paid by each day's blocks: what jumping the queue cost, recorded daily";
+  payload.meta.transforms.retargetHeight = "block height of each difficulty retarget, one per retarget";
+  console.log(`FEERATE ${payload.FEERATE.length}, FEERATE_HIGH ${payload.FEERATE_HIGH.length}, RETARGET_HEIGHT ${payload.RETARGET_HEIGHT.length} points; halvings ${payload.meta.halvings.map(h => h.utc).join(" ")}`);
+  await writeFile(OUTPUT, renderBundle(payload), "utf8");
   process.exit(0);
 }
 
@@ -322,15 +404,20 @@ if (process.argv.includes("--cap-only")) {
 
 const rows = await fetchRows();
 if (!rows.length) throw new Error("Coin Metrics returned no BTC rows");
+const feeRows = await fetchFeeRates();
+const retargetRows = await fetchRetargets();
 const data = {
   PRICE: dailyPrice(rows),
   HASH: smoothedHash(rows),
-  DIFFICULTY: difficulty(await fetchRetargets()),
+  DIFFICULTY: difficulty(retargetRows),
   FEES: smoothedFees(rows),
   TX: smoothedTransactions(rows),
   HEIGHT: heights(rows),
   CAP: marketCap(rows),
+  FEERATE: feeRateSeries(feeRows, "avgFee_50"),
+  FEERATE_HIGH: feeRateSeries(feeRows, "avgFee_90"),
+  RETARGET_HEIGHT: retargetHeights(retargetRows),
 };
 await mkdir(dirname(OUTPUT), { recursive: true });
-await writeFile(OUTPUT, render(data), "utf8");
+await writeFile(OUTPUT, render(data, await fetchHalvings()), "utf8");
 console.log(Object.fromEntries(Object.entries(data).map(([key, value]) => [key, value.length])));

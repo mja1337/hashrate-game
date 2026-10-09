@@ -98,7 +98,9 @@ Two load-order constraints are load-bearing and contract-enforced: `operator.js`
 | Price | Coin Metrics community API | Daily, plus four pre-market discovery anchors |
 | Hash rate | Coin Metrics community API | Daily 14-day trailing mean |
 | Fees, transactions, block height | Coin Metrics community API | Daily |
-| Difficulty | mempool.space difficulty adjustments | One exact value per 2016-block retarget |
+| Difficulty | mempool.space difficulty adjustments | One exact value per 2016-block retarget, with the height each began at |
+| Fee rate (median and 90th percentile, sat/vB) | mempool.space fee-rate history | Daily, whole sat/vB as published |
+| Halvings | mempool.space blocks 210,000 × n | The four blocks and their UTC instants, in the bundle's metadata |
 
 Difficulty is a step function, not a sample: the protocol changes it every 2016 blocks and nowhere else, so it is stored as change-points. That is both exact and half the size of the weekly reconstruction it replaced.
 
@@ -107,6 +109,7 @@ Regular series store a start date and a cadence rather than repeating an ISO dat
 ```bash
 node scripts/build-historical-data.mjs                    # full rebuild (network)
 node scripts/build-historical-data.mjs --difficulty-only  # difficulty alone
+node scripts/build-historical-data.mjs --feerates-only    # fee rates, retarget heights, halvings
 node scripts/build-historical-data.mjs --recompress       # re-encode on disk, no network
 ```
 

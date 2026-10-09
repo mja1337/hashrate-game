@@ -51,6 +51,9 @@ function announceProjectedHalving(previousSubsidy,nextSubsidy,silent){
   log("Projected protocol halving",`Modelled, not recorded: subsidy ${was} to ${now} per block`,"reward");
   if(!silent)showToast("Projected protocol halving",`The block subsidy falls from ${was} to ${now} per block. Bitcoin's issuance schedule is real, but this date is projected from a constant ten-minute block interval, not recorded history. Review your mining margin: the same hash rate now earns half the subsidy it did yesterday.`,"notice","mine");
 }
+/* The recorded fee rate in sat/vB on a day, median by default and the 90th percentile for the series passed, or null when
+   there is no record (before the series, after the recorded history, or a bundle without it). */
+function recordedFeeRate(t,series=FEERATE){return !series.length||t>END?null:Math.max(0,interp(series,t,false))}
 function feeAt(t){if(t>END)return futureFeeAt(t);return FEES.length?Math.max(0,interp(FEES,t,false)):t<at("2013-01-01")?.02:t<at("2017-01-01")?.15:t<at("2020-01-01")?.35:t<at("2023-01-01")?.22:.45}
 /* PROCEDURAL CONTINUATION — deterministic, pure functions of t only; never touches nextRand()/state.rng so repeated renders stay stable. */
 function futureYears(t){return Math.max(0,(Math.min(t,SANDBOX_END)-END)/(DAY*365.25))}

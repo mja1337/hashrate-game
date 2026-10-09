@@ -68,7 +68,7 @@ function poolAccount(s=state){
    multisig transfer costs more: there is more of it.
 
    IT COSTS WHAT THE DATE CHARGED. An ordinary payment is about 250 virtual bytes, priced at what a
-   byte cost on the day (treasury.js derives that from the fees blocks really collected). Before 2017
+   byte cost on the day (treasury.js reads that from the fee rates blocks recorded). Before 2017
    fees were not a market but a habit: wallets paid a fixed 0.0001-0.0005 BTC whatever the network
    was doing, so those years keep a floor that comes to the 0.0002 BTC this game always charged
    and the early economy is exactly what it was. From 2017 the market sets it: December 2017 costs
@@ -76,8 +76,8 @@ function poolAccount(s=state){
    thresholds are a choice. Running a node still buys a cheaper payment. */
 const PAYMENT_VBYTES=250,HABIT_FEE_SAT_VB=80,HABIT_FEE_ENDS=Date.parse("2017-01-01T00:00:00Z");
 function paymentRateSatPerVb(t=state.time){
-  const market=feeRateSatPerVb(t);
-  return t<HABIT_FEE_ENDS?Math.max(market,HABIT_FEE_SAT_VB):market;
+  // Before 2017 the recorded median is a mix of habits and one-off generosity; a payment keeps the fixed fee wallets paid.
+  return t<HABIT_FEE_ENDS?HABIT_FEE_SAT_VB:feeRateSatPerVb(t);
 }
 function flatNetworkFee(s=state){
   const base=PAYMENT_VBYTES*paymentRateSatPerVb(s.time)*1e-8;

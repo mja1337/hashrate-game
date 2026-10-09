@@ -25,6 +25,9 @@ const requirements = {
   TX: 800,
   HEIGHT: 800,
   CAP: 700,
+  FEERATE: 6_000,
+  FEERATE_HIGH: 6_000,
+  RETARGET_HEIGHT: 400,
 };
 
 for (const [name, minimum] of Object.entries(requirements)) {
@@ -37,9 +40,9 @@ for (const [name, minimum] of Object.entries(requirements)) {
     if (!Number.isFinite(value) || value < 0) throw new Error(`${name} has an invalid value at ${date}`);
     previous = time;
   }
-  if (name === "DIFFICULTY") {
-    if (series.at(-1)[0] > data.meta.through) throw new Error(`DIFFICULTY carries a retarget at ${series.at(-1)[0]}, past the ${data.meta.through} cutoff`);
-    if (Date.parse(data.meta.through) - Date.parse(series.at(-1)[0]) > 21 * 86_400_000) throw new Error(`DIFFICULTY's last retarget is ${series.at(-1)[0]}, more than a fortnight before the ${data.meta.through} cutoff`);
+  if (name === "DIFFICULTY" || name === "RETARGET_HEIGHT") {
+    if (series.at(-1)[0] > data.meta.through) throw new Error(`${name} carries a retarget at ${series.at(-1)[0]}, past the ${data.meta.through} cutoff`);
+    if (Date.parse(data.meta.through) - Date.parse(series.at(-1)[0]) > 21 * 86_400_000) throw new Error(`${name}'s last retarget is ${series.at(-1)[0]}, more than a fortnight before the ${data.meta.through} cutoff`);
   } else if (series.at(-1)[0] !== data.meta.through) {
     throw new Error(`${name} ends at ${series.at(-1)[0]}, expected ${data.meta.through}`);
   }
@@ -53,6 +56,25 @@ if (data.DIFFICULTY[0][1] !== 1) throw new Error("DIFFICULTY must start at 1, th
 if (data.CAP.some(entry => !(entry[1] > 0))) throw new Error("CAP carries a non-positive capitalisation");
 if (data.CAP[0][0] > "2010-08-01") throw new Error(`CAP starts at ${data.CAP[0][0]}, too late to cover the market's opening`);
 if (Math.max(...data.CAP.map(e => e[1])) < 1e12) throw new Error("CAP never reaches the trillion-dollar era, so it cannot be the recorded series");
+
+/* The fee RATES, and the retarget heights and halving blocks that sit beside the difficulty. Recorded, so what has to
+   hold is what the protocol and the arithmetic make true: the 90th percentile is never below the median, a retarget
+   falls on a multiple of 2016 blocks, there is one height per difficulty step, and each halving is the block the
+   subsidy schedule says it is, in order. */
+const medianByDate = new Map(data.FEERATE);
+for (const [date, high] of data.FEERATE_HIGH) {
+  if (!(medianByDate.get(date) <= high)) throw new Error(`FEERATE_HIGH is below the median on ${date}`);
+}
+if (data.FEERATE_HIGH.length !== data.FEERATE.length) throw new Error("FEERATE and FEERATE_HIGH do not cover the same days");
+if (Math.max(...data.FEERATE.map(e => e[1])) < 100) throw new Error("FEERATE never records a fee market, so it is not the recorded series");
+if (data.RETARGET_HEIGHT.length !== data.DIFFICULTY.length) throw new Error("There is not one retarget height for each difficulty step");
+data.RETARGET_HEIGHT.forEach(([date, height], i) => {
+  if (height % 2016 !== 0) throw new Error(`The retarget on ${date} is at height ${height}, not a multiple of 2016`);
+  if (date !== data.DIFFICULTY[i][0]) throw new Error(`Retarget ${i} is dated ${date}, but its difficulty step is dated ${data.DIFFICULTY[i][0]}`);
+});
+const halvings = data.meta.halvings || [];
+if (halvings.length !== 4 || halvings.some((h, i) => h.height !== 210_000 * (i + 1) || (i && h.time <= halvings[i - 1].time))) throw new Error("meta.halvings must carry blocks 210,000, 420,000, 630,000 and 840,000 in order");
+if (halvings.some(h => new Date(h.time * 1000).toISOString() !== h.utc)) throw new Error("A halving's time and its UTC instant disagree");
 for (let i = 1; i < data.DIFFICULTY.length; i += 1) {
   const [date, value] = data.DIFFICULTY[i];
   const previous = data.DIFFICULTY[i - 1][1];

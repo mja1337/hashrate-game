@@ -1699,13 +1699,15 @@ rule("a rush is faster, costs more, and cannot make a quorum arrive together", (
     ${CUSTODY_SITE(`state.time=at("2021-02-01");state.skills.push("airgap");`)}
     ${CONFIGURED_WALLET("single")}
     const single={normal:coldSpendDays(),rush:coldSpendDays(state,{rush:true}),
-      fee:transferNetworkFee("cold",1),rushFee:transferNetworkFee("cold",1,{rush:true})};
+      fee:transferNetworkFee("cold",1),rushFee:transferNetworkFee("cold",1,{rush:true}),mult:rushMultiple(state.time)};
     ${CONFIGURED_WALLET("2of3")}
     return{single,quorum:{normal:coldSpendDays(),rush:coldSpendDays(state,{rush:true})}};})()`);
   assert(r.single.rush < r.single.normal && r.single.rush >= 1, `a rushed air-gapped single key took ${r.single.rush} against ${r.single.normal}`);
   assert(r.quorum.rush < r.quorum.normal, "rushing did nothing for a quorum");
   assert(r.quorum.rush >= 2, `a rushed quorum took ${r.quorum.rush} day; two keys kept apart cannot arrive together`);
-  close(r.single.rushFee, r.single.fee * 3, 1e-12, "a rush should pay a multiple of the ordinary fee");
+  // The multiple is the day's recorded 90th-percentile rate over its median, kept between two and six.
+  assert(r.single.mult >= 2 && r.single.mult <= 6, `a rush's multiple of ${r.single.mult} is outside what the record allows`);
+  close(r.single.rushFee, r.single.fee * r.single.mult, 1e-12, "a rush should pay the day's queue-jumping multiple of the ordinary fee");
 });
 
 rule("the clock is stopped during a settlement, so a signing started then is refused", () => {
@@ -2276,18 +2278,18 @@ rule("rotation is a job: it costs the sweep fee, takes days, pauses signing and 
   assert(!r.after.insider, "a retired key still counted as an insider risk");
 });
 
-rule("a rotation can be rushed: fewer days, three times the fee, never under two days", () => {
+rule("a rotation can be rushed: fewer days, the queue-jumping fee, never under two days", () => {
   const r = json(`(()=>{
     ${CUSTODY_SITE(`state.time=at("2021-02-01");state.facility="warehouse";`)}
     ${PLACED_WALLET("2of3", [{device:"bank",backup:"bank",steel:true},{device:"trusted",backup:"bank",steel:true},{device:"home",backup:"bank",steel:true}])}
     state.custody.devices.push({uid:"dSpare",product:"trezorone",supplier:"trezor",boughtAt:0,keyId:null,place:"site"});
     state.utxo={cold:40,hot:1};
-    const slow=rotationDays(false),fast=rotationDays(true),base=transferNetworkFee("cold",1),rushed=transferNetworkFee("cold",1,{rush:true});
+    const slow=rotationDays(false),fast=rotationDays(true),base=transferNetworkFee("cold",1),rushed=transferNetworkFee("cold",1,{rush:true}),mult=rushMultiple(state.time);
     const cold0=state.wallets.cold;
     rotateCustodyKey("k0","dSpare",true);
-    return{slow,fast,base,rushed,charged:cold0-state.wallets.cold,job:custodyRotation()};})()`);
+    return{slow,fast,base,rushed,mult,charged:cold0-state.wallets.cold,job:custodyRotation()};})()`);
   assert(r.fast < r.slow && r.fast >= 2, `rushing took ${r.fast} days against ${r.slow}`);
-  close(r.rushed / r.base, 3, 1e-9, "a rushed rotation did not cost three times the sweep fee");
+  close(r.rushed / r.base, r.mult, 1e-9, "a rushed rotation did not cost the queue-jumping multiple of the sweep fee");
   close(r.charged, r.rushed, 1e-12, "the fee charged was not the rushed fee");
   assert(r.job && r.job.rush === true && r.job.days === r.fast, "the rotation job did not record that it was rushed");
 });
@@ -4578,6 +4580,23 @@ rule("a PC that burnt can be put together again from spare parts, free, in a day
   assert(read("state.cash") === 500 && read("state.custody.orders.length") === 1, "the replacement cost money or was not ordered");
   read("state.time+=2*DAY;advanceCustodyOrders(state.time)");
   assert(read("state.custody.devices.filter(d=>!d.destroyed).length") === 1, "the replacement never arrived");
+});
+
+/* ---- THE RECORDED FEE RATES ---- */
+
+rule("the fee a payment or a sweep costs follows the recorded rate of the day, and the halvings are the recorded blocks", () => {
+  const r = json(`(()=>{
+    const day=d=>Date.parse(d+"T00:00:00Z");
+    const spike=feeRateSatPerVb(day("2017-12-17")),quiet=feeRateSatPerVb(day("2026-10-05")),after=feeRateSatPerVb(END+400*DAY);
+    let lo=Infinity,hi=0;for(let t=day("2011-01-01");t<=END;t+=30*DAY){const m=rushMultiple(t);lo=Math.min(lo,m);hi=Math.max(hi,m)}
+    const halv=DATA_META.halvings.map(h=>new Date(h.time*1000).toISOString().slice(0,10));
+    const coded=RECORDED_HALVINGS.map(t=>new Date(t).toISOString().slice(0,10));
+    return{spike,quiet,after,lo,hi,halv,coded,recorded:recordedFeeRate(day("2017-12-17")),beyond:recordedFeeRate(END+DAY)}})()`);
+  assert(r.recorded > 100 && r.spike >= r.recorded - 1e-9, `December 2017 was not read from the record: ${r.recorded}, ${r.spike}`);
+  assert(r.quiet < 10 && r.spike > r.quiet * 20, `a quiet 2026 day (${r.quiet}) is not far below the 2017 spike (${r.spike})`);
+  assert(r.beyond === null && r.after >= 1, "beyond the record the fee rate did not fall back to the model");
+  assert(r.lo >= 2 && r.hi <= 6, `the queue-jumping multiple left its bounds: ${r.lo} to ${r.hi}`);
+  assert(JSON.stringify(r.halv) === JSON.stringify(r.coded), `the coded halving days ${r.coded} are not the recorded blocks' UTC days ${r.halv}`);
 });
 
 /* Reported from an exit hook rather than inline, because inline made the gate
