@@ -86,6 +86,7 @@ const expectedScripts = [
   "src/ui/enhance/operations.js",
   "src/ui/live.js",
   "src/ui/footer.js",
+  "src/ui/intro-chat.js",
   "src/ui/offline.js",
   "src/ui/confetti.js",
   "src/ui/render.js",

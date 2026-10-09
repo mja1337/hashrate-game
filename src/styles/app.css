@@ -484,3 +484,9 @@ body.is-offline .ticker .tick.offline-masked .value,body.is-offline .ticker .tic
 .confetti-canvas{position:fixed;inset:0;z-index:9500;pointer-events:none}
 .celebrate-banner{margin:0 0 12px;padding:6px 12px;display:inline-block;background:linear-gradient(90deg,#f7931a,#ffc267);color:#090c0d;font:700 11px var(--mono);letter-spacing:.12em;text-transform:uppercase}
 .event-celebrate .modal-top{height:8px;background:linear-gradient(90deg,#f7931a,#ffc267,#86c79a,#77a9c9,#b69ce0)}.event-celebrate h2{color:var(--orange2)}
+
+/* The message from a friend on the first screen (src/ui/intro-chat.js) */
+.irc{margin:12px 0;border:1px solid #2a3a36;background:#05090a}.irc-bar{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:6px 10px;background:#12201c;color:var(--muted);font:11px var(--mono)}
+.irc-log{padding:8px 0;font:12px/1.55 var(--mono);color:#c8d3cf}.irc-line{padding:1px 10px}.irc-nick{color:var(--orange2);font-weight:700}.irc-you{color:var(--green)}.irc-sys{color:var(--dim)}
+.irc-cursor{display:inline-block;width:7px;height:13px;margin-left:3px;vertical-align:-2px;background:var(--green);animation:irc-blink 1s steps(2) infinite}@keyframes irc-blink{50%{opacity:0}}
+@media(prefers-reduced-motion:reduce){.irc-cursor{animation:none}}

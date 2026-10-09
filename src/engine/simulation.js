@@ -23,7 +23,7 @@ const initialState=()=>{const seed=Math.floor(Math.random()*4294967296);return{
   blocks:0,mined:0,nodeDays:0,uptimeDays:0,powerSpent:0,nextMilestone:1000,
   connectivity:"fixed",history:[],activity:[],activitySeq:0,log:[{time:START,text:"Client synced to the network tip",amount:"~block "+approxHeight(START)}]
 }};
-let state,loadedHasHardwareAlerts=false,loadedHasHardwareToastSeen=false,activeTab="dashboard",mobileMenuOpen=false,mobileMenuSection="play",activityFilter="all",activityLimit=100,tradePercentages={},hardwarePurchaseChoice={},custodyLesson="malware",selectedVenue="mtgox",introDifficulty="easy",introStartingCash=STARTING_LIQUIDITY_DEFAULT,pendingTransaction=null,toast=null,toastTimer=null,timer=null,faucet=null,faucetTimer=null,mempoolTimer=null,introStep=0;
+let state,loadedHasHardwareAlerts=false,loadedHasHardwareToastSeen=false,activeTab="dashboard",mobileMenuOpen=false,mobileMenuSection="play",activityFilter="all",activityLimit=100,tradePercentages={},hardwarePurchaseChoice={},custodyLesson="malware",selectedVenue="mtgox",introDifficulty="medium",introStartingCash=STARTING_LIQUIDITY_DEFAULT,pendingTransaction=null,toast=null,toastTimer=null,timer=null,faucet=null,faucetTimer=null,mempoolTimer=null,introStep=0;
 {const stored=loadStoredSave();state=initialState();if(stored){loadedHasHardwareAlerts=!!stored.hardwareAlerts;loadedHasHardwareToastSeen=!!stored.hardwareToastSeen;state=Object.assign(state,stored)}}
 const ACTIVITY_CATEGORIES=["trade","fleet","finance","reward","custody","learning","operations","milestone"];
 function activityCategory(text=""){
@@ -59,7 +59,7 @@ migrateHardwareAlerts(state,loadedHasHardwareAlerts);
 migrateHardwareToastSeen(state,loadedHasHardwareToastSeen);
 const savedStartingMode=STARTING_MODES.some(mode=>mode.id===state.difficulty)?startingMode(state.difficulty):null;
 state.difficulty=savedStartingMode?.id||"medium";state.campaignStart=Math.max(START-DAY*5,Number(state.campaignStart)||START);
-if(!state.started){introDifficulty="easy";introStartingCash=clampStartingLiquidity(state.startingCash);const mode=startingMode(introDifficulty);state.cash=introStartingCash;state.startingCash=introStartingCash;state.time=mode.start;state.campaignStart=mode.start;state.lastMonth=new Date(mode.start).toISOString().slice(0,7);state.difficulty=mode.id}
+if(!state.started){introDifficulty="medium";introStartingCash=clampStartingLiquidity(state.startingCash);const mode=startingMode(introDifficulty);state.cash=introStartingCash;state.startingCash=introStartingCash;state.time=mode.start;state.campaignStart=mode.start;state.lastMonth=new Date(mode.start).toISOString().slice(0,7);state.difficulty=mode.id}
 state.lightning=Object.assign({locked:0,earned:0},state.lightning||{});
 state.wallets=Object.assign({hot:0,cold:0,mtgox:0,bitfinex:0,quadriga:0,frontier:0,exchange:0,etf:0,frozen:0},state.wallets||{});
 state.speculations=Array.isArray(state.speculations)?state.speculations:[];

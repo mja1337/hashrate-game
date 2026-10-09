@@ -48,7 +48,7 @@ const introEnd = inline.indexOf("\n];", introStart) + 3;
 const introContext = {};
 vm.runInNewContext(inline.slice(introStart, introEnd).replace("const INTRO_SLIDES", "var INTRO_SLIDES"), introContext);
 assert(introContext.INTRO_SLIDES.length === 1, "Opening must reach play without a slideshow");
-assert(inline.includes('introDifficulty="easy"') && inline.includes('Customise your run'), "Opening must recommend 2009 and retain custom starts");
+assert(inline.includes('introDifficulty="medium"') && inline.includes('Customise your run'), "Opening must default to the Standard 2009 start and retain custom starts");
 assert(inline.includes('id:"first-work"') && inline.includes('id:"first-month"'), "First month needs work and completion guidance");
 assert(inline.includes('data-action="wallet-demo"'), "Wallet education must remain available after starting");
 assert(inline.includes("guidance:{dismissed:[]}") && inline.includes("state.guidance=Object.assign({dismissed:[]}") && inline.includes('if(a==="dismiss-guidance")'), "Save-compatible Operator briefing dismissals are missing");
@@ -1931,6 +1931,12 @@ assert(css.includes(".svg-sprite-defs{position:absolute;width:0;height:0;overflo
     assert(!/<div class="[^"]*\bgrid\b[^"]*"[^>]*>\$\{/.test(offline.slice(offline.indexOf("function offlineLockHtml"), offline.indexOf("function offlineHardwareLockCard"))), "A lock screen is a .grid again, so enhancers fill it with the cards it should hide");
     assert(confetti.includes("prefers-reduced-motion: reduce") && confetti.includes('state.endReason!=="receivership"&&state.endReason!=="nomarket"') && confetti.includes("ev.celebrate"), "Confetti ignores reduced motion, fires on a failed run, or has lost the market-opening moment");
     assert(inline.includes('{id:"mtgoxopen",celebrate:true') && inline.includes("e.imp===3&&(state.storyPause||e.celebrate)"), "The market opening no longer always opens its window");
+  }
+  // The first screen frames the Standard start as an IRC message a month after the Genesis Block, and the rules it runs on are in the friend's mouth.
+  {
+    const chat = await readFile(new URL("src/ui/intro-chat.js", root), "utf8");
+    assert(inline.includes('introChatHtml(selectedMode)') && chat.includes("a month after the Genesis Block") && chat.includes("nobody will buy them") && chat.includes("the electricity is NOT, so bring cash"), "The first screen has lost its IRC message, or the message no longer says why the cash matters");
+    assert(chat.includes('mode.id!=="medium"&&mode.id!=="easy"') && css.includes(".irc-cursor") && css.includes("prefers-reduced-motion:reduce){.irc-cursor"), "The IRC message appears for the wrong starts, or its cursor ignores reduced motion");
   }
   // Good news waits behind a modal; a refused save is visible.
   assert(notify.includes("TOAST_DEFERRABLE") && inline.includes("flushDeferredToasts();"), "A toast can land on top of a modal again");
