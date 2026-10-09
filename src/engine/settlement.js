@@ -11,8 +11,27 @@
    Split out of simulation.js, which had reached the 70KB per-module ceiling. Nothing here is
    called before the page has finished parsing, so it can load in any order after the engine. */
 
+/* NO MARKET, NO WAY TO KICK THE CAN.
+
+   Before Bitcoin has a market price (July 2010) mined coins cannot be sold: there is nowhere to sell them into. Cash is the only
+   thing that pays a bill, apart from selling miners. A run used to survive that gap by restructuring and carrying arrears bill after
+   bill, which only deferred the same shortfall, since nothing in the meantime could raise cash. Now a bill that cash and a sale of
+   miners cannot meet before the market opens ends the run. This is why the opening cash is $2,500 by default, and why the first
+   months are about keeping the cost of the laptop and little else. */
+const NO_MARKET_RULE="Bitcoin has no market price yet, so there is nothing to sell into and nobody to restructure with: before the market opens, a bill is paid from cash or by selling miners, and if neither covers it the run ends.";
+function endRunNoMarket(due){
+  const short=Math.max(0,due-state.cash);
+  // Miners on the floor and in storage can still be sold, at resale value, for as much of it as they cover.
+  if(fleetLiquidationPlan(short,null,true).covered)return false;
+  state.pendingSettlement=null;state.settlementSaleMode=false;state.ended=true;state.endReason="nomarket";state.speed=0;
+  log("Scored campaign ended","the cash ran out before Bitcoin had a market");
+  if(typeof recordCareerRun==="function")recordCareerRun();
+  setTimer();renderFullQueued=true;save();render();return true;
+}
+
 function deferSettlement(){
   const pending=state.pendingSettlement;if(!pending)return;
+  if(state.time<MARKET)return showToast("Not before the market opens",NO_MARKET_RULE,"blocked","finance");
   const paid=Math.min(state.cash,pending.due),carried=pending.due-paid;
   state.cash-=paid;state.debt+=carried;state.arrearsDue=nextBillDate();
   state.operator.restructures=state.operator.restructures;
@@ -70,7 +89,8 @@ function finishMonthlySettlement(kind="cash",automatic=false){
 }
 
 function enterReceivership(){
-  const p=state.pendingSettlement;if(!p)return;state.operator.restructures++;const haircut=Math.min(.25,.1+(state.operator.restructures-1)*.05),btcSeized=controlled()*haircut;sellControlledBtc(btcSeized);let machines=0;HARDWARE.filter(h=>!h.permanent).forEach(h=>{const qty=Math.ceil((state.hardware[h.id]||0)*.25);state.hardware[h.id]=Math.max(0,(state.hardware[h.id]||0)-qty);state.poweredDownHardware[h.id]=Math.min(state.poweredDownHardware[h.id]||0,state.hardware[h.id]);machines+=qty});recordOperatorMonth(p.snapshot,false);state.bill=0;state.billLedger=blankBillLedger();state.debt=0;state.cash=0;state.lastMonth=p.month;state.pendingSettlement=null;state.power=false;clearTimeout(toastTimer);toast=null;log("Receivership",`${Math.round(haircut*100)}% of self-held BTC and ${machines} miners seized`);
+  const p=state.pendingSettlement;if(!p)return;
+  if(state.time<MARKET)return showToast("Not before the market opens",NO_MARKET_RULE,"blocked","finance");state.operator.restructures++;const haircut=Math.min(.25,.1+(state.operator.restructures-1)*.05),btcSeized=controlled()*haircut;sellControlledBtc(btcSeized);let machines=0;HARDWARE.filter(h=>!h.permanent).forEach(h=>{const qty=Math.ceil((state.hardware[h.id]||0)*.25);state.hardware[h.id]=Math.max(0,(state.hardware[h.id]||0)-qty);state.poweredDownHardware[h.id]=Math.min(state.poweredDownHardware[h.id]||0,state.hardware[h.id]);machines+=qty});recordOperatorMonth(p.snapshot,false);state.bill=0;state.billLedger=blankBillLedger();state.debt=0;state.cash=0;state.lastMonth=p.month;state.pendingSettlement=null;state.power=false;clearTimeout(toastTimer);toast=null;log("Receivership",`${Math.round(haircut*100)}% of self-held BTC and ${machines} miners seized`);
   if(state.operator.restructures>=3){state.ended=true;state.endReason="receivership";state.speed=0;log("Scored campaign ended","third receivership");recordCareerRun()}else state.speed=p.resumeSpeed||state.returnSpeed||0;setTimer();save();render();if(state.operator.restructures<3)reportCoinLoss({
     title:"Receivership seized part of the treasury",kind:"seized",btc:btcSeized,cause:"receivership",
     from:"self-held keys, sold to settle the bill",

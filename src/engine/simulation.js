@@ -2,13 +2,15 @@
 
 /* SIMULATION LAYER — state and economics. */
 const SAVE_KEY="hashrate-genesis-save-v1";
-const STARTING_LIQUIDITY_MIN=1500,STARTING_LIQUIDITY_MAX=1500000,STARTING_LIQUIDITY_STEP=500;
+/* The default opening cash is $2,500. Before July 2010 Bitcoin has no market price, so mined coins cannot be sold and cash is the only way to
+   pay a bill; $1,500 left too little runway to reach the market, so the default is higher. The floor stays $1,500 for a harder start. */
+const STARTING_LIQUIDITY_DEFAULT=2500,STARTING_LIQUIDITY_MIN=1500,STARTING_LIQUIDITY_MAX=1500000,STARTING_LIQUIDITY_STEP=500;
 function clampStartingLiquidity(value){const numeric=Number(value);return Math.min(STARTING_LIQUIDITY_MAX,Math.max(STARTING_LIQUIDITY_MIN,Number.isFinite(numeric)?Math.round(numeric):STARTING_LIQUIDITY_MIN))}
 function startingMode(id){return STARTING_MODES.find(mode=>mode.id===id)||STARTING_MODES[0]}
 function startingModeForCash(cash){return null}
 const initialState=()=>{const seed=Math.floor(Math.random()*4294967296);return{
   version:1,time:START,speed:0,returnSpeed:1,started:false,ended:false,seed,rng:seed,lastReal:Date.now(),
-  cash:1500,startingCash:1500,difficulty:"medium",campaignStart:START,debt:0,bill:0,billLedger:{energy:0,rent:0,internet:0,staff:0,insurance:0,nodeNetwork:0,other:0},lastMonth:new Date(START).toISOString().slice(0,7),power:true,policyLock:null,
+  cash:STARTING_LIQUIDITY_DEFAULT,startingCash:STARTING_LIQUIDITY_DEFAULT,difficulty:"medium",campaignStart:START,debt:0,bill:0,billLedger:{energy:0,rent:0,internet:0,staff:0,insurance:0,nodeNetwork:0,other:0},lastMonth:new Date(START).toISOString().slice(0,7),power:true,policyLock:null,
   wallets:{hot:0,cold:0,mtgox:0,bitfinex:0,quadriga:0,frontier:0,exchange:0,etf:0,frozen:0},
   lightning:{locked:0,earned:0},
   giftCards:{spentBtc:0,spentUsd:0,cards:0},floorView:"3d",
@@ -21,7 +23,7 @@ const initialState=()=>{const seed=Math.floor(Math.random()*4294967296);return{
   blocks:0,mined:0,nodeDays:0,uptimeDays:0,powerSpent:0,nextMilestone:1000,
   connectivity:"fixed",history:[],activity:[],activitySeq:0,log:[{time:START,text:"Client synced to the network tip",amount:"~block "+approxHeight(START)}]
 }};
-let state,loadedHasHardwareAlerts=false,loadedHasHardwareToastSeen=false,activeTab="dashboard",mobileMenuOpen=false,mobileMenuSection="play",activityFilter="all",activityLimit=100,tradePercentages={},hardwarePurchaseChoice={},custodyLesson="malware",selectedVenue="mtgox",introDifficulty="easy",introStartingCash=STARTING_LIQUIDITY_MIN,pendingTransaction=null,toast=null,toastTimer=null,timer=null,faucet=null,faucetTimer=null,mempoolTimer=null,introStep=0;
+let state,loadedHasHardwareAlerts=false,loadedHasHardwareToastSeen=false,activeTab="dashboard",mobileMenuOpen=false,mobileMenuSection="play",activityFilter="all",activityLimit=100,tradePercentages={},hardwarePurchaseChoice={},custodyLesson="malware",selectedVenue="mtgox",introDifficulty="easy",introStartingCash=STARTING_LIQUIDITY_DEFAULT,pendingTransaction=null,toast=null,toastTimer=null,timer=null,faucet=null,faucetTimer=null,mempoolTimer=null,introStep=0;
 {const stored=loadStoredSave();state=initialState();if(stored){loadedHasHardwareAlerts=!!stored.hardwareAlerts;loadedHasHardwareToastSeen=!!stored.hardwareToastSeen;state=Object.assign(state,stored)}}
 const ACTIVITY_CATEGORIES=["trade","fleet","finance","reward","custody","learning","operations","milestone"];
 function activityCategory(text=""){
@@ -158,7 +160,7 @@ HARDWARE.forEach(h=>{
   state.maintenance.faultsByPart[h.id]=byPart;
   state.maintenance.faults[h.id]=Object.values(byPart).reduce((sum,n)=>sum+n,0);
 })
-const numericDefaults={cash:1500,debt:0,bill:0,points:0,rng:123456789};
+const numericDefaults={cash:STARTING_LIQUIDITY_DEFAULT,debt:0,bill:0,points:0,rng:123456789};
 Object.keys(numericDefaults).forEach(k=>{if(!Number.isFinite(Number(state[k])))state[k]=numericDefaults[k];else state[k]=Number(state[k])});
 if(state.shoppingPause){state.shoppingPause=false;if(state.started&&state.speed<=0&&!state.activeEvent&&!state.ended)state.speed=Number(state.returnSpeed)||1}
 state.overdrive=!!state.overdrive;
@@ -465,23 +467,28 @@ function queueMonthlySettlement(due,month,loanInterest,silent=false){
      player has to go and raise it. */
   state.pendingSettlement={due,month,loanInterest,snapshot,resumeSpeed};
   if(state.cash+1e-8>=due){finishMonthlySettlement("cash",true);return}
+  if(state.time<MARKET&&typeof endRunNoMarket==="function"&&endRunNoMarket(due))return;
   state.speed=0;renderFullQueued=true;log("Settlement decision required",`${fmtUsd(due-state.cash)} short`);if(!silent)showToast("Settlement paused","Choose how to cover the shortfall. Time will not move until the decision is resolved.","bad","finance");setTimer();
 }
-function liquidationCandidates(onlyId=null){
-  return HARDWARE.filter(h=>!h.permanent&&(!onlyId||h.id===onlyId)&&(state.decommissionedHardware?.[h.id]||0)>0).map(h=>{const profitability=hardwareProfitability(h);return{h,owned:state.decommissionedHardware[h.id]||0,unit:Math.max(1,resaleHardwareValue(h)),margin:profitability.netPerUnit,efficiency:h.hash/Math.max(1,h.w)}}).sort((a,b)=>{const marginA=Number.isFinite(a.margin)?a.margin:Infinity,marginB=Number.isFinite(b.margin)?b.margin:Infinity;return marginA-marginB||a.efficiency-b.efficiency});
+/* Machines that can be sold to meet a bill. `includeInstalled` adds the ones still on the floor: at a settlement the clock is stopped,
+   so there is no time to retire a machine and wait for it to be unracked, and "sell the tower to pay the bill" has to work as it says.
+   Retired machines in storage are always sold first. */
+function liquidationCandidates(onlyId=null,includeInstalled=false){
+  const installed=h=>includeInstalled?Math.max(0,Math.floor(Number(state.hardware[h.id])||0)):0;
+  return HARDWARE.filter(h=>!h.permanent&&(!onlyId||h.id===onlyId)&&((state.decommissionedHardware?.[h.id]||0)+installed(h))>0).map(h=>{const profitability=typeof hardwareProfitability==="function"?hardwareProfitability(h):{netPerUnit:NaN},retired=state.decommissionedHardware[h.id]||0;return{h,retired,owned:retired+installed(h),unit:Math.max(1,resaleHardwareValue(h)),margin:profitability.netPerUnit,efficiency:h.hash/Math.max(1,h.w)}}).sort((a,b)=>{const marginA=Number.isFinite(a.margin)?a.margin:Infinity,marginB=Number.isFinite(b.margin)?b.margin:Infinity;return marginA-marginB||a.efficiency-b.efficiency});
 }
-function fleetLiquidationPlan(target,onlyId=null){
+function fleetLiquidationPlan(target,onlyId=null,includeInstalled=false){
   let remaining=Math.max(0,Number(target)||0),total=0,qty=0;const entries=[];
-  for(const candidate of liquidationCandidates(onlyId)){if(remaining<=.005)break;const units=Math.min(candidate.owned,Math.max(1,Math.ceil(remaining/candidate.unit))),value=units*candidate.unit;entries.push({...candidate,qty:units,value});remaining-=value;total+=value;qty+=units}
+  for(const candidate of liquidationCandidates(onlyId,includeInstalled)){if(remaining<=.005)break;const units=Math.min(candidate.owned,Math.max(1,Math.ceil(remaining/candidate.unit))),value=units*candidate.unit;entries.push({...candidate,qty:units,value});remaining-=value;total+=value;qty+=units}
   return{target:Math.max(0,Number(target)||0),total,qty,remaining:Math.max(0,remaining),entries,covered:remaining<=.005};
 }
 function liquidationPlanLabel(plan){return plan.entries.map(entry=>`${fmtCompactNumber(entry.qty)} × ${entry.h.name}`).join(", ")||"No saleable miners"}
-function executeFleetLiquidation(target,onlyId=null,label="Fleet sold for liquidity"){
-  const plan=fleetLiquidationPlan(target,onlyId);if(!plan.qty)return null;
-  plan.entries.forEach(entry=>state.decommissionedHardware[entry.h.id]=Math.max(0,(state.decommissionedHardware[entry.h.id]||0)-entry.qty));state.cash+=plan.total;log(label,`${liquidationPlanLabel(plan)} · +${fmtUsd(plan.total)}`,"fleet");return plan;
+function executeFleetLiquidation(target,onlyId=null,label="Fleet sold for liquidity",includeInstalled=false){
+  const plan=fleetLiquidationPlan(target,onlyId,includeInstalled);if(!plan.qty)return null;
+  plan.entries.forEach(entry=>{const id=entry.h.id,fromStore=Math.min(entry.qty,state.decommissionedHardware[id]||0),fromFloor=entry.qty-fromStore;state.decommissionedHardware[id]=Math.max(0,(state.decommissionedHardware[id]||0)-fromStore);if(fromFloor>0){state.hardware[id]=Math.max(0,(state.hardware[id]||0)-fromFloor);state.poweredDownHardware[id]=Math.min(state.poweredDownHardware[id]||0,state.hardware[id])}});state.cash+=plan.total;log(label,`${liquidationPlanLabel(plan)} · +${fmtUsd(plan.total)}`,"fleet");return plan;
 }
 function liquidateForSettlement(){
-  const p=state.pendingSettlement;if(!p)return;const short=Math.max(0,p.due-state.cash),plan=executeFleetLiquidation(short,null,"Emergency fleet liquidation");
+  const p=state.pendingSettlement;if(!p)return;const short=Math.max(0,p.due-state.cash),plan=executeFleetLiquidation(short,null,"Emergency fleet liquidation",true);
   if(!plan)return showToast("No saleable miners","There is no non-permanent mining hardware left to liquidate.");if(state.cash>=p.due)finishMonthlySettlement("liquidation");else{p.snapshot.competitive=false;save();render()}
 }
 function takeBridgeFinance(){

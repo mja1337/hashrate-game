@@ -1917,6 +1917,11 @@ assert(css.includes(".svg-sprite-defs{position:absolute;width:0;height:0;overflo
     assert(scenery.includes("FloorSites.style(p.id,site.large)") && scenery.includes("FloorSites.details(p.id,api,{w,d,site,s})"), "The scenery no longer asks FloorSites for each site's look");
     assert(mount.indexOf("sites.js") > 0 && mount.indexOf("sites.js") < mount.indexOf("scenery.js"), "sites.js is not loaded before scenery.js");
   }
+  // Before the market opens, cash and miners are the only way to pay a bill, and the game says so everywhere it matters.
+  assert(inline.includes("STARTING_LIQUIDITY_DEFAULT=2500") && inline.includes("with a laptop and $2,500.") && inline.includes("a $2,500 default (the minimum is $1,500)"), "The default opening cash or its explanation has changed back");
+  assert(inline.includes("function endRunNoMarket(due)") && inline.includes("if(state.time<MARKET&&typeof endRunNoMarket===\"function\"&&endRunNoMarket(due))return;") && inline.includes('state.endReason==="nomarket"'), "A run can survive the gap before the market opens by restructuring again, or the end screen no longer says why it ended");
+  assert(inline.includes('id:"no-market-cash"') && inline.includes('id="method-no-market"') && inline.includes("Before July 2010 there is no market"), "The Dashboard warning, the Method section or the tour no longer explain the no-market rule");
+  assert(inline.includes("disabled:state.debt>0||noMarket") && inline.includes("disabled:noMarket,title:noMarket?NO_MARKET_RULE"), "The settlement screen offers arrears or restructuring before the market opens");
   // Good news waits behind a modal; a refused save is visible.
   assert(notify.includes("TOAST_DEFERRABLE") && inline.includes("flushDeferredToasts();"), "A toast can land on top of a modal again");
   assert(notify.includes("function announceSaveState()") && inline.includes("saveStateHtml()"), "A browser that refuses to store the game is no longer shown in the header");

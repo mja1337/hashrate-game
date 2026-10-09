@@ -4636,6 +4636,49 @@ rule("the racking toasts name who is doing the work: you, until there is somebod
   assert(read("fieldTechnicianCount()") >= 1 && read("rackingWho()") === "your technicians", `with a technician the work was attributed to ${read("rackingWho()")}`);
 });
 
+/* ---- NO MARKET, NO RESCUE ---- */
+
+rule("a run opens with $2,500, and the floor for a harder start is still $1,500", () => {
+  const read = makeEval(loadEngine());
+  assert(read("STARTING_LIQUIDITY_DEFAULT") === 2500 && read("initialState().cash") === 2500 && read("initialState().startingCash") === 2500, "the default opening cash is not $2,500");
+  assert(read("introStartingCash") === 2500, `the intro offers ${read("introStartingCash")} as the default`);
+  assert(read("STARTING_LIQUIDITY_MIN") === 1500, "the lowest opening cash a player can choose moved");
+});
+
+rule("before the market opens, a bill cash cannot meet and no miner can cover ends the run", () => {
+  const read = makeEval(loadEngine());
+  read(`${SITE(`state.time=at("2010-03-01");state.campaignStart=at("2009-01-03");state.cash=10;state.hardware={laptop:1};state.decommissionedHardware={};`)}`);
+  read('queueMonthlySettlement(500,"2010-03",0,true)');
+  assert(read("state.ended") === true && read("state.endReason") === "nomarket", `the run was not ended: ended=${read("state.ended")} reason=${read("state.endReason")}`);
+  assert(read("state.pendingSettlement") === null && read("state.speed") === 0, "a settlement was left open on a finished run");
+});
+
+rule("before the market opens, selling a miner you own, installed or in storage, pays the bill", () => {
+  const read = makeEval(loadEngine());
+  read(`${SITE(`state.time=at("2010-03-01");state.campaignStart=at("2009-01-03");state.cash=10;state.hardware={laptop:1,cpu:2};state.decommissionedHardware={};`)}`);
+  read('queueMonthlySettlement(500,"2010-03",0,true)');
+  assert(read("state.ended") === false && read("state.pendingSettlement") !== null, "a run that could sell its tower was ended");
+  const before = read("state.hardware.cpu");
+  read("liquidateForSettlement()");
+  assert(read("state.pendingSettlement") === null && read("state.cash") < 400, `the bill was not paid by the sale: cash ${read("state.cash")}`);
+  assert(read("state.hardware.cpu") < before && read("state.hardware.laptop") === 1, "the sale did not take the tower off the floor, or took the permanent laptop");
+});
+
+rule("before the market opens there is no restructuring and no arrears; after it there is", () => {
+  const read = makeEval(loadEngine());
+  read(`${SITE(`state.time=at("2010-03-01");state.cash=10;state.hardware={laptop:1,cpu:2};state.decommissionedHardware={};`)}`);
+  read('queueMonthlySettlement(500,"2010-03",0,true)');
+  read("deferSettlement()");
+  assert(read("state.debt") === 0 && read("state.pendingSettlement") !== null, "the bill was carried into arrears before the market opened");
+  read("enterReceivership()");
+  assert(read("state.operator.restructures") === 0 && read("state.pendingSettlement") !== null, "the operation was restructured before the market opened");
+  // After the market opens a shortfall is a decision, not the end of the run.
+  const later = makeEval(loadEngine());
+  later(`${SITE(`state.time=at("2012-03-01");state.campaignStart=at("2009-01-03");state.cash=10;state.hardware={laptop:1};state.decommissionedHardware={};`)}`);
+  later('queueMonthlySettlement(500,"2012-03",0,true)');
+  assert(later("state.ended") === false && later("state.pendingSettlement") !== null, "a shortfall after the market opened ended the run");
+});
+
 /* Reported from an exit hook rather than inline, because inline made the gate
    position-dependent: it sat a few lines above the end of the file, and two rules appended
    after it ran, failed, pushed onto `failures` and were never printed. The suite announced
