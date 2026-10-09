@@ -443,7 +443,7 @@ function advanceFleetLifecycle(){
     if(!finished)return true;
     awardXp((6+3*Math.log2(1+(h.hash||0)/1e9))*Math.log2(1+total),"deploy");
     log(`Commissioned ${total} × ${h.name}`,`Racked, configured and hashing over ${Math.max(1,Math.round(span/DAY))} day${Math.round(span/DAY)===1?"":"s"}`,"fleet");
-    showToast("Commissioning complete",`${total} × ${h.name} is now connected to the fleet. Machines came online as the crew worked through them.`);
+    showToast("Commissioning complete",`${total} × ${h.name} is now connected to the fleet. Machines came online as ${rackingWho()} worked through them.`);
     renderFullQueued=true;
     return false});
   const job=state.relocationJob;if(job&&dueBy(job,state.time)){const destination=REGIONS.find(r=>r.id===job.id);state.region=job.id;

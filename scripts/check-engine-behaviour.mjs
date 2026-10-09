@@ -4628,6 +4628,14 @@ rule("only the very next release is teased, and nothing already released or unda
   assert(JSON.stringify(r.mixed) === '["c","d"]', `ties share the next step and undated items are skipped: ${r.mixed}`);
 });
 
+rule("the racking toasts name who is doing the work: you, until there is somebody on the payroll", () => {
+  const read = makeEval(loadEngine());
+  read(`${SITE()}state.staff=[];`);
+  assert(read("fieldTechnicianCount()") === 0 && read("rackingWho()") === "you", "with no technician the work was attributed to a crew");
+  read(`state.staff=["fieldtech"];`);
+  assert(read("fieldTechnicianCount()") >= 1 && read("rackingWho()") === "your technicians", `with a technician the work was attributed to ${read("rackingWho()")}`);
+});
+
 /* Reported from an exit hook rather than inline, because inline made the gate
    position-dependent: it sat a few lines above the end of the file, and two rules appended
    after it ran, failed, pushed onto `failures` and were never printed. The suite announced

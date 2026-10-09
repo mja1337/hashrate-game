@@ -32,6 +32,9 @@ function stageDelivery(id,qty,condition){
    the tenth adds a tenth. There is a limit to how many people can usefully move around the
    same aisle, and CREW_SOFT_CAP is where this stops pretending otherwise. */
 const CREW_SOFT_CAP=12,COMMISSION_PER_DAY=20;
+/* WHO IS DOING THE WORK, in words that are true of this run. With no technician on the payroll nobody is "the crew":
+   the player is doing the racking, and a toast that says otherwise describes staff who do not exist. */
+function rackingWho(){return (typeof fieldTechnicianCount==="function"?fieldTechnicianCount():0)>0?"your technicians":"you"}
 function crewRatePerDay(base){
   const techs=Math.min(CREW_SOFT_CAP,typeof fieldTechnicianCount==="function"?fieldTechnicianCount():0);
   return base*(1+techs);
@@ -194,12 +197,12 @@ function decommissionHardware(id,requested=1){
      with "Retired 0" and a notice saying they were in storage. retiringCount existed to answer
      exactly this and was never called. */
   const spare=Math.max(0,owned-retiringCount(id));
-  if(spare<1)return showToast("Already being retired",`Every ${h.name} you own is already on its way out of the racks. Wait for the crew to finish before booking more.`,"info","mine");
+  if(spare<1)return showToast("Already being retired",`Every ${h.name} you own is already on its way out of the racks. Wait until the unracking is finished before booking more.`,"info","mine");
   const qty=Math.min(spare,Math.max(1,Math.floor(Number(requested)||1)));
   const days=retirementDays(qty);
   state.retirementJobs.push({id,qty,done:0,started:state.time,due:state.time+days*DAY,days});
   log(`Retirement started: ${h.name}`,`${qty} unit${qty===1?"":"s"} · ${days} day${days===1?"":"s"} to unrack and palletise`,"fleet");
-  showToast("Retirement underway",`${qty} × ${h.name} is being isolated, unracked and moved to storage over ${days} simulation day${days===1?"":"s"}. Capacity, heat and hash rate come back as the crew works through them.`,"info","mine");
+  showToast("Retirement underway",`${qty} × ${h.name} is being isolated, unracked and moved to storage over ${days} simulation day${days===1?"":"s"}. Capacity, heat and hash rate come back as ${rackingWho()} work through them.`,"info","mine");
   save();renderMineContent();
 }
 /* The crew works through the pallet at a steady rate, and what they have finished is out of

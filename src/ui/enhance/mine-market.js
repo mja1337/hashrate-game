@@ -254,6 +254,19 @@ function tabCommandVisual(kind){
   return `<section class="card span-12 tab-command-${kind}"><div class="tab-command"><div class="tab-command-copy"><div class="hero-kicker">${narrativeEra().label}</div><h2>${title}</h2><p>${copy}</p>${stats?`<div class="tab-command-stats">${stats}</div>`:""}</div><div class="tab-command-art">${art}</div></div></section>`;
 }
 function narrativeBanner(kind,title){return `<section class="card span-12 narrative-${kind}"><div class="card-pad"><div class="hero-kicker">${narrativeEra().label}</div><h2 style="margin:8px 0">${title}</h2><p style="color:var(--muted);line-height:1.65;max-width:900px;margin:0">${narrativeCopy(kind)}</p></div></section>`}
+/* WHERE A MACHINE IS IN THE PIPELINE, on the machine's own card. The Incoming fleet card says it too, but it sits above the
+   whole catalogue, so a player who has just pressed Buy on a card sees nothing happen where they pressed. This strip is the
+   answer on the spot: on order and when it arrives, delivered and waiting to be commissioned, or part-way through racking. */
+function hardwareOrderStrip(h){
+  const orders=(state.procurementOrders||[]).filter(o=>o.id===h.id),staged=Math.max(0,Math.floor(Number(state.inactiveHardware?.[h.id])||0));
+  const racking=(state.commissioningJobs||[]).filter(j=>j.id===h.id);
+  if(!orders.length&&!staged&&!racking.length)return"";
+  const parts=[];
+  orders.forEach(o=>{const days=Math.max(0,Math.ceil((o.due-state.time)/DAY));parts.push(`${fmtCompactNumber(o.qty)} on order · arrives ${dateFmt(o.due)} (${days} day${days===1?"":"s"})${(o.slips||0)>0?" · slipped":""}`)});
+  if(staged)parts.push(`${fmtCompactNumber(staged)} delivered, waiting to be commissioned`);
+  racking.forEach(j=>{const done=Math.max(0,Math.floor(Number(j.done)||0)),left=Math.max(0,j.qty-done);parts.push(`${fmtCompactNumber(left)} of ${fmtCompactNumber(j.qty)} still to rack`)});
+  return `<div class="hw-order-strip" role="status"><b>In the pipeline</b><span>${parts.join(" · ")}</span>${staged?`<button class="action small primary" data-action="activate-hw" data-id="${h.id}">Commission ${fmtCompactNumber(staged)}</button>`:""}</div>`;
+}
 function incomingFleetVisual(){
   const transit=state.procurementOrders,delivered=HARDWARE.filter(h=>(state.inactiveHardware?.[h.id]||0)>0),commissioning=state.commissioningJobs;
   const retiring=(state.retirementJobs||[]).filter(j=>Number(j.qty)-Number(j.done||0)>0);

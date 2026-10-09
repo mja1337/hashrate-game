@@ -473,3 +473,4 @@ body.tour-on .speed:not([data-value="0"]),body.tour-on .mobile-pause-button.paus
 @media(prefers-reduced-motion:reduce){.floor-smoke i{animation:none;opacity:.4;transform:translate(0,-30%) scale(1.2)}}
 .next-up{color:var(--orange2);font-weight:700;letter-spacing:.06em;text-transform:uppercase}.facility.teaser,.item.teaser{border-style:dashed;filter:grayscale(.55)}.facility.teaser .risk,.item.teaser .owned-count{opacity:1}
 .footer .footer-tipline{flex-basis:100%;display:flex;justify-content:flex-start;padding-top:10px;margin-top:4px;border-top:1px solid var(--line)}
+.hw-order-strip{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:0 0 10px;padding:8px 10px;border:1px solid var(--orange);border-left-width:4px;background:rgba(247,147,26,.09)}.hw-order-strip b{font:700 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--orange2)}.hw-order-strip span{flex:1 1 160px;color:var(--text);font-size:13px;line-height:1.45}
