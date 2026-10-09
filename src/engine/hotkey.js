@@ -93,7 +93,7 @@ function hotKeyLost(cause,next=state.time,silent=false){
     state.wallets.hot=0;utxoState().hot=0;
     log("Online wallet lost",`-${fmtBtc(hot)} · the computer ${verb} and nothing else held the key`,"custody");
     const rate=cause==="disk"?HOT_DISK_RATE:placeRate("site",cause);
-    reportCoinLoss({title:"The wallet was the file, and the file is gone",kind:"unrecoverable",btc:hot,cause:"nobackup",odds:{monthly:rate,note:"The chance was small whatever you did, but a backup kept away from the mine would have turned it into an afternoon's work."},from:"your online wallet",
+    reportCoinLoss({title:"The wallet was the file, and the file is gone",kind:"unrecoverable",btc:hot,cause:"nobackup",scene:cause,odds:{monthly:rate,note:"The chance was small whatever you did, but a backup kept away from the mine would have turned it into an afternoon's work."},from:"your online wallet",
       what:`${title}. Nothing else held the key, so ${fmtBtc(hot)} is still on the chain at addresses nobody can spend from.`,
       why:"A software key is a file. With one copy of it, the coins are exactly as safe as one disk, in one building.",
       remedy:"Write the key down and keep it somewhere the mine cannot reach: a copy in a bank box or a trusted person's house survives the thing that took the computer.",tab:"custody"});
@@ -110,7 +110,7 @@ function hotKeyStolen(cause,next=state.time,silent=false){
     state.wallets.hot=Math.max(0,hot-taken);
     const who=cause==="seizure"?"The authorities":"Whoever took it";
     log("Online wallet emptied",`-${fmtBtc(taken)} · the key was taken`,"custody");
-    reportCoinLoss({title:cause==="seizure"?"The authorities held the key to your online wallet":"The key to your online wallet was taken",kind:"stolen",btc:taken,cause,odds:cause==="burglary"?{monthly:placeRate("site","burglary"),note:"A break-in cannot be stopped from here, but what it finds can be limited: keep only a working balance in the online wallet."}:null,from:"your online wallet",
+    reportCoinLoss({title:cause==="seizure"?"The authorities held the key to your online wallet":"The key to your online wallet was taken",kind:"stolen",btc:taken,cause,scene:cause,odds:cause==="burglary"?{monthly:placeRate("site","burglary"),note:"A break-in cannot be stopped from here, but what it finds can be limited: keep only a working balance in the online wallet."}:null,from:"your online wallet",
       what:`${who} had the key to your online wallet, and ${fmtBtc(taken)} left within the day. You moved what was left to a new wallet.`,
       why:"A software key that is not protected by anything but the room it is in belongs to whoever gets into the room.",
       remedy:"Keep the backup somewhere other than the computer, and keep the balance in the online wallet small: what you do not need this week belongs in cold storage.",tab:"custody"});

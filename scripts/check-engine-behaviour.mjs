@@ -4599,6 +4599,21 @@ rule("the fee a payment or a sweep costs follows the recorded rate of the day, a
   assert(JSON.stringify(r.halv) === JSON.stringify(r.coded), `the coded halving days ${r.coded} are not the recorded blocks' UTC days ${r.halv}`);
 });
 
+rule("a fire, flood or break-in at the mine leaves its mark on the floor for three weeks, and nothing else does", () => {
+  const read = makeEval(loadEngine());
+  read(`${SITE(`state.time=at("2013-09-01");state.campaignStart=at("2012-01-01");`)}state.custody=blankCustody();`);
+  read('applyPlaceIncident("home","fire",state.time,true)');
+  assert(read("state.siteScene") === undefined || read("state.siteScene") === null, "a fire at home marked the mining floor");
+  read('applyPlaceIncident("site","seizure",state.time,true)');
+  assert(read("state.siteScene") == null, "a seizure marked the mining floor");
+  read('applyPlaceIncident("site","flood",state.time,true)');
+  assert(read("state.siteScene.kind") === "flood", "a flood at the mine left no mark on the floor");
+  const days = (read("state.siteScene.until") - read("state.siteScene.at")) / 86400000;
+  assert(days === read("SITE_SCENE_DAYS") && days === 21, `the aftermath lasts ${days} days, not three weeks`);
+  read('reportCoinLoss({title:"t",kind:"stolen",btc:1,cause:"x",scene:"fire"})');
+  assert(read("lossQueue()[lossQueue().length-1].scene") === "fire", "a loss did not carry its scene to the window");
+});
+
 /* Reported from an exit hook rather than inline, because inline made the gate
    position-dependent: it sat a few lines above the end of the file, and two rules appended
    after it ran, failed, pushed onto `failures` and were never printed. The suite announced

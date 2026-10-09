@@ -1880,6 +1880,11 @@ assert(css.includes(".svg-sprite-defs{position:absolute;width:0;height:0;overflo
   assert(inline.includes('id:"coldsetup"') && inline.includes('id:"custodypage"'), "The tour no longer explains cold storage and the shape of the Custody page");
   assert(inline.includes('id:"cold-storage"') && inline.includes("const HOT_GRACE_DAYS=60"), "The cold storage briefing or the online wallet's grace period has gone");
   assert(inline.includes("function lossOddsText(o)") && inline.includes('class="modal-odds"'), "The loss modal no longer says how likely the loss was");
+  // Disasters are drawn, not just described: an emblem in the loss window and an overlay on the floor, still when motion is reduced.
+  assert(inline.includes("const DISASTER_SCENES=") && inline.includes("function lossEmblemHtml(scene)") && inline.includes("function floorSceneArtHtml()") && inline.includes("function floorSceneBannerHtml()"), "The disaster art is gone");
+  assert(inline.includes("lossEmblemHtml(loss.scene)") && inline.includes("floorSceneArtHtml()") && inline.includes("floorSceneBannerHtml()") && inline.includes("floorSceneSignature()"), "The loss window or the mining floor no longer draws the disaster");
+  for (const scene of ["fire", "flood", "burglary", "grid", "net"]) assert(css.includes(`.floor-scene.scene-${scene} .floor-scene-art`), `The floor has no overlay for ${scene}`);
+  assert(css.includes(".floor-scene{position:absolute;inset:0;z-index:6;pointer-events:none") && /prefers-reduced-motion:reduce\)\{\.glyph-fire/.test(css), "The floor overlay takes clicks again, or the flame ignores reduced motion");
   // Good news waits behind a modal; a refused save is visible.
   assert(notify.includes("TOAST_DEFERRABLE") && inline.includes("flushDeferredToasts();"), "A toast can land on top of a modal again");
   assert(notify.includes("function announceSaveState()") && inline.includes("saveStateHtml()"), "A browser that refuses to store the game is no longer shown in the header");

@@ -65,7 +65,7 @@ function reportCoinLoss(entry){
     usd:price>0?btc*price:0,quoted:price>0,
     from:entry.from||"self-held keys",
     what:(entry.what||"")+(claim?claim.note:""),why:entry.why||"",remedy:entry.remedy||"",paid:claim?claim.paid:0,
-    tab:entry.tab||"custody",time:state.time,oddsText:lossOddsText(entry.odds),
+    tab:entry.tab||"custody",time:state.time,oddsText:lossOddsText(entry.odds),scene:entry.scene||"",
     recovered:Math.max(0,Number(entry.recovered)||0)
   });
   /* The clock stops for the same reason it stops for a major event: the player is being asked
@@ -114,7 +114,7 @@ function advanceHotWalletRisk(){
   log("Hot-wallet key compromise",`-${fmtBtc(lost)} · cold storage unaffected`,"custody");
   if(typeof hotKeyCompromised==="function")hotKeyCompromised();
   reportCoinLoss({
-    title:"Your hot wallet was emptied",kind:"stolen",btc:lost,cause:"hotwallet",odds,
+    title:"Your hot wallet was emptied",kind:"stolen",btc:lost,cause:"hotwallet",scene:"hack",odds,
     from:"the online hot wallet",
     what:"An online signing key was compromised and the balance it could reach was swept in a single transaction.",
     why:`The hot wallet holds a key that is available to sign at any moment, which is what makes it convenient and what makes it reachable. Cold storage and custodial venue balances were untouched — only what the online key could spend went.`,
