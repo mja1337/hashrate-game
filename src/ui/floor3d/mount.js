@@ -19,7 +19,7 @@
    Nothing here is required for the game to work. Every failure path ends at the SVG floor. */
 
 const FLOOR3D_SCRIPTS=["vendor/three.floor.js","src/ui/floor3d/silhouettes.js",
-  "src/ui/floor3d/cooling.js","src/ui/floor3d/scenery.js","src/ui/floor3d/scene.js",
+  "src/ui/floor3d/cooling.js","src/ui/floor3d/sites.js","src/ui/floor3d/scenery.js","src/ui/floor3d/scene.js",
   "src/ui/floor3d/model.js"];
 
 let floor3dState="idle";      // idle | loading | ready | unsupported | failed

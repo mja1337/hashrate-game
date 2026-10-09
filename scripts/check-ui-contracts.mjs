@@ -1903,6 +1903,20 @@ assert(css.includes(".svg-sprite-defs{position:absolute;width:0;height:0;overflo
     assert(cooling.includes("p.id!=='home'){box([1.1,1.05,.35]"), "The home office has a steel wall grille again where its window should be");
     assert(scenery.includes("if(!home)for(const y of [.94,.84])"), "People at the home office wear hi-vis again");
   }
+  // Every site past the home office has its own palette and details: the seven are distinct, and the scenery asks for them.
+  {
+    const sites = await readFile(new URL("src/ui/floor3d/sites.js", root), "utf8");
+    const mount = await readFile(new URL("src/ui/floor3d/mount.js", root), "utf8");
+    const scenery = await readFile(new URL("src/ui/floor3d/scenery.js", root), "utf8");
+    const styles = [...sites.matchAll(/(?<![a-z])(garage|workshop|warehouse|campus|container|hydroplant|megacampus):\s*\{slab:0x[0-9a-f]+,yard:0x([0-9a-f]+),floor:0x([0-9a-f]+),grid:0x[0-9a-f]+,line:0x[0-9a-f]+,hazard:0x[0-9a-f]+,wall:0x([0-9a-f]+),trim:0x([0-9a-f]+)/g)];
+    assert(styles.length === 7, `FloorSites should style seven sites, found ${styles.length}`);
+    for (const [field, index] of [["wall", 4], ["floor", 3], ["trim", 5]]) assert(new Set(styles.map(m => m[index])).size >= 6, `The sites' ${field} colours are no longer distinct: they are the same room at seven sizes again`);
+    assert(new Set(styles.map(m => m[2])).size >= 6, "The sites' ground colours are no longer distinct");
+    assert(/id==='(garage)'[\s\S]*id==='workshop'[\s\S]*id==='warehouse'[\s\S]*id==='campus'[\s\S]*id==='container'[\s\S]*id==='hydroplant'[\s\S]*id==='megacampus'/.test(sites), "A site has lost its own details");
+    assert(sites.includes("const h=.8,gapX=w/2-6,gap=3;") && sites.includes("[w/2,-d/2],[-w/2,d/2],[w/2,d/2]"), "The large indoor sites have lost the kerb walls and corner posts that close their outline");
+    assert(scenery.includes("FloorSites.style(p.id,site.large)") && scenery.includes("FloorSites.details(p.id,api,{w,d,site,s})"), "The scenery no longer asks FloorSites for each site's look");
+    assert(mount.indexOf("sites.js") > 0 && mount.indexOf("sites.js") < mount.indexOf("scenery.js"), "sites.js is not loaded before scenery.js");
+  }
   // Good news waits behind a modal; a refused save is visible.
   assert(notify.includes("TOAST_DEFERRABLE") && inline.includes("flushDeferredToasts();"), "A toast can land on top of a modal again");
   assert(notify.includes("function announceSaveState()") && inline.includes("saveStateHtml()"), "A browser that refuses to store the game is no longer shown in the header");

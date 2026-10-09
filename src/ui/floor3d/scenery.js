@@ -75,7 +75,7 @@ const FloorScenery=(()=>{
     box([w,2.9,.16],[0,1.45,back],paint);box([.16,2.9,d],[-w/2,1.45,0],paint);
     box([w,.2,.06],[0,.16,back+.11],trim);box([.06,.2,d],[-w/2+.11,.16,0],trim);
     box([w,.1,.08],[0,2.84,back+.12],trim);box([.08,.1,d],[-w/2+.12,2.84,0],trim);
-    for(const x of [-3.1,3.6]){box([.16,.3,.1],[x,1.95,back+.17],0x8a7a62);lamp([.12,.2,.07],[x,1.98,back+.24],0xffd9a0,-1,1.9)}
+    for(const x of [-3.1,4.1]){box([.16,.3,.1],[x,1.95,back+.17],0x8a7a62);lamp([.12,.2,.07],[x,1.98,back+.24],0xffd9a0,-1,1.9)}
     // A window on the back wall, with a sill, mullions and a pair of curtains on a rod.
     const wx=1.2;
     box([2.5,1.6,.06],[wx,1.8,back+.1],trim);box([2.3,1.4,.05],[wx,1.8,back+.13],0xcfe6f2,-1,true);
@@ -85,8 +85,8 @@ const FloorScenery=(()=>{
     for(const dx of [-1.45,1.45]){box([.6,1.95,.1],[wx+dx,1.72,back+.24],0xa5705a);for(let k=0;k<3;k++)box([.03,1.9,.11],[wx+dx-.2+k*.2,1.72,back+.25],0x8d5c49)}
     // Pictures and a clock.
     for(const [x,y,pw,ph,art] of [[-2.4,1.85,.9,.65,0xc7b98e],[-1.3,1.7,.5,.4,0x9fbcc4]]){box([pw,ph,.04],[x,y,back+.12],0x4a3a2c);box([pw-.12,ph-.12,.05],[x,y,back+.13],art);box([pw*.4,ph*.28,.055],[x+pw*.1,y-ph*.12,back+.135],0x7a8f6a)}
-    cyl([.24,.04,.24],[3.3,2.2,back+.12],0xf1ece0,[Math.PI/2,0,0]);cyl([.26,.03,.26],[3.3,2.2,back+.1],0x4a3a2c,[Math.PI/2,0,0]);
-    box([.02,.15,.02],[3.3,2.26,back+.15],0x2a2a2a);box([.11,.02,.02],[3.34,2.2,back+.15],0x2a2a2a);
+    cyl([.24,.04,.24],[3.4,2.2,back+.12],0xf1ece0,[Math.PI/2,0,0]);cyl([.26,.03,.26],[3.4,2.2,back+.1],0x4a3a2c,[Math.PI/2,0,0]);
+    box([.02,.15,.02],[3.4,2.26,back+.15],0x2a2a2a);box([.11,.02,.02],[3.44,2.2,back+.15],0x2a2a2a);
     // The consumer unit, on the left wall: the room's only plant, and the thing that tells you the power is on.
     box([.14,.6,.42],[-w/2+.15,1.5,.6],0xe7e2d6);box([.05,.4,.3],[-w/2+.24,1.5,.6],0xcfc8b8);
     if(s.power)lamp([.04,.07,.09],[-w/2+.27,1.7,.6],C.green,-1,1.5);else box([.04,.07,.09],[-w/2+.27,1.7,.6],C.dark,-1,true);
@@ -109,27 +109,27 @@ const FloorScenery=(()=>{
   function populate(s,api){
     const {box,part,fan,label,C}=api,{p}=FloorModel.definitions(s),site=plan(s),w=p.width,d=p.depth;
     const cylinder=(size,pos,col,rot=[0,0,0])=>part('cylinder',size,pos,col,rot);
-    const home=p.id==='home';
+    const home=p.id==='home',st=FloorSites.style(p.id,site.large);
     if(home)homeOffice(api,w,d,s);
     if(!home){
-    const gridColor=site.large?0x374952:C.floor;
-    box([site.width+.4,.38,site.depth+.4],[site.cx,-.25,site.cz],C.slab);
+    const gridColor=st.yard;
+    box([site.width+.4,.38,site.depth+.4],[site.cx,-.25,site.cz],st.slab);
     box([site.width,.13,site.depth],[site.cx,-.015,site.cz],gridColor);
-    box([w,.015,d],[0,.061,0],p.outdoor?0x657371:C.floor);
+    box([w,.015,d],[0,.061,0],st.floor);
     if(!p.outdoor){
-      box([w,2.9,.16],[0,1.45,-d/2],C.wall);box([.16,2.9,d],[-w/2,1.45,0],C.wall);
-      box([w,.2,.2],[0,.25,-d/2+.1],C.orange);box([.2,.2,d],[-w/2+.1,.25,0],C.orange);
-      for(let x=-w/2+.5;x<w/2;x+=3.6){box([.16,2.75,.22],[x,1.4,-d/2+.14],C.steel);api.lamp([2.2,.07,.12],[x+.9,2.55,-d/2+.26],0xe0f3ec,-1,1.7);}
+      box([w,2.9,.16],[0,1.45,-d/2],st.wall);box([.16,2.9,d],[-w/2,1.45,0],st.wall);
+      box([w,.2,.2],[0,.25,-d/2+.1],st.trim);box([.2,.2,d],[-w/2+.1,.25,0],st.trim);
+      for(let x=-w/2+.5;x<w/2;x+=3.6){box([.16,2.75,.22],[x,1.4,-d/2+.14],st.post);api.lamp([2.2,.07,.12],[x+.9,2.55,-d/2+.26],0xe0f3ec,-1,1.7);}
       if(p.id==='garage'||p.id==='workshop'){
-        const x=w/2-2.2;box([2.5,2.35,.08],[x,1.2,-d/2+.12],0x485f68);
+        const x=w/2-2.2;box([2.5,2.35,.08],[x,1.2,-d/2+.12],st.door);
         for(let y=.2;y<2.4;y+=.16)box([2.45,.025,.035],[x,y,-d/2+.18],C.edge);
       }
     }
-    for(let x=-w/2+1;x<w/2;x+=1.7)box([.012,.008,d],[x,.078,0],0x3f5056);
-    for(let z=-d/2+1;z<d/2;z+=1.7)box([w,.008,.012],[0,.078,z],0x3f5056);
-    box([w-1,.015,.065],[0,.09,d/2-3.1],C.orange);
-    for(let x=-w/2+.6;x<w/2-.4;x+=.55)part('box',[.09,.015,.48],[x,.09,d/2-.65],C.orange,[0,.55,0]);
-    for(const x of [-w/2+2.9,w/2-2.9])box([.035,.015,d-4],[x,.09,0],0xc8d5c9);
+    for(let x=-w/2+1;x<w/2;x+=1.7)box([.012,.008,d],[x,.078,0],st.grid);
+    for(let z=-d/2+1;z<d/2;z+=1.7)box([w,.008,.012],[0,.078,z],st.grid);
+    box([w-1,.015,.065],[0,.09,d/2-3.1],st.hazard);
+    for(let x=-w/2+.6;x<w/2-.4;x+=.55)part('box',[.09,.015,.48],[x,.09,d/2-.65],st.hazard,[0,.55,0]);
+    for(const x of [-w/2+2.9,w/2-2.9])box([.035,.015,d-4],[x,.09,0],st.line);
     // Elevated cable trays along the back, clear of the miner selection area.
     if(p.id!=='home'){
       box([w-1,.13,.48],[0,2.85,-d/2+.65],C.steel);
@@ -145,6 +145,7 @@ const FloorScenery=(()=>{
     part('cylinder',[.09,.05,.09],[-w/2+.7,1.12,d/2-.4],0xd4392f,[Math.PI/2,0,0]);
     for(let i=0;i<3;i++)box([.12,.16,.04],[-w/2+.49+i*.21,.8,d/2-.38],C.orange);
     }
+    if(!home)FloorSites.details(p.id,api,{w,d,site,s});
     // Roofs removed on the live containers so racks and their status stay legible.
     if(p.id==='container')for(let row=0;row<3;row++){
       const z=(row-1)*4.4;
@@ -204,7 +205,7 @@ const FloorScenery=(()=>{
         for(let k=0;k<Math.floor(item.w);k++)B([.08,2.4,.035],[-item.w/2+.6+k,1.4,item.d/2+.03],0x45646e);
         for(let k=0;k<3;k++)B([1.2,.26,1],[(-1+k)*item.w*.25,3.12,0],C.edge);
       }else if(item.type==='container'){
-        B([item.w,2.5,item.d],[0,1.38,0],0x426e83);
+        const boxCol=item.name==='Expansion module'?0xa5543a:0x426e83;B([item.w,2.5,item.d],[0,1.38,0],boxCol);
         for(let k=0;k<Math.floor(item.w*3);k++)B([.07,2.25,.05],[-item.w/2+.2+k*.33,1.4,item.d/2+.04],0x8aa5af);
         B([item.w+.12,.1,item.d+.1],[0,2.7,0],0x254753);for(let k=0;k<4;k++)fan(x-2.5+k*1.65,1.1,z+item.d/2+.12,.35);
       }else if(item.type==='penstock'){
