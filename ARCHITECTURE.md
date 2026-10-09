@@ -1,4 +1,4 @@
-# Hashrate project structure
+# Timechain project structure
 
 `index.html` is deliberately only the application shell. Keep implementation code out of it.
 

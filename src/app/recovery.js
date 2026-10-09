@@ -20,15 +20,15 @@
   window.addEventListener("unhandledrejection",function(e){note("Unhandled: "+(e.reason&&e.reason.message||e.reason))});
 
   function version(){
-    try{if(typeof APP_VERSION!=="undefined")return APP_VERSION}catch(e){}
-    return (/Alpha ([\d.]+)/.exec(document.title)||[])[1]||"unknown";
+    try{if(typeof APP_RELEASE!=="undefined")return APP_RELEASE}catch(e){}
+    return (/(?:Alpha|Beta) [\d.]+/.exec(document.title)||[])[0]||"unknown";
   }
   function read(key){try{return localStorage.getItem(key)}catch(e){return null}}
 
   /* What a bug report should carry: where, on what, and what went wrong. No save data, no
      account, no location: the player pastes this into a report themselves. */
   window.debugInfoText=function(){
-    var lines=["Alpha "+version()];
+    var lines=["Timechain "+version()];
     try{if(typeof state!=="undefined"&&state&&typeof dateFmt==="function")lines.push("In-game date: "+dateFmt(state.time)+" · speed "+state.speed+" · tab "+(typeof activeTab!=="undefined"?activeTab:"?"))}catch(e){}
     try{if(typeof saveFailing!=="undefined")lines.push("Saving: "+(saveFailing?"BLOCKED by the browser":"ok"))}catch(e){}
     try{var raw=read(SAVE);lines.push("Save: "+(raw?Math.max(1,Math.round(raw.length/1024))+" KB":"none")+(read(KEPT)?" · an unreadable save is also kept":""))}catch(e){}
@@ -65,7 +65,7 @@
     var btn="font-weight:600;font-size:14px;font-family:inherit;padding:11px 16px;border:1px solid #4a5a56;background:#111819;color:#e7ecea;border-radius:4px;cursor:pointer;margin:0 8px 8px 0";
     var prim=btn.replace("#111819","#f7931a").replace("#e7ecea","#090c0d").replace("#4a5a56","#f7931a");
     document.body.style.background="#090c0d";
-    host.innerHTML='<div style="'+css+'"><h1 style="font-size:22px;margin:0 0 12px">The game could not start</h1>'+
+    host.innerHTML='<div style="'+css+'"><h1 style="font-size:22px;margin:0 0 12px">Timechain could not start</h1>'+
       '<p>Something in this browser\'s stored game, or in the page itself, stopped it from opening. <b>Nothing has been deleted.</b> Your save is still in this browser, and you can download it before doing anything else.</p>'+
       '<p style="margin:16px 0"><button id="rc-export" style="'+btn+'">Export my save</button><button id="rc-new" style="'+btn+'">Start a new run</button><button id="rc-retry" style="'+prim+'">Try again</button></p>'+
       '<p style="color:#9aa8a4;font-size:13px">“Start a new run” moves the current save aside as an unreadable copy, then opens a fresh game; the copy stays in this browser, and the footer will offer to export it. If a reload does not help, please send us what is below.</p>'+
@@ -77,7 +77,7 @@
     document.getElementById("rc-export").onclick=function(){
       var raw=read(SAVE)||read(KEPT);
       if(!raw){this.textContent="There is no save to export";return}
-      window.downloadText(raw,"hashrate-save-raw.json");
+      window.downloadText(raw,"timechain-save-raw.json");
     };
     document.getElementById("rc-new").onclick=function(){
       try{var raw=read(SAVE);if(raw)localStorage.setItem(KEPT,raw);localStorage.removeItem(SAVE)}catch(e){}

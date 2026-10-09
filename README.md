@@ -1,8 +1,10 @@
-# Hashrate
+# Timechain
 
-> Start with one computer. Run a Bitcoin mining operation through its entire history. Keep it profitable, solvent and secure as the technology and the network change.
+> A game-first history of Bitcoin, from the Genesis Block to today. Start with one computer. Mine, keep your keys safe and stay solvent as the technology, the network and the world change.
 
-A single-page, offline browser game covering Bitcoin mining from the Genesis Block to the present, and up to a hundred simulated years beyond it. No build step, no dependencies, no network calls at runtime: `index.html` loads a series of ordered classic scripts and a generated historical dataset.
+**Beta 1.0** · plays in the browser, free, no account · live at https://mja1337.github.io/timechain/
+
+A single-page, offline browser game covering Bitcoin (mining, markets, custody and risk) from the Genesis Block to the present, and up to a hundred simulated years beyond it. No build step, no dependencies, no network calls at runtime: `index.html` loads a series of ordered classic scripts and a generated historical dataset.
 
 The game should be understandable to someone who knows Bitcoin exists but has never looked at mining, while remaining precise enough for someone who has. The answer to that tension is progressive disclosure, not less depth: interface copy leads with consequences, contextual help answers "what does this mean and why do I care", and Method carries the formulas, edge cases and modelling assumptions.
 
@@ -14,7 +16,7 @@ python3 scripts/dev-server.py 8090
 
 Then open `http://localhost:8090`. The server sends `Cache-Control: no-store`, so a plain reload always picks up edited source. Any static server works; the file can also be opened directly, though some browsers restrict `localStorage` on `file://`.
 
-Saves live in `localStorage` under `hashrate-genesis-save-v1`, with cross-run career history under `hashrate-career-v1`. **New run** in the footer resets the current game. A stored save that cannot be used (not JSON, or the wrong shape) is never overwritten: its raw text is kept under `hashrate-genesis-save-v1.unreadable`, the footer offers to export it, and a fresh run starts. If the page cannot start at all, `src/app/recovery.js` (which loads first and uses no game code) shows a recovery page with Export my save, Start a new run and Try again.
+Saves live in `localStorage` under `hashrate-genesis-save-v1`, with cross-run career history under `hashrate-career-v1`. Those keys keep the name the game had before it was Timechain on purpose: changing them would orphan every saved run on the same origin. **New run** in the footer resets the current game. A stored save that cannot be used (not JSON, or the wrong shape) is never overwritten: its raw text is kept under `hashrate-genesis-save-v1.unreadable`, the footer offers to export it, and a fresh run starts. If the page cannot start at all, `src/app/recovery.js` (which loads first and uses no game code) shows a recovery page with Export my save, Start a new run and Try again.
 
 ## Safety checks
 
@@ -41,18 +43,18 @@ The first three suites match source text (the engine-behaviour suite does not). 
 
 GitHub Pages builds from `main`, so **every push to `main` is live within about 40 seconds**. Nothing else stands between a commit and a player.
 
-- **Every local asset URL carries the version** (`?v=2.23`, from `APP_VERSION`), in `index.html` and in the lazily loaded 3D scripts. Pages lets a browser keep a file for ten minutes, so without this a player could load new modules beside old ones, and the load-order rules in `ARCHITECTURE.md` mean that can throw. The structure check fails if any asset lacks the current version. Because of this, **bump `APP_VERSION` for every change that ships, hotfixes included**: the bump is what makes browsers fetch the new files together.
-- **Before pushing a release:** bump `APP_VERSION`, add the changelog entry and update Method, then run all four checks on the exact commit you are pushing.
-- **The launch tag** marks the build that went out (`v2.23-launch` is the first public build; each push that ships gets its own, and rollback uses the newest): `git tag -a v2.24-launch -m "Launch build"`, pushed with `git push origin v2.24-launch`. Move it with `git tag -fa` only if the launch commit itself changes before anyone has played it.
-- **Launch-weekend freeze:** from Saturday morning to Sunday evening, push to `main` only for hotfixes that bump the version and pass all four checks. No feature commits.
+- **Every local asset URL carries the version** (`?v=1.0`, from `APP_VERSION`), in `index.html` and in the lazily loaded 3D scripts. Pages lets a browser keep a file for ten minutes, so without this a player could load new modules beside old ones, and the load-order rules in `ARCHITECTURE.md` mean that can throw. The structure check fails if any asset lacks the current version. Because of this, **bump `APP_VERSION` for every change that ships, hotfixes included** (`1.0`, `1.1`, ...): the bump is what makes browsers fetch the new files together. The release label (`Beta 1.0`) is `APP_STAGE` + `APP_VERSION`.
+- **Before pushing a release:** bump `APP_VERSION`, add the changelog entry and update Method, then run all four checks on the exact commit you are pushing. Check the exit codes, not just the output.
+- **The release tag** marks the build that went out: `git tag -a beta-1.0 -m "Beta 1.0"`, pushed with `git push origin beta-1.0`. Each push that ships gets its own, and rollback uses the newest.
 - **Rolling back** without rewriting history: revert everything after the tag, then push.
 
   ```bash
-  git revert --no-edit v2.24-launch..HEAD
+  git revert --no-edit beta-1.0..HEAD
   git push
   ```
 
-  The reverted tree carries the launch build's own `?v=` URLs, so browsers that cached them get a consistent set. Rehearse it once on a throwaway clone before you need it.
+  The reverted tree carries that release's own `?v=` URLs, so browsers that cached them get a consistent set. Rehearse it once on a throwaway clone before you need it.
+- **If a Pages build does not start** after a push (it has happened), ask for one: `gh api -X POST repos/<owner>/<repo>/pages/builds`.
 
 ## Feedback and privacy
 
@@ -191,7 +193,7 @@ Use these terms consistently across interface, help and Method.
 | bitcoin | Units in prose when no amount is shown | Capitalising every use |
 | BTC | A displayed amount or balance | “coins” when a precise balance matters |
 | Mining | Using computation to compete for blocks | Assuming “hashing” is understood |
-| Hash rate | Computational work performed per second | “Hashrate” in prose; keep the product name Hashrate |
+| Hash rate | Computational work performed per second | Write “hash rate” in prose, never “hashrate”; the product name is Timechain |
 | Network difficulty | How difficult the network makes block discovery | “Difficulty” alone on first use |
 | Block reward | Subsidy plus transaction fees received for a block | Treating subsidy and fees as identical |
 | Solo mining | Mining independently with high payout variance | “Solo” without context on first use |

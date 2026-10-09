@@ -8,7 +8,7 @@
    "Copy debug info" gives them text to paste. There is no analytics call to add and the network
    contract would refuse one. */
 
-const FEEDBACK_REPO="https://github.com/mja1337/hashrate-game";
+const FEEDBACK_REPO="https://github.com/mja1337/timechain";
 /* So people without a GitHub account can write. The footer shows the link only when this is set. */
 const FEEDBACK_EMAIL="satoshistaysrad@proton.me";
 /* A tip over Lightning, through a payment page. A plain outbound link: no address is shown here, nothing is
@@ -21,7 +21,7 @@ function feedbackUrl(template="bug.yml"){
   return `${FEEDBACK_REPO}/issues/new?${query}`;
 }
 function feedbackLinks(){
-  const mail=FEEDBACK_EMAIL?` · <a href="mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent("Alpha "+APP_VERSION)}">Email</a>`:"";
+  const mail=FEEDBACK_EMAIL?` · <a href="mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent("Timechain "+APP_RELEASE)}">Email</a>`:"";
   return `<a href="${escapeHtml(feedbackUrl("bug.yml"))}" target="_blank" rel="noopener noreferrer">Report a bug</a> · <a href="${escapeHtml(feedbackUrl("idea.yml"))}" target="_blank" rel="noopener noreferrer">Suggest something</a>${mail} · <button data-action="copy-debug">Copy debug info</button>`;
 }
 function footerHtml(){

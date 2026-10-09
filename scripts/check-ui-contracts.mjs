@@ -383,12 +383,12 @@ assert(inline.includes("state.walletSetup&&state.walletSetup.required&&!state.wa
 {
   const version = /const APP_VERSION="([^"]+)"/.exec(inline)?.[1];
   assert(version, "There is no APP_VERSION: the version has to be written in one place");
-  assert(new RegExp(`const CHANGELOG=\\[\\s*\\{date:"[^"]+",title:"Alpha ${version.replace(".", "\\.")} `).test(inline),
-    `The newest changelog entry is not for Alpha ${version}: every round of changes bumps APP_VERSION and adds an entry`);
-  assert(inline.includes("Alpha ${APP_VERSION} · seed ${state.seed}") && !inline.includes("Historical replay · seed"), "The header does not read the version from APP_VERSION, or does not show the seed beside it");
+  assert(new RegExp(`const CHANGELOG=\\[\\s*\\{date:"[^"]+",title:"(?:Alpha|Beta) ${version.replace(".", "\\.")} `).test(inline),
+    `The newest changelog entry is not for ${version}: every round of changes bumps APP_VERSION and adds an entry`);
+  assert(inline.includes("${APP_RELEASE} · seed ${state.seed}") && !inline.includes("Historical replay · seed"), "The header does not read the version from APP_VERSION, or does not show the seed beside it");
   const html = await readFile(new URL("index.html", root), "utf8");
-  assert(html.includes(`Hashrate Alpha ${version} —`) && html.includes(`content="Hashrate Alpha ${version}:`), `index.html's title and description do not say Alpha ${version}`);
-  const versions = [...inline.matchAll(/title:"Alpha (\d+)\.(\d+) /g)].map(m => Number(m[1]) * 1000 + Number(m[2]));
+  assert(html.includes(`Timechain Beta ${version} —`) && html.includes(`content="Timechain Beta ${version}:`), `index.html's title and description do not say Timechain Beta ${version}`);
+  const versions = [...inline.matchAll(/title:"(Alpha|Beta) (\d+)\.(\d+) /g)].map(m => (m[1] === "Beta" ? 1_000_000 : 0) + Number(m[2]) * 1000 + Number(m[3]));
   assert(versions.every((v, i) => i === 0 || versions[i - 1] >= v), "The changelog is out of order: versions must not increase as you read down");
 }
 assert(inline.includes("createHotWallet({keyHex:state.walletSetup.keyHex,backup:!!withBackup})") && inline.includes('else if(a==="wallet-setup-done")completeWalletSetup(v==="backup");') && inline.includes('data-action="wallet-setup-done" data-value="backup"'),
@@ -1296,7 +1296,7 @@ assert(inline.includes("function filterGlossary(query)") && inline.includes('e.t
 assert(inline.includes('else if(a==="glossary-method")') && inline.includes("data-action=\"glossary-method\""), "A glossary entry can no longer hand off to its Method chapter");
 assert(css.includes(".glossary-entry .action-link{display:inline-flex;align-items:center;min-height:34px}") && css.includes(".glossary-entry .action-link{min-height:40px}"), "The Method link inside a glossary entry is an 11px text link without these rules — unusable on touch");
 
-// Language audit. "Hashrate" is the product name and "hash rate" is the measurement;
+// Language audit. "Timechain" is the product name and "hash rate" is the measurement, so "hashrate" is never right in prose;
 // "/mo" is an unexplained abbreviation on a recurring cost; a temperature takes a space
 // before its unit; and "liquidity" is the market-depth word, not the cash word. Each is
 // easy to reintroduce by copying a nearby line, so they are checked rather than trusted.
@@ -1310,7 +1310,7 @@ async function collectCopyFiles(dir) {
 await collectCopyFiles("src/");
 // A save key is an identifier, an export filename is a filename, and a shipped release
 // note records what was written at the time. None of them are player-facing prose.
-const LEGACY_EXEMPT = ['"hashrate-save.json"', '"hashrate-career-v1"', '"hashrate-genesis-save-v1"', "not a valid Hashrate save.", '"hashrate-genesis-save-v1.unreadable"', '"hashrate-save-raw.json"', '"hashrate-save-unreadable.json"', '"https://github.com/mja1337/hashrate-game"', '"https://strike.me/@jandex"'];
+const LEGACY_EXEMPT = ['"hashrate-career-v1"', '"hashrate-genesis-save-v1"', '"hashrate-genesis-save-v1.unreadable"', '"https://strike.me/@jandex"'];
 const legacyHits = [];
 for (const file of copyFiles) {
   const source = await readFile(new URL(file, root), "utf8");
@@ -1940,6 +1940,16 @@ assert(css.includes(".svg-sprite-defs{position:absolute;width:0;height:0;overflo
   }
   // Emergency stop all is the player's choice and stays: the handler records it, and a paid bill does not undo it.
   assert(inline.includes('else if(a==="toggle-power")toggleSitePower();') && inline.includes("state.power=!state.power;state.manualStop=!state.power;") && inline.includes("state.power=sitePowerAfterBill();") && inline.includes("function sitePowerAfterBill(){return !state.policyLock&&!state.manualStop}"), "Emergency stop all can be undone by the next monthly bill again");
+  // The brand is Timechain, the release is Beta, the coin links to the whitepaper, and the storage keys did not move with the name.
+  {
+    const dash = await readFile(new URL("src/ui/tabs/dashboard.js", root), "utf8");
+    const head = await readFile(new URL("index.html", root), "utf8");
+    assert(dash.includes('<div class="brand-name">TIMECHAIN</div>') && dash.includes("${APP_RELEASE} · seed ${state.seed}"), "The header does not say Timechain, or does not show the release and seed");
+    assert(dash.includes('class="coin" href="https://bitcoin.org/bitcoin.pdf" target="_blank" rel="noopener noreferrer"'), "The coin at the top left no longer opens the whitepaper in a new tab, safely");
+    assert(inline.includes('const APP_STAGE="Beta"') && inline.includes("const APP_RELEASE=`${APP_STAGE} ${APP_VERSION}`"), "The release label is no longer built from APP_STAGE and APP_VERSION");
+    assert(head.includes("og:title\" content=\"Timechain") && head.includes("mja1337.github.io/timechain/") && !/hashrate/i.test(head), "index.html still carries the old name or the old address");
+    assert(inline.includes('const SAVE_KEY="hashrate-genesis-save-v1"') && inline.includes('const CAREER_KEY="hashrate-career-v1"'), "The storage keys changed with the name, which would orphan every saved run on this origin");
+  }
   // Good news waits behind a modal; a refused save is visible.
   assert(notify.includes("TOAST_DEFERRABLE") && inline.includes("flushDeferredToasts();"), "A toast can land on top of a modal again");
   assert(notify.includes("function announceSaveState()") && inline.includes("saveStateHtml()"), "A browser that refuses to store the game is no longer shown in the header");

@@ -120,7 +120,7 @@ for (const needed of ['property="og:image"', 'property="og:title"', 'property="o
   assert(html.includes(needed), `index.html has lost its ${needed} tag: shared links lose their preview`);
 {
   const notFound = await readFile(new URL("404.html", root), "utf8");
-  assert(notFound.includes('href="/hashrate-game/"') && !/<script/i.test(notFound), "404.html must link back to the game and carry no script");
+  assert(notFound.includes('href="/timechain/"') && !/<script/i.test(notFound), "404.html must link back to the game and carry no script");
 }
 for (const file of ["og.png", "apple-touch-icon.png"]) assert((await stat(new URL(file, root))).size > 1000, `${file} is missing or empty`);
 

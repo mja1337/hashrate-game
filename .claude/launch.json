@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "hashrate-static",
+      "name": "timechain-static",
       "runtimeExecutable": "python3",
       "runtimeArgs": [
         "scripts/dev-server.py",
@@ -11,7 +11,7 @@
       "port": 8080
     },
     {
-      "name": "hashrate-test-8099",
+      "name": "timechain-test-8099",
       "runtimeExecutable": "python3",
       "runtimeArgs": [
         "scripts/dev-server.py",

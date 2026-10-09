@@ -490,3 +490,4 @@ body.is-offline .ticker .tick.offline-masked .value,body.is-offline .ticker .tic
 .irc-log{padding:8px 0;font:12px/1.55 var(--mono);color:#c8d3cf}.irc-line{padding:1px 10px}.irc-nick{color:var(--orange2);font-weight:700}.irc-you{color:var(--green)}.irc-sys{color:var(--dim)}
 .irc-cursor{display:inline-block;width:7px;height:13px;margin-left:3px;vertical-align:-2px;background:var(--green);animation:irc-blink 1s steps(2) infinite}@keyframes irc-blink{50%{opacity:0}}
 @media(prefers-reduced-motion:reduce){.irc-cursor{animation:none}}
+a.coin{text-decoration:none;cursor:pointer;transition:border-color .12s,background .12s}a.coin:hover{border-color:var(--orange);background:#241a0c}a.coin:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
