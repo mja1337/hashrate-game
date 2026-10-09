@@ -1310,7 +1310,7 @@ async function collectCopyFiles(dir) {
 await collectCopyFiles("src/");
 // A save key is an identifier, an export filename is a filename, and a shipped release
 // note records what was written at the time. None of them are player-facing prose.
-const LEGACY_EXEMPT = ['"hashrate-save.json"', '"hashrate-career-v1"', '"hashrate-genesis-save-v1"', "not a valid Hashrate save.", '"hashrate-genesis-save-v1.unreadable"', '"hashrate-save-raw.json"', '"hashrate-save-unreadable.json"', '"https://github.com/mja1337/hashrate-game"'];
+const LEGACY_EXEMPT = ['"hashrate-save.json"', '"hashrate-career-v1"', '"hashrate-genesis-save-v1"', "not a valid Hashrate save.", '"hashrate-genesis-save-v1.unreadable"', '"hashrate-save-raw.json"', '"hashrate-save-unreadable.json"', '"https://github.com/mja1337/hashrate-game"', '"https://strike.me/@jandex"'];
 const legacyHits = [];
 for (const file of copyFiles) {
   const source = await readFile(new URL(file, root), "utf8");
@@ -1858,6 +1858,7 @@ assert(css.includes(".svg-sprite-defs{position:absolute;width:0;height:0;overflo
   assert(/visibilityState==="hidden"[\s\S]*state\.speed=0/.test(bootstrap) && !/tick\(true\)/.test(bootstrap), "A hidden tab no longer pauses the game, or the catch-up burst is back");
   // The footer: feedback, debug text and what is stored.
   for (const text of ["Report a bug", "Suggest something", 'data-action="copy-debug"', "No accounts, no tracking, no analytics"]) assert(footer.includes(text), `The footer lost "${text}"`);
+  assert(footer.includes('const TIP_URL="https://strike.me/@jandex"') && footer.includes('class="footer-tip"') && footer.includes('rel="noopener noreferrer"'), "The Lightning tip link is gone from the footer, or no longer opens safely");
   assert(footer.includes("issues/new?") && footer.includes("version:APP_VERSION"), "The feedback links no longer carry the version");
   assert(inline.includes("${footerHtml()}"), "render() no longer draws the footer from footer.js");
   // The key's warning: true, and in readable text.
@@ -1873,6 +1874,12 @@ assert(css.includes(".svg-sprite-defs{position:absolute;width:0;height:0;overflo
     for (const fg of ["muted", "dim"]) for (const bg of ["bg", "panel", "panel2"])
       assert(ratio(token(fg), token(bg)) >= 4.5, `--${fg} on --${bg} is below 4.5:1: secondary text is hard to read`);
   }
+  // Custody: a way in from the first day, a sequence, and a tour that says so.
+  assert(inline.includes('id:"beigepc"') && inline.includes("function coldDepositBlockReason()") && !inline.includes("Cold storage practices unlock in 2012"), "Cold storage is gated on 2012 again, or the early signer is gone");
+  assert(inline.includes("function coldSetupCard()") && inline.includes("const CUSTODY_GROUPS=[") && inline.includes("orderCustodyCards(grid)"), "The Custody section has lost its step-by-step card or its order");
+  assert(inline.includes('id:"coldsetup"') && inline.includes('id:"custodypage"'), "The tour no longer explains cold storage and the shape of the Custody page");
+  assert(inline.includes('id:"cold-storage"') && inline.includes("const HOT_GRACE_DAYS=60"), "The cold storage briefing or the online wallet's grace period has gone");
+  assert(inline.includes("function lossOddsText(o)") && inline.includes('class="modal-odds"'), "The loss modal no longer says how likely the loss was");
   // Good news waits behind a modal; a refused save is visible.
   assert(notify.includes("TOAST_DEFERRABLE") && inline.includes("flushDeferredToasts();"), "A toast can land on top of a modal again");
   assert(notify.includes("function announceSaveState()") && inline.includes("saveStateHtml()"), "A browser that refuses to store the game is no longer shown in the header");

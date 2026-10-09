@@ -31,6 +31,10 @@ function blankCustody(){
 function custodyProduct(id){return CUSTODY_PRODUCTS.find(p=>p.id===id)||null}
 function custodyPolicy(id){return CUSTODY_POLICIES.find(p=>p.id===id)||CUSTODY_POLICIES[0]}
 function custodyProductAvailable(p,t=state.time){return !!p&&t>=at(p.date)}
+/* A one-off, like the old PC in the basement, is refused while a working one exists or is on its way. A fire that took
+   it is the reason to put another together from spare parts, which is the same product reached a different way. */
+function custodyOnceBlocked(p){return !!p&&!!p.once&&((state.custody.devices||[]).some(d=>d.product===p.id&&!d.destroyed)||(state.custody.orders||[]).some(o=>o.id===p.id))}
+function custodyAcquireLabel(p){const lost=(state.custody.devices||[]).some(d=>d.product===p.id&&d.destroyed);return lost&&p.acquireAgain?p.acquireAgain:p.acquire}
 
 /* A label the player can recognise a key by. Deliberately not anything resembling a real
    recovery phrase: these are identifiers for a key, never the key itself. */
@@ -189,14 +193,17 @@ function orderCustodyProduct(id,qty=1){
   if(!p||p.build)return;
   if(!custodyProductAvailable(p))return showToast("Not available yet",`${p.name} does not exist until ${dateFmt(at(p.date),true)}.`);
   qty=Math.max(1,Math.floor(Number(qty)||1));
+  // Some things are one-offs: there is one old PC in the basement.
+  if(custodyOnceBlocked(p))return showToast("There is only the one",`You already have ${p.name}. Buy a signer if you need another.`,"blocked","custody");
   const unit=custodyUnitCost(p),cost=unit*qty;
   if(state.cash<cost)return showToast("Not enough cash",`${qty} × ${p.name} costs ${fmtUsd(cost)}.`);
   state.cash-=cost;
   const lead=custodyLeadDays(p);
   if(lead<=0){receiveCustodyOrder({id,qty,supplier:p.supplier},state.time);save();render();return}
   state.custody.orders.push({id,qty,supplier:p.supplier,due:state.time+lead*DAY,cost});
-  log(`Ordered ${p.name}`,`${qty} × ${fmtUsd(unit)} · ${lead} days`,"custody");
-  showToast("Custody order placed",`${qty} × ${p.name} arrives in ${lead} days.`,"info","custody");
+  if(p.acquire){const again=custodyAcquireLabel(p)===p.acquireAgain&&!!p.acquireAgain;log(again?`Putting ${p.name} back together`:`Fetching ${p.name}`,`${again?"from spare parts":"from the basement"} · ${lead} day${lead===1?"":"s"}`,"custody");showToast(again?"Cobbling one together":"Digging it out",again?`A replacement ${p.name} is going together from spare parts. It is ready in ${lead} day${lead===1?"":"s"}.`:`${p.name} is on its way up from the basement. It arrives in ${lead} day${lead===1?"":"s"}.`,"info","custody")}
+  else{log(`Ordered ${p.name}`,`${qty} × ${fmtUsd(unit)} · ${lead} days`,"custody");
+  showToast("Custody order placed",`${qty} × ${p.name} arrives in ${lead} days.`,"info","custody")}
   save();render();
 }
 /* Delivery. A signing device becomes an object you own and nothing more — it holds no key

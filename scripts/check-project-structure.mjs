@@ -74,6 +74,7 @@ const expectedScripts = [
   "src/ui/floor3d/mount.js",
   "src/ui/enhance/keys.js",
   "src/ui/enhance/custody.js",
+  "src/ui/enhance/custody-order.js",
   "src/ui/enhance/treasury.js",
   "src/ui/enhance/settlement.js",
   "src/ui/enhance/places.js",

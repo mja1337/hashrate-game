@@ -29,6 +29,13 @@ const HOT_DISK_RATE=.0015;                          // a month's chance that the
 const HOT_RECOVERY_BASE=120,HOT_RECOVERY_PER_DAY=40; // an afternoon's work, and a day's more for each day the backup is away
 const HOT_THEFT_FLOOR=.5,HOT_THEFT_SPREAD=.4;        // the same share of a wallet a thief takes anywhere else in this game
 
+/* THE FIRST TWO MONTHS ARE FREE OF THIS. A new player has coins in the online wallet from the first payout and
+   no way yet to have learned what a backup is for, so a run could end its first month on a roll the player could
+   neither see coming nor answer. Nothing in the online wallet can be lost, stolen or burnt for the first sixty
+   days of a campaign; the warning to back it up still arrives the day the coins do. */
+const HOT_GRACE_DAYS=60;
+function hotKeyGrace(s=state){return s.time<(Number(s.campaignStart)||START)+HOT_GRACE_DAYS*DAY}
+
 function hotKey(s=state){
   const c=s.custody;if(!c||!c.hotKeyId)return null;
   const key=(c.keys||[]).find(k=>k.id===c.hotKeyId);
@@ -85,7 +92,8 @@ function hotKeyLost(cause,next=state.time,silent=false){
   if(hot>0){
     state.wallets.hot=0;utxoState().hot=0;
     log("Online wallet lost",`-${fmtBtc(hot)} · the computer ${verb} and nothing else held the key`,"custody");
-    reportCoinLoss({title:"The wallet was the file, and the file is gone",kind:"unrecoverable",btc:hot,cause:"nobackup",from:"your online wallet",
+    const rate=cause==="disk"?HOT_DISK_RATE:placeRate("site",cause);
+    reportCoinLoss({title:"The wallet was the file, and the file is gone",kind:"unrecoverable",btc:hot,cause:"nobackup",odds:{monthly:rate,note:"The chance was small whatever you did, but a backup kept away from the mine would have turned it into an afternoon's work."},from:"your online wallet",
       what:`${title}. Nothing else held the key, so ${fmtBtc(hot)} is still on the chain at addresses nobody can spend from.`,
       why:"A software key is a file. With one copy of it, the coins are exactly as safe as one disk, in one building.",
       remedy:"Write the key down and keep it somewhere the mine cannot reach: a copy in a bank box or a trusted person's house survives the thing that took the computer.",tab:"custody"});
@@ -102,7 +110,7 @@ function hotKeyStolen(cause,next=state.time,silent=false){
     state.wallets.hot=Math.max(0,hot-taken);
     const who=cause==="seizure"?"The authorities":"Whoever took it";
     log("Online wallet emptied",`-${fmtBtc(taken)} · the key was taken`,"custody");
-    reportCoinLoss({title:cause==="seizure"?"The authorities held the key to your online wallet":"The key to your online wallet was taken",kind:"stolen",btc:taken,cause,from:"your online wallet",
+    reportCoinLoss({title:cause==="seizure"?"The authorities held the key to your online wallet":"The key to your online wallet was taken",kind:"stolen",btc:taken,cause,odds:cause==="burglary"?{monthly:placeRate("site","burglary"),note:"A break-in cannot be stopped from here, but what it finds can be limited: keep only a working balance in the online wallet."}:null,from:"your online wallet",
       what:`${who} had the key to your online wallet, and ${fmtBtc(taken)} left within the day. You moved what was left to a new wallet.`,
       why:"A software key that is not protected by anything but the room it is in belongs to whoever gets into the room.",
       remedy:"Keep the backup somewhere other than the computer, and keep the balance in the online wallet small: what you do not need this week belongs in cold storage.",tab:"custody"});
@@ -111,7 +119,7 @@ function hotKeyStolen(cause,next=state.time,silent=false){
 }
 /* Called by every place incident, after the generic damage is done, so a backup the incident destroyed is already gone. */
 function hotKeyAfterIncident(placeId,kind,next,silent=false){
-  const key=hotKey();if(!key)return;
+  const key=hotKey();if(!key||hotKeyGrace())return;
   // Somebody took the seed backup: they hold the key, wherever the computer is.
   if((kind==="burglary"||kind==="seizure")&&key.exposed&&key.exposed.at===next)return hotKeyStolen(kind,next,silent);
   if(placeId!=="site")return;
@@ -128,6 +136,7 @@ function advanceHotKeyRisk(next,silent=false){
     log("Your online wallet has no backup",`${key.label} exists only on the mining computer`,"custody");
     if(!silent)showToast("Back up your wallet","Coins have arrived in a wallet that exists only on the computer in the mine. Write the key down, and keep it somewhere that a fire at the mine cannot reach.","warning","custody");
   }
+  if(hotKeyGrace())return;
   const month=new Date(next).toISOString().slice(0,7);
   if(hashRoll(state.seed,"hotdisk",month)<HOT_DISK_RATE)hotKeyLost("disk",next,silent);
 }

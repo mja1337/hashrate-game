@@ -36,6 +36,22 @@ function pendingLoss(s=state){return lossQueue(s)[0]||null}
 /* The value is stamped at the moment of loss rather than recomputed later: what these coins
    are worth today is a different and much crueller number, and the game already shows it in
    the ledger. What the modal reports is what left, when it left. */
+/* HOW LIKELY WAS THIS, AND WHAT WOULD HAVE LOWERED IT.
+
+   A loss modal that only says what happened teaches the player to fear the game rather than to read it. Most of
+   the incidents here are rolled once a month at a small stated chance, so the modal says what the chance was, how
+   that adds up over a year, and, where there is something a player could have done, what it would have made the
+   chance. A run that is hit in its first month should read "that was a 1 in 450 month", not "I did something wrong".
+   `odds` is {monthly, better?, betterWhy?, note?}; an incident with no stated chance passes none. */
+function lossOddsText(o){
+  const m=Number(o&&o.monthly);if(!(m>0&&m<1))return"";
+  const oneIn=p=>`1 in ${fmtNum(Math.max(2,Math.round(1/p)))}`,year=1-Math.pow(1-m,12),pct=x=>x<.01?(x*100).toFixed(2):x<.1?(x*100).toFixed(1):(x*100).toFixed(0);
+  let t=`How likely was this? About ${oneIn(m)} in the month it happened (${pct(m)}%). The same roll comes round every month, so over a year of play it is about ${pct(year)}%.`;
+  if(o.better>0&&o.better<m*.8)t+=` ${o.betterWhy||"With better precautions"} it would have been about ${oneIn(o.better)} a month.`;
+  if(o.note)t+=` ${o.note}`;
+  if(typeof state!=="undefined"&&state.time-(Number(state.campaignStart)||state.time)<DAY*120)t+=" It happened early in the run, which makes it mostly bad luck.";
+  return t;
+}
 function reportCoinLoss(entry){
   const btc=Math.max(0,Number(entry.btc)||0);
   if(btc<=0&&!entry.always)return;
@@ -49,7 +65,7 @@ function reportCoinLoss(entry){
     usd:price>0?btc*price:0,quoted:price>0,
     from:entry.from||"self-held keys",
     what:(entry.what||"")+(claim?claim.note:""),why:entry.why||"",remedy:entry.remedy||"",paid:claim?claim.paid:0,
-    tab:entry.tab||"custody",time:state.time,
+    tab:entry.tab||"custody",time:state.time,oddsText:lossOddsText(entry.odds),
     recovered:Math.max(0,Number(entry.recovered)||0)
   });
   /* The clock stops for the same reason it stops for a major event: the player is being asked
@@ -88,14 +104,17 @@ function dismissLoss(){
    so the remedy is not a purchase, it is a habit. */
 function advanceHotWalletRisk(){
   const hotRisk=hotWalletIncidentRisk();
-  if(!(hotRisk>0)||nextRand()>=hotRisk)return;
+  if(!(hotRisk>0)||(typeof hotKeyGrace==="function"&&hotKeyGrace())||nextRand()>=hotRisk)return;
+  // Worked out before the coins leave, from the balance the roll was made against.
+  const hotNow=state.wallets.hot||0,coldNow=state.wallets.cold||0,mostlyCold={...state,wallets:{...state.wallets,hot:hotNow*.1,cold:coldNow+hotNow*.9}};
+  const odds={monthly:hotRisk,better:hotWalletIncidentRisk(mostlyCold),betterWhy:"With most of your coins in cold storage and only a working float online,"};
   const lost=state.wallets.hot*(.12+nextRand()*.28);
   if(lost<=0)return;
   state.wallets.hot=Math.max(0,state.wallets.hot-lost);
   log("Hot-wallet key compromise",`-${fmtBtc(lost)} · cold storage unaffected`,"custody");
   if(typeof hotKeyCompromised==="function")hotKeyCompromised();
   reportCoinLoss({
-    title:"Your hot wallet was emptied",kind:"stolen",btc:lost,cause:"hotwallet",
+    title:"Your hot wallet was emptied",kind:"stolen",btc:lost,cause:"hotwallet",odds,
     from:"the online hot wallet",
     what:"An online signing key was compromised and the balance it could reach was swept in a single transaction.",
     why:`The hot wallet holds a key that is available to sign at any moment, which is what makes it convenient and what makes it reachable. Cold storage and custodial venue balances were untouched — only what the online key could spend went.`,

@@ -533,6 +533,7 @@ function giftCardHindsight(t=state.time){
 function transfer(from,to,fraction,opts={}){
   if(venueFrozen(from))return showToast("Withdrawals frozen",`${walletName(from)} has paused withdrawals until ${dateFmt(state.ops.venueFreezes[from])}.`);
   fraction=clamp(Number(fraction)||0,0.01,1);const gross=state.wallets[from]*fraction;if(gross<=0)return;
+  if(to==="cold"&&!custodySetup().ready)return showToast("Cold storage needs a signer first","A wallet nobody can sign for is a place coins go to be lost. Follow the steps in Set up cold storage on the Custody section: a signer, a key, a backup, then assign the key.","blocked","custody");
   const fee=transferNetworkFee(from,fraction,opts);if(gross<=fee)return showToast("Transfer too small",`The selected ${formatPercent(fraction*100)}% is not enough to cover the ${fmtBtc(fee)} network fee.`);const btc=gross-fee;
   /* Everything except cold storage moves the moment it is asked to. Cold does not, because
      that is what cold storage IS — see signing.js. */
@@ -573,7 +574,6 @@ function venueAvailable(id){
   if(id==="quadriga")return state.time>=at("2013-01-01")&&state.time<at("2019-02-05");
   if(id==="frontier")return state.time>=at("2011-06-01")&&state.time<at("2022-11-11");
   if(id==="exchange")return state.time>=at("2015-01-01");
-  if(id==="cold")return state.time>=at("2012-01-01");
   if(id==="etf")return state.time>=at("2024-01-10");return true;
 }
 function walletName(id){return({hot:"Node-connected hot wallet",cold:"Cold / hardware wallet",mtgox:"Mt. Gox",bitfinex:"Bitfinex",quadriga:"QuadrigaCX",frontier:"Frontier exchange",exchange:"Regulated exchange",etf:"ETF exposure",frozen:"Frozen claims"})[id]||id}

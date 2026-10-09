@@ -229,7 +229,7 @@ function applyPlaceIncidentBase(placeId,kind,next,silent=false){
   if(takes&&policy.threshold>0&&stolen.size>=policy.threshold&&held>0){
     const taken=held*(PLACE_THEFT_FLOOR+PLACE_THEFT_SPREAD*hashRoll(state.seed,"theft",placeId,next)),hot=state.wallets.hot||0;
     state.wallets.hot=Math.max(0,hot-taken*hot/held);state.wallets.cold=Math.max(0,(state.wallets.cold||0)-taken*(1-hot/held));
-    reportCoinLoss({title:`${taker} took the keys, and the coins went with them`,kind:"stolen",btc:taken,cause:kind,from:`the seed backups kept at ${placeSay(place)}`,
+    reportCoinLoss({title:`${taker} took the keys, and the coins went with them`,kind:"stolen",btc:taken,cause:kind,odds:placeRate(placeId,kind)>0?{monthly:placeRate(placeId,kind),note:"Where the seeds are kept sets this chance: a bank box is a small fraction of a house."}:null,from:`the seed backups kept at ${placeSay(place)}`,
       what:`${what} at ${placeSay(place)}. They took ${gone}, and with ${stolen.size} of the ${policy.keys} seed${policy.keys===1?"":"s"} the wallet needs ${policy.threshold}. ${fmtBtc(taken)} left within the day.`,
       why:kind==="seizure"?"A seed backup is the coins, and a box in a bank is the one place a government can open without asking you.":"A seed backup is the coins. It sat in the same place as everything else, so one visit was enough to satisfy the wallet.",
       remedy:policy.threshold>1?"Keep the keys of a quorum in different places: one stolen seed then spends nothing.":"A single seed in a single place is a single point of failure. Keep a second copy apart, and move the signer and the backup to different places.",tab:"custody"});
@@ -239,7 +239,7 @@ function applyPlaceIncidentBase(placeId,kind,next,silent=false){
   const after=custodyOperable();
   if(before&&!after){
     const taken=strandSelfHeld(`${placeId}-${kind}`,next);
-    reportCoinLoss({title:"Every copy of the keys was in the same place",kind:"unrecoverable",btc:taken,cause:"places",always:true,from:"self-held keys",
+    reportCoinLoss({title:"Every copy of the keys was in the same place",kind:"unrecoverable",btc:taken,cause:"places",always:true,odds:placeRate(placeId,kind)>0?{monthly:placeRate(placeId,kind),note:"The chance of the fire or break-in was small; what made it a loss was every copy sharing one place."}:null,from:"self-held keys",
       what:`${what} at ${placeSay(place)}. Gone: ${gone}. That left too few keys to sign and too few backups to rebuild them, so ${fmtBtc(taken)} is still on the chain at addresses nobody can spend from.`,
       why:"The backups shared a fate with the signers. A backup kept beside the thing it backs up protects against a lost device and nothing else.",
       remedy:"Keep at least one durable backup somewhere a fire at the mine cannot reach, and write down the wallet configuration of a quorum separately from its keys.",tab:"custody"});

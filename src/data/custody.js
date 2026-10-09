@@ -17,6 +17,10 @@
 
 const CUSTODY_PRODUCTS=[
   /* --- Commercial signing devices ------------------------------------------------ */
+  /* The first signer there ever was: a computer that is simply never connected. Wallet files were kept this way
+     from the first week, which is why cold storage is available from the first day rather than from 2012. */
+  {id:"beigepc",name:"Old beige PC, kept offline",kind:"signer",supplier:"basement",date:"2009-01-03",cost:0,lead:1,once:true,acquire:"Fetch it from the basement",acquireAgain:"Cobble one together from spare parts",
+    desc:"A tower from the late 1990s that has been under the stairs since the last century, wheezes when it boots and has never seen the internet, which is exactly the qualification. The key is made on it and signs on it, and anything it signs travels by USB stick. It is still a computer, so it can fail, and it lives wherever you put it, which at first is the mine. There is only the one, and if a fire takes it, anyone who can use a screwdriver can put another together from spare parts."},
   {id:"trezorone",name:"Trezor One",kind:"signer",supplier:"trezor",date:"2014-08-01",cost:99,lead:9,
     desc:"The first commercial hardware wallet. A screen, two buttons and a seed you write down yourself."},
   {id:"nanos",name:"Ledger Nano S",kind:"signer",supplier:"ledger",date:"2016-06-01",cost:79,lead:9,
@@ -96,6 +100,7 @@ const CUSTODY_SUPPLIERS={
   generic:{name:"General electronics suppliers"},
   selfbuilt:{name:"Self-built"},
   none:{name:"—"},
+  basement:{name:"The basement"},
 };
 
 const CUSTODY_POLICIES=[

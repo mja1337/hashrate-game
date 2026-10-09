@@ -4517,6 +4517,69 @@ rule("the fourth halving lands on its UTC day, 20 April 2024, not the 19th", () 
   assert(event === '"2024-04-20"', `the halving event is dated ${event}`);
 });
 
+/* ---- COLD STORAGE FROM THE FIRST DAY ---- */
+
+rule("cold storage can be set up on day one from the old PC in the basement, and nowhere sooner than a signer exists", () => {
+  const read = makeEval(loadEngine());
+  read(`${SITE(`state.time=at("2009-02-01");state.campaignStart=at("2009-01-03");state.wallets.hot=100;state.wallets.cold=0;state.cash=1000;`)}
+    state.custody=blankCustody();`);
+  assert(read('venueAvailable("cold")') === true, "cold storage is not available in 2009");
+  // No wallet can sign yet: coins are not accepted into cold storage.
+  read('transfer("hot","cold",.5)');
+  assert(read("state.wallets.cold") === 0 && read("state.wallets.hot") === 100, "coins were moved to a wallet nobody can sign for");
+  read('orderCustodyProduct("beigepc",1)');
+  assert(read("state.cash") === 1000, "the PC from the basement cost money");
+  read('orderCustodyProduct("beigepc",1)');
+  assert(read("state.custody.orders.length") === 1, "there was more than one old PC in the basement");
+  read("state.time+=2*DAY;advanceCustodyOrders(state.time)");
+  assert(read("state.custody.devices.length") === 1, "the old PC never arrived");
+  read("generateCustodyKey(state.custody.devices[0].uid)");
+  read('backupCustodyKey(state.custody.keys.find(k=>!k.hot).id,"paperbackup")');
+  read("assignCustodyKey(state.custody.keys.find(k=>!k.hot).id)");
+  assert(read("custodySetup().ready") === true, "the wallet cannot sign after the five steps");
+  read('transfer("hot","cold",.5)');
+  assert(Math.abs(read("state.wallets.cold") - 50) < 1, `half the coins did not reach cold storage: ${read("state.wallets.cold")}`);
+});
+
+rule("the online wallet cannot be lost in the first sixty days of a campaign, and can be afterwards", () => {
+  const read = makeEval(loadEngine());
+  read(`${SITE(`state.time=at("2013-06-01");state.campaignStart=at("2013-06-01");state.wallets.hot=100;state.wallets.cold=0;`)}
+    state.custody=blankCustody();createHotWallet({});`);
+  assert(read("hotKeyGrace()") === true, "a campaign's first day is not inside the grace period");
+  read("for(let i=0;i<20000;i++){state.wallets.hot=100;advanceHotWalletRisk()}");
+  assert(read("state.wallets.hot") === 100, "the online wallet was compromised during the grace period");
+  read('state.time=at("2013-09-01")');
+  assert(read("hotKeyGrace()") === false, "the grace period never ends");
+  read("let hit=0;for(let i=0;i<20000;i++){state.wallets.hot=100;advanceHotWalletRisk();if(state.wallets.hot<100)hit++}globalThis.__hit=hit");
+  assert(read("__hit") > 0, "the online wallet can no longer be compromised even after the grace period");
+});
+
+rule("a custody loss says how likely it was, and what would have lowered it", () => {
+  const read = makeEval(loadEngine());
+  read(`${SITE(`state.time=at("2013-09-01");state.campaignStart=at("2013-01-01");state.wallets.hot=100;state.wallets.cold=0;`)}
+    state.custody=blankCustody();createHotWallet({});state.pendingLosses=[];
+    for(let i=0;i<20000&&!lossQueue().length;i++){state.wallets.hot=100;advanceHotWalletRisk()}`);
+  assert(read("lossQueue().length") > 0, "no hot-wallet incident was produced to read");
+  const text = read("lossQueue()[0].oddsText");
+  assert(/How likely was this\? About 1 in [\d,]+ in the month it happened \(\d/.test(text), `the loss carried no odds: "${text}"`);
+  assert(/cold storage/.test(text) && /over a year/.test(text), `the odds did not say what would have lowered them: "${text}"`);
+  assert(read('lossOddsText({monthly:0})') === "" && read("lossOddsText(null)") === "", "an incident with no stated chance printed one");
+});
+
+rule("a PC that burnt can be put together again from spare parts, free, in a day, and a working one is still only the one", () => {
+  const read = makeEval(loadEngine());
+  read(`${SITE(`state.time=at("2009-02-01");state.campaignStart=at("2009-01-03");state.cash=500;`)}
+    state.custody=blankCustody();orderCustodyProduct("beigepc",1);state.time+=2*DAY;advanceCustodyOrders(state.time);`);
+  assert(read("custodyOnceBlocked(custodyProduct('beigepc'))") === true, "a second old PC could be fetched while the first still worked");
+  read("state.custody.devices[0].destroyed={at:state.time,cause:'fire'}");
+  assert(read("custodyOnceBlocked(custodyProduct('beigepc'))") === false, "a PC that burnt could not be replaced");
+  assert(/spare parts/.test(read("custodyAcquireLabel(custodyProduct('beigepc'))")), "the replacement is not described as coming from spare parts");
+  read("orderCustodyProduct('beigepc',1)");
+  assert(read("state.cash") === 500 && read("state.custody.orders.length") === 1, "the replacement cost money or was not ordered");
+  read("state.time+=2*DAY;advanceCustodyOrders(state.time)");
+  assert(read("state.custody.devices.filter(d=>!d.destroyed).length") === 1, "the replacement never arrived");
+});
+
 /* Reported from an exit hook rather than inline, because inline made the gate
    position-dependent: it sat a few lines above the end of the file, and two rules appended
    after it ran, failed, pushed onto `failures` and were never printed. The suite announced

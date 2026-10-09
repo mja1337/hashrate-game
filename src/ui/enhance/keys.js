@@ -60,7 +60,7 @@ function custodyShopCard(){
       const leaked=custodySupplierExposed(p.supplier);
       return `<article class="venue"><div class="risk ${leaked?"high":"low"}">${CUSTODY_SUPPLIERS[p.supplier]?.name||p.supplier}${leaked?" · RECORDS LEAKED":""}</div>
         <h3>${p.name}</h3><p>${p.desc}</p>
-        <div class="actions"><button class="action small" data-action="custody-buy" data-id="${p.id}"${state.cash<cost?" disabled":""}>Order · ${cost>0?fmtUsd(cost):"free"}${lead?` · ${lead}d`:""}</button>
+        <div class="actions"><button class="action small" data-action="custody-buy" data-id="${p.id}"${state.cash<cost||custodyOnceBlocked(p)?" disabled":""}>${p.acquire?`${custodyAcquireLabel(p)} · ${lead}d`:`Order · ${cost>0?fmtUsd(cost):"free"}${lead?` · ${lead}d`:""}`}</button>
         ${kind!=="signer"?`<span class="meta">${stock} in stock</span>`:""}</div></article>`;
     }).join("")}</div>`;
   };
@@ -69,7 +69,7 @@ function custodyShopCard(){
   const buildable=custodyProductAvailable(product);
   const inFlight=(c.builds||[]).length;
   return `<section class="card span-12"><div class="card-head"><h2>Custody supply</h2><div class="meta">ORDER, BUILD, BACK UP</div></div><div class="card-pad">
-    ${group("signer","Commercial signers","Bought from a named vendor, which means that vendor holds a record of the purchase.")}
+    ${group("signer","Signers","Bought from a named vendor, which means that vendor holds a record of the purchase. An old PC from the basement comes from nobody.")}
     ${buildable?`<h4>Build your own</h4><p class="modal-note">${product.desc} Components come from general electronics suppliers, so no vendor holds a list of bitcoin customers — that reduces exposure rather than granting anonymity.</p>
     <div class="venue-grid"><article class="venue"><div class="risk ${missing?"medium":"low"}">${inFlight?"ASSEMBLY UNDERWAY":missing?"COMPONENTS MISSING":"READY TO ASSEMBLE"}</div><h3>${build.name}</h3>
       <p>${Object.entries(build.required).map(([pid,n])=>`${custodyProduct(pid)?.name||pid} ${(c.parts[pid]||0)}/${n}`).join(" · ")}${Object.keys(build.optional||{}).map(pid=>` · ${custodyProduct(pid)?.name||pid} ${(c.parts[pid]||0)}/1 (optional)`).join("")}</p>

@@ -12,6 +12,10 @@ const FEEDBACK_REPO="https://github.com/mja1337/hashrate-game";
 /* An address that is only for this project, so people without a GitHub account can write. Empty
    until one exists; the footer shows the link only when it is set. */
 const FEEDBACK_EMAIL="";
+/* A tip over Lightning, through a payment page. A plain outbound link: no address is shown here, nothing is
+   embedded, and nothing is requested until the player follows it. */
+const TIP_URL="https://strike.me/@jandex";
+const TIP_BOLT=`<svg width="11" height="13" viewBox="0 0 11 13" aria-hidden="true"><path d="M6.6 0 0 7.4h4.1L3.4 13 11 5H6.8z" fill="currentColor"/></svg>`;
 
 function feedbackUrl(template="bug.yml"){
   const query=new URLSearchParams({template,version:APP_VERSION,ingame_date:dateFmt(state.time)});
@@ -23,7 +27,7 @@ function feedbackLinks(){
 }
 function footerHtml(){
   const unreadable=unreadableSaveKept?` · <button data-action="export-unreadable">Export unreadable save</button>`:"";
-  return `<footer class="footer"><span>Historical simulation · recorded, derived and modelled data are labelled separately · not financial advice</span><span><button data-action="tour-start">Tour</button> · ${feedbackLinks()} · <button data-action="story-pause">Story pause: ${state.storyPause?"on":"off"}</button> · <button data-action="export">Export save</button> · <button data-action="import">Import save</button> · <button data-action="reset">New run</button>${unreadable}<input id="importSave" type="file" accept="application/json,.json" hidden></span><span class="footer-privacy">No accounts, no tracking, no analytics. Your game is saved only in this browser (local storage) and nothing leaves it. Clearing site data deletes it, so use Export save to keep a copy.</span></footer>`;
+  return `<footer class="footer"><span>Historical simulation · recorded, derived and modelled data are labelled separately · not financial advice</span><span><a class="footer-tip" href="${TIP_URL}" target="_blank" rel="noopener noreferrer" title="Opens a Lightning payment page in a new tab">${TIP_BOLT}Tip the developer in Bitcoin (Lightning)</a> · <button data-action="tour-start">Tour</button> · ${feedbackLinks()} · <button data-action="story-pause">Story pause: ${state.storyPause?"on":"off"}</button> · <button data-action="export">Export save</button> · <button data-action="import">Import save</button> · <button data-action="reset">New run</button>${unreadable}<input id="importSave" type="file" accept="application/json,.json" hidden></span><span class="footer-privacy">No accounts, no tracking, no analytics. Your game is saved only in this browser (local storage) and nothing leaves it. Clearing site data deletes it, so use Export save to keep a copy.</span></footer>`;
 }
 /* Shown once after a load that set a save aside, above everything including modals. */
 function saveNoticeHtml(){

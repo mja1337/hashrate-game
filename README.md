@@ -43,12 +43,12 @@ GitHub Pages builds from `main`, so **every push to `main` is live within about 
 
 - **Every local asset URL carries the version** (`?v=2.23`, from `APP_VERSION`), in `index.html` and in the lazily loaded 3D scripts. Pages lets a browser keep a file for ten minutes, so without this a player could load new modules beside old ones, and the load-order rules in `ARCHITECTURE.md` mean that can throw. The structure check fails if any asset lacks the current version. Because of this, **bump `APP_VERSION` for every change that ships, hotfixes included**: the bump is what makes browsers fetch the new files together.
 - **Before pushing a release:** bump `APP_VERSION`, add the changelog entry and update Method, then run all four checks on the exact commit you are pushing.
-- **The launch tag** marks the build that went out: `git tag -a v2.23-launch -m "Launch build"`, pushed with `git push origin v2.23-launch`. Move it with `git tag -fa` only if the launch commit itself changes before anyone has played it.
+- **The launch tag** marks the build that went out (`v2.23-launch` is the first public build; each push that ships gets its own, and rollback uses the newest): `git tag -a v2.24-launch -m "Launch build"`, pushed with `git push origin v2.24-launch`. Move it with `git tag -fa` only if the launch commit itself changes before anyone has played it.
 - **Launch-weekend freeze:** from Saturday morning to Sunday evening, push to `main` only for hotfixes that bump the version and pass all four checks. No feature commits.
 - **Rolling back** without rewriting history: revert everything after the tag, then push.
 
   ```bash
-  git revert --no-edit v2.23-launch..HEAD
+  git revert --no-edit v2.24-launch..HEAD
   git push
   ```
 
