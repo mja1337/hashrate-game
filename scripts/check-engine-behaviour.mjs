@@ -4719,6 +4719,40 @@ rule("reconnecting goes back to the plan that was cut, or to the local line if t
   assert(read("state.connectivity") === "fixed", "a plan that is not available here was restored");
 });
 
+/* ---- EMERGENCY STOP ALL ---- */
+
+rule("Emergency stop all stops every machine, mining and the electricity, and Start site power brings them back", () => {
+  const read = makeEval(loadEngine());
+  read(`${SITE(`state.time=at("2011-03-10");state.campaignStart=at("2009-02-03");state.hardware={laptop:1,cpu:3};state.node=0;state.decommissionedHardware={};state.speed=0;`)}`);
+  assert(read("operating()") === true && read("fleet().w") > 0, "the starting position is not a running mine");
+  read("toggleSitePower()");
+  assert(read("state.power") === false && read("state.manualStop") === true && read("operating()") === false, "the stop did not stop the mine");
+  assert(read("nodeHostPowered()") === false, "the laptop's node kept running with the site stopped");
+  const mined = read("state.mined"); read("state.billLedger=blankBillLedger();for(let i=0;i<6;i++)tick(true)");
+  assert(read("state.mined") === mined, "coins were mined with the site stopped");
+  assert(read("state.billLedger.energy") === 0, `electricity accrued with the site stopped: ${read("state.billLedger.energy")}`);
+  assert(read("state.billLedger.rent") >= 0 && read("state.billLedger.internet") > 0, "the fixed costs stopped with the machines: the internet line should still be billed");
+  read("toggleSitePower()");
+  assert(read("state.power") === true && read("state.manualStop") === false && read("operating()") === true, "Start site power did not bring the mine back");
+});
+
+rule("a manual stop survives the monthly bill and clearing arrears; a policy lock still keeps the site off", () => {
+  const read = makeEval(loadEngine());
+  read(`${SITE(`state.time=at("2011-03-20");state.campaignStart=at("2009-02-03");state.cash=5000;state.hardware={laptop:1,cpu:3};state.decommissionedHardware={};state.speed=0;state.storyPause=false;`)}state.lastMonth="2011-03";`);
+  read("toggleSitePower()");
+  read("for(let i=0;i<20;i++)tick(true)");
+  assert(read("new Date(state.time).toISOString().slice(0,7)") === "2011-04", "the test did not cross a month boundary");
+  assert(read("state.power") === false && read("operating()") === false, "the monthly bill switched a manually stopped site back on");
+  // Arrears cut the grid, the player clears them: a site they stopped stays stopped.
+  read("state.debt=40;state.arrearsDue=state.time;state.cash=5000;payDebt()");
+  assert(read("state.debt") === 0 && read("state.power") === false, "clearing arrears switched a manually stopped site back on");
+  // And what the player did not choose still wins: a policy lock keeps the site off after the bill.
+  read("toggleSitePower();state.policyLock='closed';state.power=false;state.manualStop=false");
+  assert(read("sitePowerAfterBill()") === false, "a policy lock no longer keeps the site off");
+  read("state.policyLock=null");
+  assert(read("sitePowerAfterBill()") === true, "a site nobody stopped is not restored after a bill");
+});
+
 /* Reported from an exit hook rather than inline, because inline made the gate
    position-dependent: it sat a few lines above the end of the file, and two rules appended
    after it ran, failed, pushed onto `failures` and were never printed. The suite announced

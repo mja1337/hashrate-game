@@ -29,6 +29,21 @@ function endRunNoMarket(due){
   setTimer();renderFullQueued=true;save();render();return true;
 }
 
+/* WHETHER THE SITE IS ON, AFTER A BILL.
+
+   Paying a bill or clearing arrears restores the power that unpaid arrears had cut. It used to do that unconditionally, which also
+   undid "Emergency stop all": a player who stopped the site on the 20th found it running again after the bill on the 1st, with the
+   electricity accruing. A manual stop (state.manualStop) is the player's to undo, by pressing Start site power; only a policy lock
+   keeps power off against the player's wishes. */
+/* The button on the mining floor: Emergency stop all, and Start site power. Stopping is remembered as the player's own choice. */
+function toggleSitePower(){
+  state.power=!state.power;state.manualStop=!state.power;
+  log(state.power?"Mining fleet started":"Mining fleet stopped","manual","operations");
+  showToast(state.power?"Site power on":"Site stopped",state.power?"Every machine that is not switched off on its own is hashing again.":"Every machine is off: nothing mines and the fleet draws no power. Rent, internet, staff and insurance still fall due, and the site stays stopped, through the monthly bill too, until you press Start site power.","status","mine");
+  save();render();
+}
+function sitePowerAfterBill(){return !state.policyLock&&!state.manualStop}
+
 function deferSettlement(){
   const pending=state.pendingSettlement;if(!pending)return;
   if(state.time<MARKET)return showToast("Not before the market opens",NO_MARKET_RULE,"blocked","finance");
@@ -84,7 +99,7 @@ function finishMonthlySettlement(kind="cash",automatic=false){
    shrinking. It used to be recorded as though it had earned the money: twenty-five solvent
    months out of twenty-five, whether the cash came from mining or from liquidating a
    thousand bitcoin. Only a bill met from operating cash counts now. */
-  recordOperatorMonth(pending.snapshot,kind==="cash");state.bill=0;state.billLedger=blankBillLedger();state.lastMonth=pending.month;state.pendingSettlement=null;state.debt=0;state.power=!state.policyLock;clearTimeout(toastTimer);toast=null;
+  recordOperatorMonth(pending.snapshot,kind==="cash");state.bill=0;state.billLedger=blankBillLedger();state.lastMonth=pending.month;state.pendingSettlement=null;state.debt=0;state.power=sitePowerAfterBill();clearTimeout(toastTimer);toast=null;
   let hardwareOpened=false;if(!state.ended){state.speed=pending.resumeSpeed||state.returnSpeed||0;hardwareOpened=activateNextHardwareAlert();setTimer()}save();if(automatic&&!hardwareOpened){refreshLive();requestAnimationFrame(()=>{refreshDashboardVisuals();refreshMinePricing()})}else render();if(!automatic&&rescueFeedback)setTimeout(()=>showToast(rescueFeedback[0],rescueFeedback[1],"warning","finance"),0);return true;
 }
 

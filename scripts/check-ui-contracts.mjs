@@ -385,7 +385,7 @@ assert(inline.includes("state.walletSetup&&state.walletSetup.required&&!state.wa
   assert(version, "There is no APP_VERSION: the version has to be written in one place");
   assert(new RegExp(`const CHANGELOG=\\[\\s*\\{date:"[^"]+",title:"Alpha ${version.replace(".", "\\.")} `).test(inline),
     `The newest changelog entry is not for Alpha ${version}: every round of changes bumps APP_VERSION and adds an entry`);
-  assert(inline.includes("Alpha ${APP_VERSION} · Operator campaign"), "The header does not read the version from APP_VERSION");
+  assert(inline.includes("Alpha ${APP_VERSION} · seed ${state.seed}") && !inline.includes("Historical replay · seed"), "The header does not read the version from APP_VERSION, or does not show the seed beside it");
   const html = await readFile(new URL("index.html", root), "utf8");
   assert(html.includes(`Hashrate Alpha ${version} —`) && html.includes(`content="Hashrate Alpha ${version}:`), `index.html's title and description do not say Alpha ${version}`);
   const versions = [...inline.matchAll(/title:"Alpha (\d+)\.(\d+) /g)].map(m => Number(m[1]) * 1000 + Number(m[2]));
@@ -1938,6 +1938,8 @@ assert(css.includes(".svg-sprite-defs{position:absolute;width:0;height:0;overflo
     assert(inline.includes('introChatHtml(selectedMode)') && chat.includes("a month after the Genesis Block") && chat.includes("nobody will buy them") && chat.includes("the electricity is NOT, so bring cash"), "The first screen has lost its IRC message, or the message no longer says why the cash matters");
     assert(chat.includes('mode.id!=="medium"&&mode.id!=="easy"') && css.includes(".irc-cursor") && css.includes("prefers-reduced-motion:reduce){.irc-cursor"), "The IRC message appears for the wrong starts, or its cursor ignores reduced motion");
   }
+  // Emergency stop all is the player's choice and stays: the handler records it, and a paid bill does not undo it.
+  assert(inline.includes('else if(a==="toggle-power")toggleSitePower();') && inline.includes("state.power=!state.power;state.manualStop=!state.power;") && inline.includes("state.power=sitePowerAfterBill();") && inline.includes("function sitePowerAfterBill(){return !state.policyLock&&!state.manualStop}"), "Emergency stop all can be undone by the next monthly bill again");
   // Good news waits behind a modal; a refused save is visible.
   assert(notify.includes("TOAST_DEFERRABLE") && inline.includes("flushDeferredToasts();"), "A toast can land on top of a modal again");
   assert(notify.includes("function announceSaveState()") && inline.includes("saveStateHtml()"), "A browser that refuses to store the game is no longer shown in the header");
